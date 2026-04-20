@@ -1,0 +1,10 @@
+# Ignore everything
+*
+
+# But not these directories
+!/user/
+!/code/
+
+# Ignore everything in subdirectories
+user/*
+code/*
