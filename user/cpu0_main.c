@@ -17,8 +17,7 @@ int core0_main(void)
     {
         // 此处编写需要循环执行的代码
 
-//哈好好
-// 哈好好11
+
         printf("left speed:%d, right speed:%d\r\n", motor_value.receive_left_speed_data, motor_value.receive_right_speed_data);
         tft180_show_float(0, 0,motor_value.receive_left_speed_data, 8, 6);
         system_delay_ms(50);
