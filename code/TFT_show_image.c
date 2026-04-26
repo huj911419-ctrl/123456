@@ -53,5 +53,7 @@ void draw_line(void)
     tft180_show_string(0,  98, "ROW:");
     tft180_show_int   (36, 98, (int32)g_tf.valid_row_count, 3);// 有效行数
     tft180_show_string(0, 114, "THR:");
-    tft180_show_int   (36,114, (int32)g_tf.threshold,       3);// 当前二值化阈值
+    tft180_show_int(36, 114, (int32)g_tf.threshold, 3); // 当前二值化阈值
+    tft180_show_int(130,0, motor_value.receive_left_speed_data,3);
+    tft180_show_int(130,10,motor_value.receive_right_speed_data,3);
 }

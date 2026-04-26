@@ -3,43 +3,61 @@
 
 #include "zf_common_headfile.h"
 
-
-
-// ==================== 枚举类型定义 ====================
+// ================================================================
+//  【用户配置区 1/2】：在此枚举中添加你的页面
+//  PAGE_MAX 必须放最后，不要删除
+// ================================================================
+/*typedef enum
+{
+    PAGE_MAIN = 0, // 主页面（建议保留）
+    // ↓↓↓ 在这里添加更多页面 ↓↓↓
+    // PAGE_MY_PAGE_A,
+    // PAGE_MY_PAGE_B,
+    // PAGE_MY_PAGE_C,
+    PAGE_MAX // ← 不要删除，用于自动计算页面总数
+} MenuPage;*/
 typedef enum
 {
-    PAGE_MAIN = 0,  // 0: 主界面
-    PAGE_SYS_INFO,  // 1: 系统信息
-    PAGE_CAM_SET,   // 2: 摄像头设置
-    PAGE_MOTOR_SET, // 3: 电机设置
-    PAGE_SERVO_SET, // 4: 舵机设置
-    PAGE_IMU_INFO,  // 5: IMU信息
-    PAGE_MAX        // 页面总数
+    PAGE_MAIN = 0,
+    PAGE_MOTOR, // ← 加这行
+    PAGE_CAM,   // ← 加这行
+    PAGE_PID,   // ← 加这行
+    PAGE_MAX
 } MenuPage;
-
-// 2位拨码开关 → 4种工作模式
-typedef enum
+// ================================================================
+//  菜单项（每一页内可上下选择、左右调节的参数行）
+// ================================================================
+typedef struct
 {
-    MODE_NORMAL = 0,   // 00: 正常手动模式
-    MODE_CAM_AUTO,     // 01: 摄像头自动模式
-    MODE_SERVO_FOLLOW, // 10: 舵机云台跟随
-    MODE_EMERGENCY,    // 11: 紧急停机模式
-    MODE_MAX
-} WorkMode;
+    const char *label; // 显示名称，例如 "Speed"
+    int16 *value;      // 指向实际变量的指针（直接改变量本身）
+    int16 min;         // 允许的最小值
+    int16 max;         // 允许的最大值
+    int16 step;        // 每次按键调节的步长
+} MenuItem;
 
-// ==================== 全局变量声明 ====================
-extern MenuPage now_page;
-extern uint8 cam_threshold;
-extern int16 motor_speed;
-extern int16 servo_angle;
-extern uint8 dip_mode;        // 拨码原始值 (0-3)
-extern WorkMode current_mode; // 当前工作模式
+// ================================================================
+//  页面描述结构体
+// ================================================================
+typedef struct
+{
+    const char *title;  // 页面标题（显示在第0行）
+    MenuItem *items;    // 该页菜单项数组（无参数页填 NULL）
+    uint8 item_count;   // 菜单项数量（无参数页填 0）
+    void (*draw)(void); // 自定义绘制回调（可填 NULL，由框架处理）
+} MenuPageDef;
 
-// ==================== 函数声明 ====================
-void key_init_all(void);   // 按键+拨码初始化
-uint8 key_scan(void);      // 按键扫描
-void key_process(void);    // 按键逻辑处理
-void menu_show(void);      // 菜单显示
-uint8 dip_scan_mode(void); // 拨码开关扫描
+// ================================================================
+//  全局状态（其他 .c 文件可 extern 引用）
+// ================================================================
+extern MenuPage now_page; // 当前页面
+extern uint8 menu_cursor; // 当前光标所在行（选中的 MenuItem 索引）
+
+// ================================================================
+//  对外接口
+// ================================================================
+void key_init_all(void); // 初始化所有按键 & 拨码引脚
+void key_process(void);  // 放入主循环或定时器，处理按键逻辑
+void menu_show(void);    // 放入主循环，刷新当前页面显示
 
 #endif /* MENU_H_ */
