@@ -1,16 +1,32 @@
-#include "Image.h"
+#include "Track_funsion.h"
+/* ================================================================
+ *  赛道约定：蓝色背景（亮）+ 深色赛道线（暗）
+ *    · 赛道像素（灰度 < threshold）→ bin_image = 255（显示为白）
+ *    · 背景像素（灰度 >= threshold）→ bin_image = 0 （显示为黑）
+ *
+ *  边界定义：
+ *    · 左边界：从左向右第一个"黑→白"跳变点
+ *    · 右边界：从右向左第一个"白→黑"跳变点
+ * ================================================================ */
 
-extern uint8 mt9v03x_image[MT9V03X_H][MT9V03X_W];
+/* ==================== 全局变量 ==================== */
 
 TrackFusion_t g_tf;
+
+/* 二值化图像，和你原来 image[][] 完全一样的用法
+ * 255=赛道线  0=背景 */
 uint8 bin_image[TF_IMG_H][TF_IMG_W];
 
+/* 大津法内部变量（static放全局区，不占栈）*/
 static uint8 s_otsu_cnt = 0;
 static uint16 s_hist[256];
 static float s_P[256];
 static float s_PK[256];
 static float s_Mk[256];
 
+/* ================================================================
+ *  一、大津法求阈值
+ * ================================================================ */
 static uint8 calc_otsu(void)
 {
     float imgsize = (float)((uint32)TF_IMG_H * TF_IMG_W);
@@ -53,6 +69,11 @@ static uint8 calc_otsu(void)
     return best;
 }
 
+/* ================================================================
+ *  二、全图二值化（和你原来的 image_binaryzation 一样）
+ *  深色像素（赛道线）< threshold → 255
+ *  亮色像素（背景）  >= threshold → 0
+ * ================================================================ */
 static void binarize_image(void)
 {
     for (uint16 i = 0; i < TF_IMG_H; i++)
@@ -60,11 +81,19 @@ static void binarize_image(void)
             bin_image[i][j] = (mt9v03x_image[i][j] < g_tf.threshold) ? 255u : 0u;
 }
 
+/* ================================================================
+ *  三、像素判断（直接查 bin_image，不再实时比较灰度）
+ * ================================================================ */
 static inline uint8 is_white(uint8 row, int16 col)
 {
     return (bin_image[row][(uint8)col] == 255u) ? 1u : 0u;
 }
 
+/* ================================================================
+ *  四、跳变点检测（三点模板）
+ *  左边界：col-1=黑, col=白, col+1=白
+ *  右边界：col-1=白, col=白, col+1=黑
+ * ================================================================ */
 static inline uint8 is_left_edge(uint8 row, int16 col)
 {
     if (col < 1 || col >= TF_IMG_W - 1)
@@ -79,6 +108,11 @@ static inline uint8 is_right_edge(uint8 row, int16 col)
     return (is_white(row, col - 1) && is_white(row, col) && !is_white(row, col + 1)) ? 1u : 0u;
 }
 
+/* ================================================================
+ *  五、四方向扫描函数（带边界保护）
+ * ================================================================ */
+
+/* 向右搜索左边界 */
 static int16 scan_left_edge_right(uint8 row, int16 start, int16 end)
 {
     if (start < 1)
@@ -93,6 +127,7 @@ static int16 scan_left_edge_right(uint8 row, int16 start, int16 end)
     return TF_INVALID;
 }
 
+/* 向左搜索左边界 */
 static int16 scan_left_edge_left(uint8 row, int16 start, int16 end)
 {
     if (start >= TF_IMG_W - 1)
@@ -107,6 +142,7 @@ static int16 scan_left_edge_left(uint8 row, int16 start, int16 end)
     return TF_INVALID;
 }
 
+/* 向左搜索右边界 */
 static int16 scan_right_edge_left(uint8 row, int16 start, int16 end)
 {
     if (start >= TF_IMG_W - 1)
@@ -121,6 +157,7 @@ static int16 scan_right_edge_left(uint8 row, int16 start, int16 end)
     return TF_INVALID;
 }
 
+/* 向右搜索右边界 */
 static int16 scan_right_edge_right(uint8 row, int16 start, int16 end)
 {
     if (start < 1)
@@ -135,6 +172,9 @@ static int16 scan_right_edge_right(uint8 row, int16 start, int16 end)
     return TF_INVALID;
 }
 
+/* ================================================================
+ *  六、有效边界对检验
+ * ================================================================ */
 static inline uint8 valid_pair(int16 lb, int16 rb)
 {
     if (lb == TF_INVALID || rb == TF_INVALID)
@@ -143,6 +183,9 @@ static inline uint8 valid_pair(int16 lb, int16 rb)
     return (w >= TF_MIN_TRACK_WIDTH && w <= TF_MAX_TRACK_WIDTH) ? 1u : 0u;
 }
 
+/* ================================================================
+ *  七、基点搜索（四级策略）
+ * ================================================================ */
 static uint8 find_jidian1(void)
 {
     const uint8 row = TF_JIDIAN_ROW;
@@ -151,21 +194,25 @@ static uint8 find_jidian1(void)
     const int16 tqtr = TF_IMG_W * 3 / 4;
     int16 lb = TF_INVALID, rb = TF_INVALID;
 
+    /* 策略1：中点在赛道内 */
     if (is_white(row, mid - 1) && is_white(row, mid) && is_white(row, mid + 1))
     {
         lb = scan_left_edge_left(row, mid, 1);
         rb = scan_right_edge_right(row, mid, TF_IMG_W - 2);
     }
+    /* 策略2：1/4点在赛道内（赛道偏左）*/
     else if (is_white(row, qtr - 1) && is_white(row, qtr) && is_white(row, qtr + 1))
     {
         lb = scan_left_edge_left(row, qtr, 1);
         rb = scan_right_edge_right(row, qtr, TF_IMG_W - 2);
     }
+    /* 策略3：3/4点在赛道内（赛道偏右）*/
     else if (is_white(row, tqtr - 1) && is_white(row, tqtr) && is_white(row, tqtr + 1))
     {
         lb = scan_left_edge_left(row, tqtr, 1);
         rb = scan_right_edge_right(row, tqtr, TF_IMG_W - 2);
     }
+    /* 策略4：全行兜底扫描 */
     else
     {
         lb = scan_left_edge_right(row, 1, TF_IMG_W - 2);
@@ -181,6 +228,9 @@ static uint8 find_jidian1(void)
     return 1u;
 }
 
+/* ================================================================
+ *  八、单行边线搜索（三级回退）
+ * ================================================================ */
 static uint8 search_row_edges(uint8 row, int16 prev_lb, int16 prev_rb,
                               int16 *out_lb, int16 *out_rb)
 {
@@ -188,22 +238,28 @@ static uint8 search_row_edges(uint8 row, int16 prev_lb, int16 prev_rb,
     const int16 R = TF_LOCAL_RANGE;
     const int16 MID = TF_IMG_CENTER;
 
-    lb = scan_left_edge_right(row, prev_lb - R, prev_lb + R);
+    /* 左边界搜索 */
+    lb = scan_left_edge_right(row, prev_lb - R, prev_lb + R); // L1
     if (lb == TF_INVALID)
-        lb = scan_left_edge_left(row, prev_lb + R, prev_lb - R);
+        lb = scan_left_edge_left(row, prev_lb + R, prev_lb - R); // L2
     if (lb == TF_INVALID)
-        lb = scan_left_edge_left(row, MID, 1);
+        lb = scan_left_edge_left(row, MID, 1); // L3
 
-    rb = scan_right_edge_left(row, prev_rb + R, prev_rb - R);
+    /* 右边界搜索 */
+    rb = scan_right_edge_left(row, prev_rb + R, prev_rb - R); // L1
     if (rb == TF_INVALID)
-        rb = scan_right_edge_right(row, prev_rb - R, prev_rb + R);
+        rb = scan_right_edge_right(row, prev_rb - R, prev_rb + R); // L2
     if (rb == TF_INVALID)
-        rb = scan_right_edge_right(row, MID, TF_IMG_W - 2);
+        rb = scan_right_edge_right(row, MID, TF_IMG_W - 2); // L3
 
     *out_lb = lb;
     *out_rb = rb;
     return valid_pair(lb, rb);
 }
+
+/* ================================================================
+ *  九、对外接口
+ * ================================================================ */
 
 void track_fusion_init(void)
 {
@@ -222,6 +278,7 @@ void track_fusion_init(void)
     g_tf.threshold = 128u;
     s_otsu_cnt = (uint8)TF_OTSU_INTERVAL;
 
+    /* 清空二值化图像 */
     for (uint16 i = 0; i < TF_IMG_H; i++)
         for (uint16 j = 0; j < TF_IMG_W; j++)
             bin_image[i][j] = 0u;
@@ -229,6 +286,7 @@ void track_fusion_init(void)
 
 void track_fusion_update(void)
 {
+    /* 0. 清空上帧结果 */
     for (uint8 i = 0; i < TF_IMG_H; i++)
     {
         g_tf.left_edge[i] = TF_INVALID;
@@ -240,6 +298,7 @@ void track_fusion_update(void)
     g_tf.valid_row_count = 0u;
     g_tf.line_lost = 0u;
 
+    /* 1. 周期性大津阈值更新 */
     s_otsu_cnt++;
     if (s_otsu_cnt >= TF_OTSU_INTERVAL)
     {
@@ -252,8 +311,12 @@ void track_fusion_update(void)
         g_tf.threshold = (uint8)raw;
     }
 
+    /* 2. 全图二值化（阈值更新后立刻执行）
+     *    遍历所有像素，深色=赛道线=255，亮色=背景=0
+     *    和你原来的 image_binaryzation 完全一样的逻辑 */
     binarize_image();
 
+    /* 3. 基点搜索 */
     if (!find_jidian1())
     {
         g_tf.line_lost = 1u;
@@ -270,6 +333,7 @@ void track_fusion_update(void)
     g_tf.row_valid[jrow] = 1u;
     g_tf.valid_row_count = 1u;
 
+    /* 4. 逐行向上边界跟随 */
     uint8 miss_streak = 0u;
     int16 end_row = (int16)TF_SEARCH_END_ROW;
 
@@ -295,6 +359,7 @@ void track_fusion_update(void)
         }
     }
 
+    /* 5. 加权中线误差计算 */
     if (g_tf.valid_row_count == 0u)
     {
         g_tf.line_lost = 1u;
@@ -318,4 +383,40 @@ void track_fusion_update(void)
 
     g_tf.error = avg_center - (int16)TF_IMG_CENTER;
     g_tf.line_lost = 0u;
+}
+
+
+// -------- 直角检测相关 --------
+#define RIGHT_ANGLE_THRESHOLD 35
+#define RIGHT_ANGLE_FRAMES 2
+
+static uint8 s_right_angle_cnt = 0u;
+uint8 g_right_angle_flag = 0u; // 全局变量，pid那边要用
+int8 g_right_angle_dir = 0;    // 全局变量，pid那边要用
+
+void right_angle_detect(void)
+{
+    if (g_tf.line_lost)
+    {
+        s_right_angle_cnt = 0u;
+        g_right_angle_flag = 0u;
+        return;
+    }
+
+    int16 abs_err = g_tf.error >= 0 ? g_tf.error : -g_tf.error;
+
+    if (abs_err >= RIGHT_ANGLE_THRESHOLD)
+    {
+        s_right_angle_cnt++;
+        if (s_right_angle_cnt >= RIGHT_ANGLE_FRAMES)
+        {
+            g_right_angle_flag = 1u;
+            g_right_angle_dir = g_tf.error > 0 ? 1 : -1;
+        }
+    }
+    else
+    {
+        s_right_angle_cnt = 0u;
+        g_right_angle_flag = 0u;
+    }
 }

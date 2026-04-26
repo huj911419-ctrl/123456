@@ -2,20 +2,16 @@
 #define _TFT_SHOW_IMAGE_H_
 
 #include "zf_common_headfile.h"
-#include "Image.h"
+/**
+ * @brief 显示二值化底图 + 叠加边界线
+ *        必须在 track_fusion_update() 之后调用
+ *
+ *        屏幕布局：
+ *          y=0  ~ y=80  : 二值化图像（白=赛道线 黑=背景）
+ *                          蓝点=左边界 绿点=右边界 红点=中线
+ *          y=82 ~ y=127 : ERR / ROW / THR 数值
+ */
+void draw_line(void);
 
-void draw_line1(void);
-void draw_line2(void);
-
-typedef enum
-{
-    DISP_GRAY = 0,
-    DISP_BINARY = 1,
-} DispMode_t;
-
-#define TFT_REFRESH_DIV 4
-
-void track_display_init(void);
-void track_display_update(DispMode_t mode);
 
 #endif
