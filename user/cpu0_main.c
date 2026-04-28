@@ -1,5 +1,5 @@
 #include "zf_common_headfile.h"
-#include "Menu.h"
+
 #pragma section all "cpu0_dsram"
 
 int core0_main(void)
@@ -16,7 +16,7 @@ int core0_main(void)
     pit_ms_init(CCU60_CH0, 30);
     key_init_all();
     cpu_wait_event_ready();
-
+    neg_pressure_init(50, 2000);  // 10kHz£¬50%Õ¼¿Õ±È
     while (TRUE)
     {
         track_fusion_update();

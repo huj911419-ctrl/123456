@@ -381,7 +381,7 @@ void track_fusion_update(void)
                            ? (int16)(weighted_sum / weight_total)
                            : (int16)TF_IMG_CENTER;
 
-    g_tf.error = avg_center - (int16)TF_IMG_CENTER;
+    g_tf.error =-( avg_center - (int16)TF_IMG_CENTER);
     g_tf.line_lost = 0u;
 }
 
