@@ -1,4 +1,5 @@
 #include "Track_funsion.h"
+
 /* ================================================================
  *  赛道约定：蓝色背景（亮）+ 深色赛道线（暗）
  *    · 赛道像素（灰度 < threshold）→ bin_image = 255（显示为白）
@@ -78,7 +79,7 @@ static void binarize_image(void)
 {
     for (uint16 i = 0; i < TF_IMG_H; i++)
         for (uint16 j = 0; j < TF_IMG_W; j++)
-            bin_image[i][j] = (mt9v03x_image[i][j] >g_tf.threshold) ? 255u : 0u;
+            bin_image[i][j] = (mt9v03x_image[i][j] < g_tf.threshold) ? 255u : 0u;
 }
 
 /* ================================================================
@@ -381,42 +382,119 @@ void track_fusion_update(void)
                            ? (int16)(weighted_sum / weight_total)
                            : (int16)TF_IMG_CENTER;
 
-    g_tf.error =-( avg_center - (int16)TF_IMG_CENTER);
+    g_tf.error =-(avg_center - (int16)TF_IMG_CENTER);
     g_tf.line_lost = 0u;
 }
 
+/* ================================================================
+ *  十、直角检测
+ *
+ *  检测原理：
+ *    只统计底部 RA_CHECK_ROWS 行的边界状态
+ *    车还没到直角 → 底部左右边界都正常
+ *    车到了直角   → 底部某侧边界消失，贴到图像边缘
+ *
+ *  实时变化：
+ *    每帧重新判断当前状态，摄像头看到什么就输出什么
+ *    没有"锁定"逻辑，条件消失则标志立刻清零
+ *
+ *  防抖：
+ *    连续 RA_CONFIRM_FRAMES 帧同一结果才确认（建议2~3）
+ *    候选结果改变时重新从0开始计数
+ *
+ *  超时清除：
+ *    当前结果连续保持超过 RA_TIMEOUT_FRAMES 帧后强制清零
+ *    防止直角标志因某种异常一直保持
+ *
+ *  g_ra_flag：
+ *    0 = 正常直线/弯道
+ *    1 = 直角右转（底部右侧消失）
+ *    2 = 直角左转（底部左侧消失）
+ *    3 = 横线/T字路口（底部两侧同时消失）
+ * ================================================================ */
 
-// -------- 直角检测相关 --------
-#define RIGHT_ANGLE_THRESHOLD 35
-#define RIGHT_ANGLE_FRAMES 2
+uint8 g_ra_flag = 0u;
 
-static uint8 s_right_angle_cnt = 0u;
-uint8 g_right_angle_flag = 0u; // 全局变量，pid那边要用
-int8 g_right_angle_dir = 0;    // 全局变量，pid那边要用
+static uint8 s_ra_confirm_cnt = 0u; // 连续帧防抖计数
+static uint8 s_ra_candidate = 0u;   // 当前候选结果
+static uint8 s_ra_timeout_cnt = 0u; // 超时计数
 
 void right_angle_detect(void)
 {
+    /* ---- 丢线时全部清零 ---- */
     if (g_tf.line_lost)
     {
-        s_right_angle_cnt = 0u;
-        g_right_angle_flag = 0u;
+        s_ra_confirm_cnt = 0u;
+        s_ra_candidate = 0u;
+        s_ra_timeout_cnt = 0u;
+        g_ra_flag = 0u;
         return;
     }
 
-    int16 abs_err = g_tf.error >= 0 ? g_tf.error : -g_tf.error;
+    /* ---- 统计底部 RA_CHECK_ROWS 行的贴边情况 ---- */
+    uint8 right_lost = 0u;
+    uint8 left_lost = 0u;
 
-    if (abs_err >= RIGHT_ANGLE_THRESHOLD)
+    for (int16 i = (int16)TF_JIDIAN_ROW;
+         i > (int16)TF_JIDIAN_ROW - (int16)RA_CHECK_ROWS; i--)
     {
-        s_right_angle_cnt++;
-        if (s_right_angle_cnt >= RIGHT_ANGLE_FRAMES)
+        if (!g_tf.row_valid[i])
+            continue;
+
+        if (g_tf.right_edge[i] >= (int16)(TF_IMG_W - RA_EDGE_MARGIN))
+            right_lost++;
+
+        if (g_tf.left_edge[i] <= (int16)RA_EDGE_MARGIN)
+            left_lost++;
+    }
+
+    /* ---- 本帧原始结果 ---- */
+    uint8 this_frame = 0u;
+    if (right_lost >= RA_LOST_THRESH && left_lost >= RA_LOST_THRESH)
+        this_frame = 3u;
+    else if (right_lost >= RA_LOST_THRESH)
+        this_frame = 1u;
+    else if (left_lost >= RA_LOST_THRESH)
+        this_frame = 2u;
+
+    /* ---- 防抖：连续帧确认 ---- */
+    if (this_frame != 0u && this_frame == s_ra_candidate)
+    {
+        /* 同一结果连续出现，计数+1 */
+        if (s_ra_confirm_cnt < RA_CONFIRM_FRAMES)
+            s_ra_confirm_cnt++;
+
+        if (s_ra_confirm_cnt >= RA_CONFIRM_FRAMES)
         {
-            g_right_angle_flag = 1u;
-            g_right_angle_dir = g_tf.error > 0 ? 1 : -1;
+            /* 确认：实时更新标志（条件在就是什么，条件消失立刻清零）*/
+            g_ra_flag = this_frame;
+
+            /* 超时计数 */
+            s_ra_timeout_cnt++;
+            if (s_ra_timeout_cnt >= RA_TIMEOUT_FRAMES)
+            {
+                /* 持续时间过长，强制清零防止卡死 */
+                g_ra_flag = 0u;
+                s_ra_confirm_cnt = 0u;
+                s_ra_candidate = 0u;
+                s_ra_timeout_cnt = 0u;
+            }
         }
+    }
+    else if (this_frame != 0u)
+    {
+        /* 新的候选结果，重新从1开始计数 */
+        s_ra_candidate = this_frame;
+        s_ra_confirm_cnt = 1u;
+        s_ra_timeout_cnt = 0u;
+        /* 标志先不更新，等连续帧确认后再改 */
     }
     else
     {
-        s_right_angle_cnt = 0u;
-        g_right_angle_flag = 0u;
+        /* 本帧没有检测到，立刻清零（实时响应）*/
+        s_ra_confirm_cnt = 0u;
+        s_ra_candidate = 0u;
+        s_ra_timeout_cnt = 0u;
+        g_ra_flag = 0u;
     }
 }

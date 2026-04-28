@@ -22,7 +22,7 @@
 
 /* ==================== 循迹参数（可调）==================== */
 #define TF_OTSU_INTERVAL 5           // 每几帧重算一次大津阈值
-#define TF_THRESHOLD_BIAS (-15)      // 阈值偏移量
+#define TF_THRESHOLD_BIAS (-10)      // 阈值偏移量
 #define TF_JIDIAN_ROW (TF_IMG_H - 4) // 基点搜索行 = 116
 #define TF_SEARCH_END_ROW 8          // 向上搜索终止行
 #define TF_LOCAL_RANGE 18            // 本地搜索半宽
@@ -58,14 +58,33 @@ extern TrackFusion_t g_tf;
  */
 extern uint8 bin_image[TF_IMG_H][TF_IMG_W];
 
+/* ==================== 直角检测参数（可调）==================== */
+#define RA_CHECK_ROWS 15     // 只看底部多少行（越小越靠近车头才触发）
+#define RA_EDGE_MARGIN 3     // 边界距图像边缘多少列算贴边（越小越严格）
+#define RA_LOST_THRESH 8     // 底部多少行贴边才触发（越小越灵敏）
+#define RA_CONFIRM_FRAMES 2  // 连续多少帧确认（建议2~3，1太敏感，4太迟钝）
+#define RA_TIMEOUT_FRAMES 50 // 标志最长保持多少帧（50帧≈1秒），超时强制清零
+
+/* ==================== 直角检测结果 ==================== */
+/*
+ * g_ra_flag : 0=正常  1=直角右转  2=直角左转  3=横线/T字路口
+ *
+ * 检测原理：
+ *   只统计底部 RA_CHECK_ROWS 行（车头正下方附近）
+ *   右边界贴近图像右边缘 → 右侧白线消失 → 直角右转
+ *   左边界贴近图像左边缘 → 左侧白线消失 → 直角左转
+ *   两侧同时贴边         → 横线到达底部 → 横线/T字
+ *   连续 RA_CONFIRM_FRAMES 帧都满足才确认，防止噪点误触发
+ */
+extern uint8 g_ra_flag; // 外部读这个判断是否到了直角
+
 /* ==================== 对外接口 ==================== */
 void track_fusion_init(void);
 void track_fusion_update(void);
 
-// 直角检测结果（供 line_pid.c 读取）
-extern uint8 g_right_angle_flag;
-extern int8 g_right_angle_dir;
-
+/* 每帧在 track_fusion_update() 之后调用
+ * 结果写入 g_ra_flag
+ * 0=正常直线  1=直角右转  2=直角左转  3=横线/T字 */
 void right_angle_detect(void);
 
 #endif /* TRACK_FUSION_H */
