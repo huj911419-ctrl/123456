@@ -78,7 +78,7 @@ static void binarize_image(void)
 {
     for (uint16 i = 0; i < TF_IMG_H; i++)
         for (uint16 j = 0; j < TF_IMG_W; j++)
-            bin_image[i][j] = (mt9v03x_image[i][j] < g_tf.threshold) ? 255u : 0u;
+            bin_image[i][j] = (mt9v03x_image[i][j] >g_tf.threshold) ? 255u : 0u;
 }
 
 /* ================================================================

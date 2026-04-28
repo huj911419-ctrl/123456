@@ -22,7 +22,7 @@
 
 /* ==================== 循迹参数（可调）==================== */
 #define TF_OTSU_INTERVAL 5           // 每几帧重算一次大津阈值
-#define TF_THRESHOLD_BIAS (-10)      // 阈值偏移量
+#define TF_THRESHOLD_BIAS (-15)      // 阈值偏移量
 #define TF_JIDIAN_ROW (TF_IMG_H - 4) // 基点搜索行 = 116
 #define TF_SEARCH_END_ROW 8          // 向上搜索终止行
 #define TF_LOCAL_RANGE 18            // 本地搜索半宽
