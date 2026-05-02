@@ -3,13 +3,14 @@
 // ================================================================
 //  全局变量
 // ================================================================
-float yaw_angle = 0.0f;   // 累积偏航角（度）
-float yaw_rate  = 0.0f;   // 当前角速度（度/秒）
+volatile float yaw_angle = 0.0f;   // 累积偏航角（度）
+volatile float yaw_rate  = 0.0f;   // 当前角速度（度/秒）
 
 static float s_gyro_z_offset = 0.0f;  // 陀螺仪 Z 轴零偏（标定值）
 
-#define GYRO_Z_DEADBAND  0.5f   // 角速度死区（度/秒），小于此值归零
+#define GYRO_Z_DEADBAND  0.15f  // 角速度死区（度/秒），小于此值归零
 #define YAW_CALIB_COUNT  200    // 零偏标定采样次数（200次 * 5ms ≈ 1秒）
+#define YAW_CALIB_VAR_MAX 0.1f  // 标定方差上限，超过说明有抖动需重来
 
 // ================================================================
 //  函数接口：IMU 初始化 + 零偏标定
@@ -25,17 +26,31 @@ void imu_init(void)
             break;
     }
 
-    // 零偏标定：静止状态采集 200 次取平均
+    // 零偏标定：静止状态采集，带方差检测
     // 此时小车必须静止不动！
-    float sum = 0.0f;
-    for (int i = 0; i < YAW_CALIB_COUNT; i++)
+    for (int retry = 0; retry < 3; retry++)
     {
-        imu660rc_get_gyro();
-        // Z 轴朝下安装，取反
-        sum += -imu660rc_gyro_transition(imu660rc_gyro_z);
-        system_delay_ms(5);
+        float sum = 0.0f, sum_sq = 0.0f;
+        for (int i = 0; i < YAW_CALIB_COUNT; i++)
+        {
+            imu660rc_get_gyro();
+            float val = -imu660rc_gyro_transition(imu660rc_gyro_z);
+            sum    += val;
+            sum_sq += val * val;
+            system_delay_ms(5);
+        }
+        float mean     = sum / (float)YAW_CALIB_COUNT;
+        float variance = sum_sq / (float)YAW_CALIB_COUNT - mean * mean;
+
+        if (variance < YAW_CALIB_VAR_MAX)
+        {
+            s_gyro_z_offset = mean;
+            break;
+        }
+        // 方差过大，抖动严重，重试
+        if (retry == 2)
+            s_gyro_z_offset = mean; // 第3次强制用当前值
     }
-    s_gyro_z_offset = sum / (float)YAW_CALIB_COUNT;
 
     // 清零
     yaw_angle = 0.0f;
