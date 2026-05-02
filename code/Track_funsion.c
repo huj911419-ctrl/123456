@@ -79,7 +79,7 @@ static void binarize_image(void)
 {
     for (uint16 i = 0; i < TF_IMG_H; i++)
         for (uint16 j = 0; j < TF_IMG_W; j++)
-            bin_image[i][j] = (mt9v03x_image[i][j] < g_tf.threshold) ? 255u : 0u;
+            bin_image[i][j] = (mt9v03x_image[i][j] > g_tf.threshold) ? 255u : 0u;
 }
 
 /* ================================================================
@@ -450,6 +450,7 @@ void right_angle_detect(void)
 
     /* ---- 本帧原始结果 ---- */
     uint8 this_frame = 0u;
+    printf("right_lost=%d,left_lost=%d\r\n", right_lost, left_lost);
     if (right_lost >= RA_LOST_THRESH && left_lost >= RA_LOST_THRESH)
         this_frame = 3u;
     else if (right_lost >= RA_LOST_THRESH)

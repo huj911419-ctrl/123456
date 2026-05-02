@@ -20,9 +20,10 @@ int core0_main(void)
     while (TRUE)
     {
         track_fusion_update();
-        printf("%d,%d\r\n",
-               motor_value.receive_left_speed_data,
-               motor_value.receive_right_speed_data);
+        right_angle_detect();
+        //printf("%d,%d\r\n",
+         //      motor_value.receive_left_speed_data,
+          //     motor_value.receive_right_speed_data);
         
         base_speed = (int16)motor_speed * 20; 
         
