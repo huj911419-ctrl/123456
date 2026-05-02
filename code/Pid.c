@@ -1,5 +1,6 @@
 #include "Pid.h"
 #include "Menu.h"
+#include "IMU.h"
 
 int16 base_speed = 900;  // 基础速度
 
@@ -96,6 +97,8 @@ void line_pid_init(void)
     s_steer_d_reset_flag = 1u; // 初始化时先复位一次，让D项不参与
     s_speed_integral_l = 0.0f;
     s_speed_integral_r = 0.0f;
+    s_prev_ra_flag = 0;
+    imu_reset_yaw();
 }
 
 // ================================================================
@@ -107,9 +110,10 @@ void line_pid_reset_derivative(void)
 }
 
 // ================================================================
-// 内部变量：自动停止计时
+// 内部变量：自动停止计时 + 直角弯状态跟踪
 // ================================================================
 static uint32 s_motor_run_counter = 0;
+static uint8 s_prev_ra_flag = 0;  // 上一次直角弯标志（用于检测退出）
 
 // ================================================================
 // 函数接口：PID控制主函数（在定时器中调用，30ms周期）
@@ -144,17 +148,36 @@ void line_pid_control(void)
     // -------- 0. 直角弯处理 --------
     if (g_ra_flag == 1)  // 右直角 - 右轮停，左轮转
     {
+        s_prev_ra_flag = 1;
         small_driver_set_duty(0, 500);
         return;
     }
     else if (g_ra_flag == 2) // 左直角 - 左轮停，右轮转
     {
+        s_prev_ra_flag = 2;
         small_driver_set_duty(500, 0);
         return;
     }
 
-    // -------- 1. 转向 PD（位置偏差 → 转向输出）--------
+    // 直角弯退出时清零 yaw，防止累积角度影响后续直线
+    if (s_prev_ra_flag != 0)
+    {
+        imu_reset_yaw();
+        s_prev_ra_flag = 0;
+    }
+
+    // -------- 1. 转向 PD（位置偏差 → 转向输出）+ Yaw 补偿 --------
     float steer = steer_pd_calc(pos_err);
+
+    // Yaw 补偿：当车辆偏航时施加反向修正
+    {
+        float yaw_kp_val = (float)yaw_kp / 10.0f;  // 菜单值转实际值
+        float yaw_comp = 0.0f;
+        float yaw_abs = yaw_angle >= 0 ? yaw_angle : -yaw_angle;
+        if (yaw_abs > YAW_DEADZONE)
+            yaw_comp = yaw_kp_val * yaw_angle;
+        steer += yaw_comp;
+    }
 
     // -------- 2. 速度固定 --------
     float target_speed = base_speed;

@@ -45,6 +45,9 @@ int16 pid_kp = 15;             // Kp，实际值为 pid_kp/10.0
 int16 pid_ki = 2;              // Ki，实际值为 pid_ki/10.0
 int16 pid_kd = 8;              // Kd，实际值为 pid_kd/10.0
 
+// ---------- IMU参数 ----------
+int16 yaw_kp = 10;             // Yaw 补偿系数，实际值为 yaw_kp/10.0（即 1.0）
+
 // ================================================================
 //  每个页面定义对应的 MenuItem 数组
 //  格式：{ "显示名", &变量, 最小值, 最大值, 步进 }
@@ -73,6 +76,11 @@ static MenuItem items_pid[] = {
     {"Kp x10", &pid_kp, 0, 100, 1}, // 实际Kp = pid_kp/10.0
     {"Ki x10", &pid_ki, 0, 50, 1},
     {"Kd x10", &pid_kd, 0, 50, 1},
+};
+
+// IMU页面参数列表（1个参数）
+static MenuItem items_imu[] = {
+    {"YAW Kp", &yaw_kp, 0, 100, 1}, // 实际YAW_Kp = yaw_kp/10.0
 };
 
 // ================================================================
@@ -110,6 +118,14 @@ static MenuPageDef g_pages[PAGE_MAX] = {
         .title = "PID SET",
         .items = items_pid,
         .item_count = 3,
+        .draw = NULL,
+    },
+
+    // PAGE_IMU - IMU参数设置页面
+    {
+        .title = "IMU SET",
+        .items = items_imu,
+        .item_count = 1,
         .draw = NULL,
     },
 

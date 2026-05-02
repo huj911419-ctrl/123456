@@ -13,6 +13,7 @@ typedef enum
     PAGE_MOTOR,       // 电机设置页面
     PAGE_CAM,         // 摄像头设置页面
     PAGE_PID,         // PID参数设置页面
+    PAGE_IMU,         // IMU参数设置页面
     PAGE_MAX          // 页面总数（必须放在最后）
 } MenuPage;
 
@@ -48,6 +49,7 @@ extern int16 motor_speed;    // 电机速度
 extern int16 motor_dir;     // 电机方向
 extern int16 motor_enable;   // 电机使能
 extern int16 motor_run_time;  // 电机运行时长
+extern int16 yaw_kp;          // Yaw 补偿系数（实际值 = yaw_kp/10.0f）
 
 // ================================================================
 //  函数接口
