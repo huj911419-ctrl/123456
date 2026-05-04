@@ -146,24 +146,26 @@ void line_pid_control(void)
     int16 pos_err_abs = pos_err >= 0 ? pos_err : -pos_err;
 
     // -------- 0. 直角弯处理 --------
-    if (g_ra_flag == 1)  // 右直角 - 右轮停，左轮转
+    if (g_ra_flag == 1)
     {
         s_prev_ra_flag = 1;
         small_driver_set_duty(0, 500);
+        turn_right_led_on();
         return;
     }
-    else if (g_ra_flag == 2) // 左直角 - 左轮停，右轮转
+    else if (g_ra_flag == 2)
     {
         s_prev_ra_flag = 2;
         small_driver_set_duty(500, 0);
+        turn_right_led_off();
         return;
     }
 
-    // 直角弯退出时清零 yaw，防止累积角度影响后续直线
     if (s_prev_ra_flag != 0)
     {
         imu_reset_yaw();
         s_prev_ra_flag = 0;
+        turn_right_led_off();
     }
 
     // -------- 1. 转向 PD（位置偏差 → 转向输出）+ Yaw 补偿 --------

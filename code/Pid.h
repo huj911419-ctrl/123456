@@ -28,7 +28,7 @@ extern int16 base_speed;  // 基础速度
 // ================================================================
 // 速度相关参数
 // ================================================================
-#define BASE_SPEED 50.0f    // 直道目标速度（实际使用base_speed变量）
+#define BASE_SPEED 50.0f    // 直道目标速度（实际使用base_speed变量）//
 #define MIN_SPEED 30.0f     // 弯道最低速度
 #define MAX_DUTY 300.0f     // 输出限幅
 #define SPEED_REDUCE_K 5.0f // 偏差速度缩减系数

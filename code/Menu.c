@@ -11,6 +11,8 @@
 #define KEY3 P11_3 // 确定键 / 增加值
 #define KEY4 P11_2 // 取消键 / 减少值
 
+#define TURN_RIGHT_LED P20_8 // 右转指示灯
+
 #define SWITCH1 P33_11 // 拨码开关1位 (bit1)
 #define SWITCH2 P33_12 // 拨码开关0位 (bit0)
 
@@ -270,6 +272,7 @@ void key_init_all(void)
     gpio_init(KEY4, GPI, GPIO_HIGH, GPI_PULL_UP);
     gpio_init(SWITCH1, GPI, GPIO_HIGH, GPI_PULL_UP);
     gpio_init(SWITCH2, GPI, GPIO_HIGH, GPI_PULL_UP);
+    gpio_init(TURN_RIGHT_LED, GPO, GPIO_HIGH, GPIO_PUSHPULL);
 }
 
 // ================================================================
@@ -392,4 +395,14 @@ void menu_show(void)
     {
         default_draw(page);
     }
+}
+
+void turn_right_led_on(void)
+{
+    gpio_set_level(TURN_RIGHT_LED, GPIO_LOW);
+}
+
+void turn_right_led_off(void)
+{
+    gpio_set_level(TURN_RIGHT_LED, GPIO_HIGH);
 }

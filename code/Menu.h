@@ -3,59 +3,45 @@
 
 #include "zf_common_headfile.h"
 
-// ================================================================
-//  页面枚举定义（1/2）此处定义所有页面
-//  PAGE_MAX 必须最后定义，会自动统计页面数量
-// ================================================================
 typedef enum
 {
-    PAGE_MAIN = 0,     // 主页面（图像显示）
-    PAGE_MOTOR,       // 电机设置页面
-    PAGE_CAM,         // 摄像头设置页面
-    PAGE_PID,         // PID参数设置页面
-    PAGE_IMU,         // IMU参数设置页面
-    PAGE_MAX          // 页面总数（必须放在最后）
+    PAGE_MAIN = 0,
+    PAGE_MOTOR,
+    PAGE_CAM,
+    PAGE_PID,
+    PAGE_IMU,
+    PAGE_MAX
 } MenuPage;
 
-// ================================================================
-//  菜单项结构体（每个参数）
-// ================================================================
 typedef struct
 {
-    const char *label;  // 显示名称，如 "Speed"
-    int16 *value;     // 指向实际运行时变量的指针（直接改变量）
-    int16 min;        // 最小值
-    int16 max;        // 最大值
-    int16 step;       // 每次按键调整的步进值
+    const char *label;
+    int16 *value;
+    int16 min;
+    int16 max;
+    int16 step;
 } MenuItem;
 
-// ================================================================
-//  页面定义结构体
-// ================================================================
 typedef struct
 {
-    const char *title;  // 页面标题（显示在第0行）
-    MenuItem *items;   // 页面参数数组（无参数页面填 NULL）
-    uint8 item_count;  // 参数数量（无参数页面填 0）
-    void (*draw)(void); // 自定义绘制回调（可填 NULL，启用默认绘制）
+    const char *title;
+    MenuItem *items;
+    uint8 item_count;
+    void (*draw)(void);
 } MenuPageDef;
 
-// ================================================================
-//  全局变量（在 .c 中定义，这里 extern 供外部使用）
-// ================================================================
-extern MenuPage now_page;      // 当前所在页面
-extern uint8 menu_cursor;     // 当前选中的参数索引
-extern int16 motor_speed;    // 电机速度
-extern int16 motor_dir;     // 电机方向
-extern int16 motor_enable;   // 电机使能
-extern int16 motor_run_time;  // 电机运行时长
-extern int16 yaw_kp;          // Yaw 补偿系数（实际值 = yaw_kp/10.0f）
+extern MenuPage now_page;
+extern uint8 menu_cursor;
+extern int16 motor_speed;
+extern int16 motor_dir;
+extern int16 motor_enable;
+extern int16 motor_run_time;
+extern int16 yaw_kp;
 
-// ================================================================
-//  函数接口
-// ================================================================
-void key_init_all(void);    // 初始化按键 & 拨码开关
-void key_process(void);    // 按键处理（在主循环中调用，10ms一次）
-void menu_show(void);      // 刷新当前页面显示（在主循环中调用）
+void key_init_all(void);
+void key_process(void);
+void menu_show(void);
+void turn_right_led_on(void);
+void turn_right_led_off(void);
 
-#endif /* MENU_H_ */
+#endif
