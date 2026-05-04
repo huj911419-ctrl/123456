@@ -7,10 +7,12 @@ volatile float yaw_angle = 0.0f;   // 累积偏航角（度）
 volatile float yaw_rate  = 0.0f;   // 当前角速度（度/秒）
 
 static float s_gyro_z_offset = 0.0f;  // 陀螺仪 Z 轴零偏（标定值）
+static float s_yaw_rate_filtered = 0.0f;  // 滤波后的角速度
 
 #define GYRO_Z_DEADBAND  0.15f  // 角速度死区（度/秒），小于此值归零
 #define YAW_CALIB_COUNT  200    // 零偏标定采样次数（200次 * 5ms ≈ 1秒）
 #define YAW_CALIB_VAR_MAX 0.1f  // 标定方差上限，超过说明有抖动需重来
+#define YAW_RATE_FILTER  0.8f   // 低通滤波系数 (0~1)，值越大越平滑
 
 // ================================================================
 //  函数接口：IMU 初始化 + 零偏标定
@@ -76,11 +78,15 @@ void imu_update(void)
 
     // 死区处理：角速度太小认为是噪声
     if (raw_rate > GYRO_Z_DEADBAND)
-        yaw_rate = raw_rate;
+        raw_rate = raw_rate;
     else if (raw_rate < -GYRO_Z_DEADBAND)
-        yaw_rate = raw_rate;
+        raw_rate = raw_rate;
     else
-        yaw_rate = 0.0f;
+        raw_rate = 0.0f;
+
+    // 低通滤波
+    s_yaw_rate_filtered = s_yaw_rate_filtered * YAW_RATE_FILTER + raw_rate * (1.0f - YAW_RATE_FILTER);
+    yaw_rate = s_yaw_rate_filtered;
 
     // 累积角度：角速度 * 时间（5ms = 0.005s）
     yaw_angle += yaw_rate * 0.005f;
