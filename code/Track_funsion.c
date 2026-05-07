@@ -543,3 +543,51 @@ void right_angle_detect(void)
         g_ra_flag = 0u;
     }
 }
+/* ========================================================================
+ * 全局变量: g_ra_pre_flag
+ * 功能: 直角预判标志（远处检测，用于提前减速）
+ * 说明: 0 = 正常
+ *       1 = 远处看到直角，开始减速
+ * ======================================================================== */
+uint8 g_ra_pre_flag = 0u;
+
+/* ========================================================================
+ * 函数: right_angle_pre_detect
+ * 功能: 直角预判检测（看图像中上部，直角出现就返回1）
+ * 说明: 检测区域：行 RA_PRE_START_ROW ~ RA_PRE_END_ROW（图像中上部）
+ *       统计每行左右半幅的白色像素数量
+ *       某半幅白色像素超过阈值 → 说明横向白线进入视野 → 准备减速
+ * ======================================================================== */
+void right_angle_pre_detect(void)
+{
+    uint8 right_row_cnt = 0u;
+    uint8 left_row_cnt = 0u;
+
+    /* 只扫描中上部区域 */
+    for (int16 i = (int16)RA_PRE_START_ROW; i > (int16)RA_PRE_END_ROW; i--)
+    {
+        uint8 left_white = 0u;
+        uint8 right_white = 0u;
+
+        /* 统计左半幅白色像素 */
+        for (int16 j = 0; j < (int16)TF_IMG_CENTER; j++)
+            if (bin_image[i][j] == 255u)
+                left_white++;
+
+        /* 统计右半幅白色像素 */
+        for (int16 j = (int16)TF_IMG_CENTER; j < (int16)TF_IMG_W; j++)
+            if (bin_image[i][j] == 255u)
+                right_white++;
+
+        if (right_white >= RA_PRE_WHITE_THRESH)
+            right_row_cnt++;
+        if (left_white >= RA_PRE_WHITE_THRESH)
+            left_row_cnt++;
+    }
+
+    /* 任意一侧满足条件就置位预判标志 */
+    g_ra_pre_flag = (right_row_cnt >= RA_PRE_ROW_THRESH ||
+                     left_row_cnt >= RA_PRE_ROW_THRESH)
+                        ? 1u
+                        : 0u;
+}

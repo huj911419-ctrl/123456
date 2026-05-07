@@ -6,10 +6,10 @@
 // ================================================================
 //  硬件引脚定义
 // ================================================================
-#define KEY1 P20_6 // 上一页
-#define KEY2 P20_7 // 下一页
-#define KEY3 P11_3 // 确定键 / 增加值
-#define KEY4 P11_2 // 取消键 / 减少值
+#define KEY1 P11_3  // 上一页
+#define KEY2 P11_2 // 下一页
+#define KEY3 P20_6  // 确定键 / 增加值
+#define KEY4 P20_7 // 取消键 / 减少值
 
 #define TURN_RIGHT_LED P20_8 // 右转指示灯
 
@@ -33,19 +33,19 @@
 // ================================================================
 
 // ---------- 主页参数 ----------
-int16 motor_speed = 50;       // 电机速度   范围 0~100
+int16 motor_speed = 50;       // 电机速度   范围 0~100，base_speed = motor_speed*8
 int16 motor_dir = 1;           // 电机方向   0=反转 1=正转
 int16 motor_enable = 0;       // 电机使能   0=停止 1=运行
-int16 motor_run_time = 3;      // 电机运行时长（秒） 范围 3~60
+int16 motor_run_time = 60;      // 电机运行时长（秒） 范围 3~60
 
 // ---------- 摄像头参数 ----------
 int16 cam_threshold = 128;    // 阈值二值化值 范围 0~255
 int16 cam_exposure = 200;      // 曝光时间   范围 100~500
 
 // ---------- PID参数 ----------
-int16 pid_kp = 15;             // Kp，实际值为 pid_kp/10.0
-int16 pid_ki = 2;              // Ki，实际值为 pid_ki/10.0
-int16 pid_kd = 8;              // Kd，实际值为 pid_kd/10.0
+int16 pid_kp = 13;             // Kp，实际 STEER_KP = pid_kp*0.8
+int16 pid_ki = 2;              // Ki（预留，当前未接入Pid.c）
+int16 pid_kd = 16;             // Kd，实际 STEER_KD = pid_kd*0.6
 
 // ---------- IMU参数 ----------
 int16 yaw_kp = 10;             // Yaw 补偿系数，实际值为 yaw_kp/10.0（即 1.0）
@@ -272,7 +272,7 @@ void key_init_all(void)
     gpio_init(KEY4, GPI, GPIO_HIGH, GPI_PULL_UP);
     gpio_init(SWITCH1, GPI, GPIO_HIGH, GPI_PULL_UP);
     gpio_init(SWITCH2, GPI, GPIO_HIGH, GPI_PULL_UP);
-    gpio_init(TURN_RIGHT_LED, GPO, GPIO_HIGH, GPIO_PUSHPULL);
+    gpio_init(TURN_RIGHT_LED, GPO, GPIO_HIGH,GPI_PULL_UP );
 }
 
 // ================================================================

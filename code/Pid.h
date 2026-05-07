@@ -3,24 +3,29 @@
 
 #include "zf_common_headfile.h"
 
-extern int16 base_speed;  // 基础速度
+extern int16 base_speed; // 基础速度
+
+// 菜单实时可调的 PID 变量（定义在 Menu.c）
+extern int16 motor_speed; // 电机速度 0~100
+extern int16 pid_kp;      // 转向 P，实际值 = pid_kp * 0.8
+extern int16 pid_kd;      // 转向 D，实际值 = pid_kd * 0.6
 
 // ================================================================
-// 转向 PD 参数
+// 转向 PD 参数（菜单变量驱动，无需重新编译即可调参）
 // ================================================================
-#define STEER_KP 50.0f      // 转向P比例系数
-#define STEER_KD 25.0f      // 转向D微分系数
-#define STEER_MAX 4000.0f   // 转向输出限幅
+#define STEER_KP  ((float)pid_kp * 0.8f)   // 转向P，默认15→12.0
+#define STEER_KD  ((float)pid_kd * 0.6f)   // 转向D，默认8→4.8
+#define STEER_MAX 4000.0f // 转向输出限幅
 
 // 死区：偏差绝对值小于此值时转向输出为0，防止小抖动
-#define STEER_DEADZONE 2    // 转向死区阈值
+#define STEER_DEADZONE 2 // 转向死区阈值
 
 // ================================================================
 // 速度 PI 参数
 // ================================================================
-#define SPEED_KP 0.45f      // 速度P比例系数
-#define SPEED_KI 0.6f       // 速度I积分系数
-#define SPEED_I_MAX 3000.0f // 积分限幅
+#define SPEED_KP 0.5f     // 速度P比例系数
+#define SPEED_KI 0.5f     // 速度I积分系数
+#define SPEED_I_MAX 500.0f // 积分限幅
 
 // 积分分离：偏差大于此值时不积分，防止积分饱和
 #define SPEED_I_SEPARATION 20 // 积分分离阈值
@@ -28,21 +33,21 @@ extern int16 base_speed;  // 基础速度
 // ================================================================
 // 速度相关参数
 // ================================================================
-#define BASE_SPEED 50.0f    // 直道目标速度（实际使用base_speed变量）//
-#define MIN_SPEED 30.0f     // 弯道最低速度
-#define MAX_DUTY 300.0f     // 输出限幅
-#define SPEED_REDUCE_K 5.0f // 偏差速度缩减系数
+#define MAX_DUTY 1000.0f // 输出限幅
+
+// 低通滤波系数：0~1，越大越平滑（抑制摄像头帧间噪声）
+#define ERROR_FILTER_ALPHA 0.65f
 
 // ================================================================
-//  Yaw 补偿参数
+//  Yaw 补偿参数（IMU 相关，当前未启用）
 // ================================================================
-#define YAW_KP  10.0f       // Yaw 补偿比例系数
-#define YAW_DEADZONE 1.0f   // Yaw 死区（角度绝对值小于此值不补偿）
+#define YAW_KP 10.0f      // Yaw 补偿比例系数
+#define YAW_DEADZONE 1.0f // Yaw 死区（角度绝对值小于此值不补偿）
 
 // ================================================================
 // 函数接口
 // ================================================================
-void line_pid_init(void);              // PID初始化
+void line_pid_init(void);             // PID初始化
 void line_pid_control(void);          // PID控制主函数（在定时器中调用）
 void line_pid_reset_derivative(void); // 复位D项（微分复位）
 

@@ -15,9 +15,24 @@ IFX_INTERRUPT(cc60_pit_ch0_isr, 0, CCU6_0_CH0_ISR_PRIORITY)
 {
     interrupt_global_enable(0);
     pit_clear_flag(CCU60_CH0);
-    
-        line_pid_control();
-   
+
+    /* if (g_ra_flag != 0)
+     {
+         // 底部检测到直角，执行转弯
+     }
+     else if (g_ra_pre_flag)
+     {
+         // 远处看到直角，正常循迹但降速
+         line_pid_control();
+         // set_motor_speed(低速);
+         base_speed = 100; // 直接设置较低的基础速度，实际速度由PID输出调整
+     }
+     else
+     {
+         // 完全正常，全速循迹
+         line_pid_control();
+     }*/
+    line_pid_control();
 }
 
 /* CCU60 通道1 PIT中断
@@ -27,7 +42,7 @@ IFX_INTERRUPT(cc60_pit_ch1_isr, 0, CCU6_0_CH1_ISR_PRIORITY)
 {
     interrupt_global_enable(0);
     pit_clear_flag(CCU60_CH1);
-    imu_update();
+    //imu_update();
 }
 
 /* CCU61 通道0 PIT中断 - 备用 */

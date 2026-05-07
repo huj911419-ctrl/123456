@@ -21,7 +21,7 @@ int core0_main(void)
     
     /* 初始化赛道融合检测 */
     track_fusion_init();
-    
+
     /* 初始化小车主控串口通信 */
     small_driver_uart_init();
     
@@ -29,7 +29,8 @@ int core0_main(void)
     line_pid_init();
     
     /* 初始化IMU惯性测量单元 */
-    imu_init();
+    
+   // imu_init();
     
     /* 初始化30ms周期中断 */
     pit_ms_init(CCU60_CH0, 30);
@@ -44,12 +45,15 @@ int core0_main(void)
     {
         /* 更新赛道融合检测结果 */
         track_fusion_update();
-        
+
+        /* 直角预判检测（基于当前帧二值图，必须在 track_fusion_update 之后） */
+        right_angle_pre_detect();
+
         /* 直角检测 */
         right_angle_detect();
         
-        /* 计算基础速度: 电机速度值 * 20 */
-        base_speed = (int16)motor_speed * 20;
+        // base_speed 直接由菜单设置，不再自动计算
+        // base_speed = (int16)motor_speed * 20;
         
         /* 按键处理 */
         key_process();
