@@ -2,29 +2,29 @@
 #include "Menu.h"
 #include "IMU.h"
 
-int16 base_speed = 0; // �����ٶ�
+int16 base_speed = 0; // 锟斤拷锟斤拷锟劫讹拷
 
-// ================= ȫ�־�̬���� =================
-static float s_steer_last_pos_err = 0.0f; // ��һ��λ��������D����㣩
-static uint8 s_steer_d_reset_flag = 0u;   // ΢�ָ�λ��־��1ʱ�´�D����룩
+// ================= 全锟街撅拷态锟斤拷锟斤拷 =================
+static float s_steer_last_pos_err = 0.0f; // 锟斤拷一锟斤拷位锟斤拷锟斤拷睿拷锟斤拷锟紻锟斤拷锟斤拷悖�
+static uint8 s_steer_d_reset_flag = 0u;   // 微锟街革拷位锟斤拷志锟斤拷1时锟铰达拷D锟筋不锟斤拷锟诫）
 
 static float s_speed_integral = 0.0f;
 
-// �Զ�ֹͣ + ֱ����״̬
+// 锟皆讹拷停止 + 直锟斤拷锟斤拷状态
 static uint32 s_motor_run_counter = 0;
-static uint8 s_prev_ra_flag = 0; // ��һ��ֱ�����־
+static uint8 s_prev_ra_flag = 0; // 锟斤拷一锟斤拷直锟斤拷锟斤拷锟街�
 
 // ================================================================
-// �ڲ�������ת�� PD ����
+// 锟节诧拷锟斤拷锟斤拷锟斤拷转锟斤拷 PD 锟斤拷锟斤拷
 // ================================================================
 static float steer_pd_calc(int16 pos_err)
 {
-    // 一阶低通滤波，抑制摄像头帧间噪声引起的高频抖动
+    // 涓�闃朵綆閫氭护娉紝鎶戝埗鎽勫儚澶村抚闂村櫔澹板紩璧风殑楂橀鎶栧姩
     static float s_filtered_err = 0.0f;
     s_filtered_err = s_filtered_err * ERROR_FILTER_ALPHA + (float)pos_err * (1.0f - ERROR_FILTER_ALPHA);
     float err = s_filtered_err;
 
-    // 死区：偏差小不输出，但保持滤波状态和 last_err（修复退出死区时 D 项突跳）
+    // 姝诲尯锛氬亸宸皬涓嶈緭鍑猴紝浣嗕繚鎸佹护娉㈢姸鎬佸拰 last_err锛堜慨澶嶉��鍑烘鍖烘椂 D 椤圭獊璺筹級
     if (err > -STEER_DEADZONE && err < STEER_DEADZONE)
     {
         s_steer_last_pos_err = err;
@@ -56,7 +56,7 @@ static float steer_pd_calc(int16 pos_err)
 }
 
 // ================================================================
-// �ڲ��������ٶ� PI ������
+// 锟节诧拷锟斤拷锟斤拷锟斤拷锟劫讹拷 PI 锟斤拷锟斤拷锟斤拷
 // ================================================================
 static float speed_pi_calc(float target, float actual, float *integral, int16 pos_err_abs)
 {
@@ -79,7 +79,7 @@ static float speed_pi_calc(float target, float actual, float *integral, int16 po
 }
 
 // ================================================================
-// �ڲ�����������޷�
+// 锟节诧拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷薹锟�
 // ================================================================
 static int16 clamp_duty(float val)
 {
@@ -91,7 +91,7 @@ static int16 clamp_duty(float val)
 }
 
 // ================================================================
-// PID��ʼ��
+// PID锟斤拷始锟斤拷
 // ================================================================
 void line_pid_init(void)
 {
@@ -103,7 +103,7 @@ void line_pid_init(void)
 }
 
 // ================================================================
-// ��λD��
+// 锟斤拷位D锟斤拷
 // ================================================================
 void line_pid_reset_derivative(void)
 {
@@ -111,7 +111,7 @@ void line_pid_reset_derivative(void)
 }
 
 // ================================================================
-// PID�����ƺ�����30ms���ڣ�
+// PID锟斤拷锟斤拷锟狡猴拷锟斤拷锟斤拷30ms锟斤拷锟节ｏ拷
 // ================================================================
 void line_pid_control(void)
 {
@@ -124,7 +124,7 @@ void line_pid_control(void)
     }
 
     s_motor_run_counter++;
-    if (s_motor_run_counter >= (uint32)motor_run_time * 1000 / 30)
+    if (s_motor_run_counter >= (uint32)motor_run_time * 1000 / 11)
     {
         motor_enable = 0;
         small_driver_set_duty(0, 0);
@@ -137,7 +137,38 @@ void line_pid_control(void)
     int16 pos_err_abs = pos_err >= 0 ? pos_err : -pos_err;
     base_speed = (int16)motor_speed * 8;
 
-    // ֱ���䴦��
+    // 鐩磋棰勫垽鍑忛�� + 閿佸瓨闃查棯鐑� + 瓒呮椂闃茶瑙﹀彂
+    {
+        static uint8 s_pre_lock = 0;
+        static uint8 s_pre_timeout = 0;
+
+        if (g_ra_pre_flag && g_ra_flag == 0)
+        {
+            s_pre_lock = 1;
+            s_pre_timeout = 0;
+        }
+
+        if (g_ra_flag != 0)
+        {
+            s_pre_lock = 0;
+        }
+
+        if (s_pre_lock)
+        {
+            base_speed = base_speed / 7;
+            if (!g_ra_pre_flag)
+            {
+                s_pre_timeout++;
+                if (s_pre_timeout > 30) // ~330ms 棰勫垽娑堝け浠嶄笉鎭㈠ 鈫� 瑙ｉ攣
+                {
+                    s_pre_lock = 0;
+                    s_pre_timeout = 0;
+                }
+            }
+        }
+    }
+
+    // 鐩磋寮杞拷锟斤拷浯︼拷锟�
     if (g_ra_flag == 1)
     {
         s_prev_ra_flag = 1;
@@ -162,7 +193,7 @@ void line_pid_control(void)
 
     float steer = steer_pd_calc(pos_err);
 
-    // Yaw����
+    // Yaw锟斤拷锟斤拷
     {
         float yaw_kp_val = (float)yaw_kp / 10.0f;
         float yaw_comp = 0.0f;
@@ -178,10 +209,10 @@ void line_pid_control(void)
     float actual_r = (float)motor_value.receive_right_speed_data;
     float avg_actual = (actual_l + actual_r) * 0.5f;
 
-    // 单速度环：两轮平均速度闭环，避免左右PI互相对抗
+    // 鍗曢�熷害鐜細涓よ疆骞冲潎閫熷害闂幆锛岄伩鍏嶅乏鍙砅I浜掔浉瀵规姉
     float speed_out = speed_pi_calc(target_speed, avg_actual, &s_speed_integral, pos_err_abs);
 
-    // 速度越高需要越大转向力度
+    // 閫熷害瓒婇珮闇�瑕佽秺澶ц浆鍚戝姏搴�
     float speed_factor = 1.0f + (float)base_speed * 0.002f;
     steer *= speed_factor;
 

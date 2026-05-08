@@ -43,8 +43,8 @@ int16 cam_threshold = 128;    // 阈值二值化值 范围 0~255
 int16 cam_exposure = 200;      // 曝光时间   范围 100~500
 
 // ---------- PID参数 ----------
-int16 pid_kp = 13;             // Kp，实际 STEER_KP = pid_kp*0.8
-int16 pid_ki = 2;              // Ki（预留，当前未接入Pid.c）
+int16 pid_kp = 8;             // Kp，实际 STEER_KP = pid_kp*0.8
+int16 pid_ki = 2;              // Ki，实际 SPEED_KI = pid_ki*0.25
 int16 pid_kd = 16;             // Kd，实际 STEER_KD = pid_kd*0.6
 
 // ---------- IMU参数 ----------
@@ -57,7 +57,7 @@ int16 yaw_kp = 10;             // Yaw 补偿系数，实际值为 yaw_kp/10.0（
 
 // 电机页面的参数列表（2个参数）
 static MenuItem items_motor[] = {
-    {"Speed", &motor_speed, 0, 100, 5},
+    {"Speed", &motor_speed, 0, 400, 20},
     {"Dir", &motor_dir, 0, 1, 1},
 };
 
@@ -75,9 +75,9 @@ static MenuItem items_cam[] = {
 
 // PID页面参数列表（3个参数）
 static MenuItem items_pid[] = {
-    {"Kp x10", &pid_kp, 0, 100, 1}, // 实际Kp = pid_kp/10.0
-    {"Ki x10", &pid_ki, 0, 50, 1},
-    {"Kd x10", &pid_kd, 0, 50, 1},
+    {"Kp", &pid_kp, 0, 100, 1}, // STEER_KP = pid_kp*0.8
+    {"Ki", &pid_ki, 0, 50, 1},  // SPEED_KI = pid_ki*0.25
+    {"Kd", &pid_kd, 0, 50, 1},  // STEER_KD = pid_kd*0.6
 };
 
 // IMU页面参数列表（1个参数）
@@ -359,14 +359,16 @@ static void default_draw(MenuPageDef *page)
     if (now_page != PAGE_MAIN)
         tft180_show_string(0, 8, adjust_mode ? "[SW:ADJUST]" : "[SW:SELECT]");
 
-    // 行2以下：参数列表
-    for (uint8 i = 0; i < page->item_count; i++)
+    // 参数列表：从底部向上排版，避免多项时越界
     {
-        MenuItem *item = &page->items[i];
-        // 光标标记
-        const char *cursor_mark = (i == menu_cursor) ? ">" : " ";
-        sprintf(buf, "%s%-10s%d", cursor_mark, item->label, *item->value);
-        tft180_show_string(70, 106 + i * 8, buf);
+        uint8 start_y = 120 - page->item_count * 8;
+        for (uint8 i = 0; i < page->item_count; i++)
+        {
+            MenuItem *item = &page->items[i];
+            const char *cursor_mark = (i == menu_cursor) ? ">" : " ";
+            sprintf(buf, "%s%-10s%d", cursor_mark, item->label, *item->value);
+            tft180_show_string(70, start_y + i * 8, buf);
+        }
     }
 
     // 底部按键提示（非主���面）

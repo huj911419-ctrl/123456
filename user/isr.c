@@ -8,9 +8,9 @@
  * PIT(定时器)中断服务程序
  * ======================================================================== */
 
-/* CCU60 通道0 PIT中断 - 30ms周期
+/* CCU60 通道0 PIT中断 - 11ms周期
  * 功能: PID控制计算
- * 说明: 主控制循环，每30ms执行一次PID运算 */
+ * 说明: 主控制循环，每11ms执行一次PID运算 */
 IFX_INTERRUPT(cc60_pit_ch0_isr, 0, CCU6_0_CH0_ISR_PRIORITY)
 {
     interrupt_global_enable(0);

@@ -106,7 +106,9 @@ static void binarize_image(void)
  * ======================================================================== */
 static inline uint8 is_white(uint8 row, int16 col)
 {
-    return (bin_image[row][(uint8)col] == 255u) ? 1u : 0u;
+    if (col < 0 || col >= TF_IMG_W)
+        return 0u;
+    return (bin_image[row][col] == 255u) ? 1u : 0u;
 }
 
 /* ========================================================================
@@ -560,34 +562,40 @@ uint8 g_ra_pre_flag = 0u;
  * ======================================================================== */
 void right_angle_pre_detect(void)
 {
-    uint8 right_row_cnt = 0u;
-    uint8 left_row_cnt = 0u;
+    static uint8 s_on_cnt = 0;
+    static uint8 s_off_cnt = 0;
 
-    /* 只扫描中上部区域 */
-    for (int16 i = (int16)RA_PRE_START_ROW; i > (int16)RA_PRE_END_ROW; i--)
+    uint8 right_lost = 0u;
+    uint8 left_lost = 0u;
+
+    for (int16 i = (int16)RA_PRE_START_ROW;
+         i > (int16)RA_PRE_END_ROW; i--)
     {
-        uint8 left_white = 0u;
-        uint8 right_white = 0u;
+        if (!g_tf.row_valid[i])
+            continue;
 
-        /* 统计左半幅白色像素 */
-        for (int16 j = 0; j < (int16)TF_IMG_CENTER; j++)
-            if (bin_image[i][j] == 255u)
-                left_white++;
+        if (g_tf.right_edge[i] >= (int16)(TF_IMG_W - RA_PRE_EDGE_MARGIN))
+            right_lost++;
 
-        /* 统计右半幅白色像素 */
-        for (int16 j = (int16)TF_IMG_CENTER; j < (int16)TF_IMG_W; j++)
-            if (bin_image[i][j] == 255u)
-                right_white++;
-
-        if (right_white >= RA_PRE_WHITE_THRESH)
-            right_row_cnt++;
-        if (left_white >= RA_PRE_WHITE_THRESH)
-            left_row_cnt++;
+        if (g_tf.left_edge[i] <= (int16)RA_PRE_EDGE_MARGIN)
+            left_lost++;
     }
 
-    /* 任意一侧满足条件就置位预判标志 */
-    g_ra_pre_flag = (right_row_cnt >= RA_PRE_ROW_THRESH ||
-                     left_row_cnt >= RA_PRE_ROW_THRESH)
-                        ? 1u
-                        : 0u;
+    uint8 detected = (right_lost >= RA_PRE_LOST_THRESH ||
+                      left_lost >= RA_PRE_LOST_THRESH) ? 1u : 0u;
+
+    if (detected)
+    {
+        s_on_cnt++;
+        s_off_cnt = 0;
+        if (s_on_cnt >= 2)
+            g_ra_pre_flag = 1u;
+    }
+    else
+    {
+        s_off_cnt++;
+        s_on_cnt = 0;
+        if (s_off_cnt >= 5)
+            g_ra_pre_flag = 0u;
+    }
 }

@@ -7,8 +7,9 @@ extern int16 base_speed; // 基础速度
 
 // 菜单实时可调的 PID 变量（定义在 Menu.c）
 extern int16 motor_speed; // 电机速度 0~100
-extern int16 pid_kp;      // 转向 P，实际值 = pid_kp * 0.8
-extern int16 pid_kd;      // 转向 D，实际值 = pid_kd * 0.6
+extern int16 pid_kp;      // 转向 P，STEER_KP = pid_kp * 0.8
+extern int16 pid_ki;      // 速度 I，SPEED_KI = pid_ki * 0.25
+extern int16 pid_kd;      // 转向 D，STEER_KD = pid_kd * 0.6
 
 // ================================================================
 // 转向 PD 参数（菜单变量驱动，无需重新编译即可调参）
@@ -24,7 +25,7 @@ extern int16 pid_kd;      // 转向 D，实际值 = pid_kd * 0.6
 // 速度 PI 参数
 // ================================================================
 #define SPEED_KP 0.5f     // 速度P比例系数
-#define SPEED_KI 0.5f     // 速度I积分系数
+#define SPEED_KI ((float)pid_ki * 0.25f) // 速度I，默认2→0.5
 #define SPEED_I_MAX 500.0f // 积分限幅
 
 // 积分分离：偏差大于此值时不积分，防止积分饱和

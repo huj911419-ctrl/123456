@@ -78,11 +78,11 @@ extern uint8 bin_image[TF_IMG_H][TF_IMG_W];
  */
 extern uint8 g_ra_flag; // 外部变量，判定是否有直角
 
-/* ==================== 直角预判参数（远处检测，用于提前减速）==================== */
-#define RA_PRE_START_ROW 80    // 预判区域起始行（从这行往上看）
-#define RA_PRE_END_ROW 40      // 预判区域终止行
-#define RA_PRE_WHITE_THRESH 30 // 单行半幅白色像素阈值
-#define RA_PRE_ROW_THRESH 5    // 多少行满足才算预判到
+/* ==================== 直角预判参数（远处边线丢线检测，用于提前减速）==================== */
+#define RA_PRE_START_ROW 75    // 预判起始行（中上部）
+#define RA_PRE_END_ROW 55      // 预判终止行
+#define RA_PRE_LOST_THRESH 5   // 丢边行数阈值（比主检测的8更敏感）
+#define RA_PRE_EDGE_MARGIN 5   // 边线贴近图像边缘的阈值
 
 extern uint8 g_ra_pre_flag; // 1=远处看到直角，开始减速  0=正常
 
@@ -95,8 +95,7 @@ void track_fusion_update(void);
  * 0=无直角  1=左直角弯  2=右直角弯  3=十字/T形 */
 void right_angle_detect(void);
 
-/* 每帧在 right_angle_detect() 之后调用
- * 更新 g_ra_pre_flag
- * 1=远处看到直角需要减速  0=正常 */
+/* right_angle_detect() 之后调用，用边线丢线法在中上部提前发现直角
+ * 更新 g_ra_pre_flag: 1=远处看到直角需减速  0=正常 */
 void right_angle_pre_detect(void);
 #endif /* TRACK_FUSION_H */
