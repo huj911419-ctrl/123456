@@ -36,7 +36,10 @@
 int16 motor_speed = 50;       // 电机速度   范围 0~100，base_speed = motor_speed*8
 int16 motor_dir = 1;           // 电机方向   0=反转 1=正转
 int16 motor_enable = 0;       // 电机使能   0=停止 1=运行
-int16 motor_run_time = 60;      // 电机运行时长（秒） 范围 3~60
+int16 detect_count = 0;       // 路口检测计数目标（0=禁用）
+int16 route_seq[20] = {0};    // 路线序列: 0=直行 1=右转 2=左转
+int16 route_len = 4;          // 路线长度 1~20
+int16 route_step = 0;         // 当前步骤 0~(len-1)
 
 // ---------- 摄像头参数 ----------
 int16 threshold_bias = -10;    // Otsu阈值偏移量 范围 -50~50
@@ -60,6 +63,7 @@ int16 steer_speed_k = 5;       // 转向速度耦合系数
 // ---------- 直角弯参数 ----------
 int16 ra_enter_frames = 5;     // 进入直角过渡帧数
 int16 ra_exit_frames = 8;      // 退出直角过渡帧数
+int16 ra_turn_frames = 20;     // 直角弯维持帧数（TURNING阶段）
 
 // ================================================================
 //  每个页面定义对应的 MenuItem 数组
@@ -74,7 +78,7 @@ static MenuItem items_motor[] = {
 // 主页面参数列表（2个参数）
 static MenuItem items_main[] = {
     {"Enable", &motor_enable, 0, 1, 1},
-    {"RunTime", &motor_run_time, 3, 60, 1},
+    {"DetCnt", &detect_count, 0, 20, 1},
 };
 
 // 摄像头页面参数列表（2个参数）
@@ -107,7 +111,23 @@ static MenuItem items_speed[] = {
 // 直角弯参数页面（2个参数）
 static MenuItem items_ra[] = {
     {"RAEnter",  &ra_enter_frames, 1, 20, 1},   // 进入过渡帧数
+    {"RATurn",   &ra_turn_frames,  5, 50, 1},   // TURNING维持帧数
     {"RAExit",   &ra_exit_frames,  1, 20, 1},   // 退出过渡帧数
+};
+
+// 路线序列页面参数列表（Len + 10个方向步骤）
+static MenuItem items_route[] = {
+    {"Len",      &route_len,     1, 20, 1},
+    {"Step00",   &route_seq[0],  0,  2, 1},
+    {"Step01",   &route_seq[1],  0,  2, 1},
+    {"Step02",   &route_seq[2],  0,  2, 1},
+    {"Step03",   &route_seq[3],  0,  2, 1},
+    {"Step04",   &route_seq[4],  0,  2, 1},
+    {"Step05",   &route_seq[5],  0,  2, 1},
+    {"Step06",   &route_seq[6],  0,  2, 1},
+    {"Step07",   &route_seq[7],  0,  2, 1},
+    {"Step08",   &route_seq[8],  0,  2, 1},
+    {"Step09",   &route_seq[9],  0,  2, 1},
 };
 
 // ================================================================
@@ -168,7 +188,15 @@ static MenuPageDef g_pages[PAGE_MAX] = {
     {
         .title = "RA SET",
         .items = items_ra,
-        .item_count = 2,
+        .item_count = 3,
+        .draw = NULL,
+    },
+
+    // PAGE_ROUTE - 路线序列设置页面
+    {
+        .title = "ROUTE",
+        .items = items_route,
+        .item_count = 11,
         .draw = NULL,
     },
 

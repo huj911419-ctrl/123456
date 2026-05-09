@@ -11,9 +11,12 @@ static uint8 s_steer_d_reset_flag = 0u;
 
 static float s_speed_integral = 0.0f;
 
-// 运行停止 + 直角弯状态
-static uint32 s_motor_run_counter = 0;
+// 运行停止 + 直角弯状态机
 static uint8 s_prev_ra_flag = 0;
+static uint8 s_is_cross_turn = 0;      // 当前转弯由十字路口路线触发
+static uint8 s_intersection_done = 0;  // 已完成路口数
+static uint8 s_finish_flag = 0;        // 收尾阶段标志
+static uint16 s_finish_cnt = 0;        // 收尾帧计数
 
 // 直角弯平滑过渡状态机
 typedef enum {
@@ -24,8 +27,13 @@ typedef enum {
 } RaState_e;
 
 static RaState_e s_ra_state = RA_STATE_NONE;
+static uint8 s_ra_dir = 0;             // 当前直角方向 (1=右转 2=左转)
 static uint16 s_ra_enter_cnt = 0;
+static uint16 s_ra_turn_cnt = 0;       // TURNING 阶段帧计数器
 static uint16 s_ra_exit_cnt = 0;
+
+// 十字路口直行导航帧计数
+static uint16 s_cross_nav_cnt = 0;
 
 // 丢线恢复
 static uint8 s_line_lost_cnt = 0;
@@ -154,6 +162,37 @@ static int16 calc_adapted_speed(int16 base, int16 pos_err_abs)
 }
 
 // ================================================================
+// 轨道恢复检查：赛道重新可见且有效行数足够
+// ================================================================
+static uint8 track_ok(void)
+{
+    return (g_tf.line_lost == 0u && g_tf.valid_row_count >= 30u) ? 1u : 0u;
+}
+
+// ================================================================
+// 路口完成回调：计数+1、更新路线步进、清零 g_ra_flag、检查收尾
+// ================================================================
+static void action_done(void)
+{
+    s_intersection_done++;
+
+    if (s_is_cross_turn)
+    {
+        route_step++;
+        s_cross_nav_cnt = 0;
+        s_is_cross_turn = 0;
+    }
+
+    g_ra_flag = 0u;
+
+    if (detect_count > 0 && s_intersection_done >= (uint8)detect_count)
+    {
+        s_finish_flag = 1u;
+        s_finish_cnt = 0;
+    }
+}
+
+// ================================================================
 // PID初始化
 // ================================================================
 void line_pid_init(void)
@@ -163,7 +202,13 @@ void line_pid_init(void)
     s_steer_d_reset_flag = 1u;
     s_speed_integral = 0.0f;
     s_prev_ra_flag = 0;
+    s_is_cross_turn = 0;
+    s_intersection_done = 0;
+    s_finish_flag = 0;
+    s_finish_cnt = 0;
     s_ra_state = RA_STATE_NONE;
+    s_ra_dir = 0;
+    s_cross_nav_cnt = 0;
     s_line_lost_cnt = 0;
     imu_reset_yaw();
 }
@@ -186,28 +231,36 @@ void line_pid_control(void)
     {
         small_driver_set_duty(0, 0);
         s_speed_integral = 0.0f;
-        s_motor_run_counter = 0;
+        s_is_cross_turn = 0;
+        s_intersection_done = 0;
+        s_finish_flag = 0;
+        s_finish_cnt = 0;
         s_ra_state = RA_STATE_NONE;
+        s_ra_dir = 0;
+        s_cross_nav_cnt = 0;
         s_line_lost_cnt = 0;
+        route_step = 0;
         return;
     }
 
-    s_motor_run_counter++;
-    if (s_motor_run_counter >= (uint32)motor_run_time * 1000 / 11)
+    /* ---- 收尾阶段：正常巡线3秒后停车 ---- */
+    if (s_finish_flag)
     {
-        motor_enable = 0;
-        small_driver_set_duty(0, 0);
-        s_speed_integral = 0.0f;
-        s_motor_run_counter = 0;
-        s_ra_state = RA_STATE_NONE;
-        return;
+        s_finish_cnt++;
+        if (s_finish_cnt > 273u)
+        {
+            motor_enable = 0;
+            small_driver_set_duty(0, 0);
+            return;
+        }
+        /* 收尾期间继续正常巡线 PID（fall through） */
     }
 
     int16 pos_err = g_tf.error;
     int16 pos_err_abs = pos_err >= 0 ? pos_err : -pos_err;
     base_speed = (int16)motor_speed * 8;
 
-    // ---- 丢线恢复：连续丢线超过10帧，减速直线行驶 ----
+    /* ---- 丢线恢复 ---- */
     if (g_tf.line_lost)
     {
         s_line_lost_cnt++;
@@ -225,7 +278,8 @@ void line_pid_control(void)
         s_line_lost_cnt = 0;
     }
 
-    // ---- 直角预判减速 + 锁定防抖 + 超时防误触发 ----
+    /* ---- 直角预判减速 ---- */
+    if (!s_finish_flag)
     {
         static uint8 s_pre_lock = 0;
         static uint8 s_pre_timeout = 0;
@@ -256,25 +310,45 @@ void line_pid_control(void)
         }
     }
 
-    // ---- 直角弯平滑过渡状态机 ----
-
-    // 十字路口：g_ra_flag == 3，减速直行
+    /* ---- 十字路口 ---- */
     if (g_ra_flag == 3)
     {
         s_prev_ra_flag = 3;
+        s_is_cross_turn = 1;
         s_ra_state = RA_STATE_NONE;
-        float cross_speed = (float)base_speed * 0.6f;
-        small_driver_set_duty(clamp_duty(cross_speed), clamp_duty(cross_speed));
-        return;
+
+        uint8 dir = (route_step < route_len) ? (uint8)route_seq[route_step] : 0u;
+
+        if (dir == 0)
+        {
+            /* 直行通过十字 */
+            s_cross_nav_cnt++;
+            float cross_speed = (float)base_speed * 0.6f;
+            small_driver_set_duty(clamp_duty(cross_speed), clamp_duty(cross_speed));
+
+            if (s_cross_nav_cnt > 40u && track_ok())
+                action_done();
+        }
+        else
+        {
+            /* 十字路口按路线转弯：复用 RA 状态机，方向由 route_seq 决定 */
+            s_ra_dir = dir;
+            g_ra_flag = dir;  /* 借 g_ra_flag 触发 RA 状态机入口 */
+        }
+        if (dir == 0)
+            return;
     }
 
-    // 进入直角弯：g_ra_flag == 1(右转) 或 2(左转)
+    /* ---- 直角弯：g_ra_flag == 1(右转) 或 2(左转) ---- */
     if (g_ra_flag == 1 || g_ra_flag == 2)
     {
         if (s_ra_state == RA_STATE_NONE)
         {
             s_ra_state = RA_STATE_ENTERING;
             s_ra_enter_cnt = 0;
+            s_ra_turn_cnt = 0;
+            if (s_ra_dir == 0)
+                s_ra_dir = (uint8)g_ra_flag;
         }
 
         if (s_ra_state == RA_STATE_ENTERING)
@@ -288,7 +362,7 @@ void line_pid_control(void)
             float blended_steer = steer * (1.0f - blend) + hard_steer * blend;
             float speed_cmd = (float)base_speed * (1.0f - blend * 0.5f);
 
-            if (g_ra_flag == 1)
+            if (s_ra_dir == 1)
             {
                 small_driver_set_duty(clamp_duty(speed_cmd - blended_steer),
                                       clamp_duty(speed_cmd + blended_steer));
@@ -302,14 +376,18 @@ void line_pid_control(void)
             }
 
             if (s_ra_enter_cnt >= (uint16)ra_enter_frames)
+            {
                 s_ra_state = RA_STATE_TURNING;
+                s_ra_turn_cnt = 0;
+                s_prev_ra_flag = s_ra_dir;
+            }
             return;
         }
 
         if (s_ra_state == RA_STATE_TURNING)
         {
-            s_prev_ra_flag = g_ra_flag;
-            if (g_ra_flag == 1)
+            s_ra_turn_cnt++;
+            if (s_ra_dir == 1)
             {
                 small_driver_set_duty(0, base_speed);
                 turn_right_led_on();
@@ -319,20 +397,20 @@ void line_pid_control(void)
                 small_driver_set_duty(base_speed, 0);
                 turn_right_led_off();
             }
+
+            if (s_ra_turn_cnt >= (uint16)ra_turn_frames)
+            {
+                s_ra_state = RA_STATE_EXITING;
+                s_ra_exit_cnt = 0;
+                line_pid_reset_derivative();
+            }
             return;
         }
     }
 
-    // 退出直角弯：从 TURNING/ENTERING 恢复到正常 PID
-    if (s_ra_state != RA_STATE_NONE && g_ra_flag == 0)
+    /* ---- 退出直角弯：EXITING 阶段 ---- */
+    if (s_ra_state == RA_STATE_EXITING)
     {
-        if (s_ra_state != RA_STATE_EXITING)
-        {
-            s_ra_state = RA_STATE_EXITING;
-            s_ra_exit_cnt = 0;
-            line_pid_reset_derivative();
-        }
-
         s_ra_exit_cnt++;
         float blend = 1.0f - (float)s_ra_exit_cnt / (float)ra_exit_frames;
         if (blend < 0.0f) blend = 0.0f;
@@ -359,14 +437,15 @@ void line_pid_control(void)
             if (s_prev_ra_flag != 0)
             {
                 imu_reset_yaw();
-                s_prev_ra_flag = 0;
                 turn_right_led_off();
             }
+            action_done();
+            s_ra_dir = 0;
         }
         return;
     }
 
-    // ---- 正常巡线 PID ----
+    /* ---- 正常巡线 PID（含收尾阶段） ---- */
     if (s_prev_ra_flag != 0)
     {
         imu_reset_yaw();
@@ -376,7 +455,7 @@ void line_pid_control(void)
 
     float steer = steer_pd_calc(pos_err);
 
-    // Yaw补偿
+    /* Yaw 补偿 */
     {
         float yaw_kp_val = (float)yaw_kp / 10.0f;
         float yaw_comp = 0.0f;
@@ -386,7 +465,6 @@ void line_pid_control(void)
         steer += yaw_comp;
     }
 
-    // 前瞻预判：取当前偏差和前瞻偏差中较大值，提前为弯道减速
     int16 trend_abs = g_tf.error_trend >= 0 ? g_tf.error_trend : -g_tf.error_trend;
     int16 effective_err = pos_err_abs > trend_abs ? pos_err_abs : trend_abs;
     float target_speed = (float)calc_adapted_speed(base_speed, effective_err);
@@ -397,7 +475,6 @@ void line_pid_control(void)
 
     float speed_out = speed_pi_calc(target_speed, avg_actual, &s_speed_integral, pos_err_abs);
 
-    // 速度越高需要越大的转向力度
     float speed_factor = 1.0f + (float)base_speed * (float)steer_speed_k * 0.001f;
     steer *= speed_factor;
 

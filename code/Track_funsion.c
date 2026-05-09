@@ -106,7 +106,7 @@ static void binarize_image(void)
  * ======================================================================== */
 static inline uint8 is_white(uint8 row, int16 col)
 {
-    if (col < 0 || col >= TF_IMG_W)
+    if (row >= TF_IMG_H || col < 0 || col >= TF_IMG_W)
         return 0u;
     return (bin_image[row][col] == 255u) ? 1u : 0u;
 }
@@ -474,96 +474,263 @@ void track_fusion_update(void)
  *       3 = 十字/T字路口
  * ======================================================================== */
 uint8 g_ra_flag = 0u;
+IntersectionResult_t g_inter_result;
 
-/* 直角检测内部计数器 */
-static uint8 s_ra_confirm_cnt = 0u;
-static uint8 s_ra_candidate = 0u;
-static uint8 s_ra_timeout_cnt = 0u;
+/* 拐点法路口检测状态机变量 */
+static uint8 s_inter_lock_cnt = 0u;
+static uint8 s_inter_cooldown_cnt = 0u;
+static uint8 s_inter_confirm_cnt = 0u;
+static uint8 s_inter_candidate = 0u;
 
 /* ========================================================================
- * 函数: right_angle_detect
- * 功能: 直角弯检测
- * 说明: 检测原理:
- *       1. 统计底部若干行的边线状态
- *       2. 如果只剩左边线 → 右直角
- *       3. 如果只剩右边线 → 左直角
- *       4. 如果两边都丢失 → 十字/T字路口
- *       
- *       防抖机制:
- *       1. 需要连续2帧确认才认为是直角
- *       2. 如果超过50帧自动退出直角状态
+ * 函数: count_white_on_edge
+ * 功能: 统计矩形框一条边上的白色像素数
+ * 参数: row_start / row_end - 边的行范围（水平边二者相等，垂直边二者不等）
+ *       col_start / col_end - 边的列范围
+ * 返回: 白像素累计数
  * ======================================================================== */
-void right_angle_detect(void)
+static uint8 count_white_on_edge(uint8 row_start, uint8 row_end,
+                                 uint8 col_start, uint8 col_end)
 {
-    /* 丢失赛道时复位所有状态 */
-    if (g_tf.line_lost)
+    uint8 cnt = 0u;
+    if (row_start == row_end)
     {
-        s_ra_confirm_cnt = 0u;
-        s_ra_candidate = 0u;
-        s_ra_timeout_cnt = 0u;
-        g_ra_flag = 0u;
-        return;
-    }
-
-    /* 统计底部边缘丢失情况 */
-    uint8 right_lost = 0u;
-    uint8 left_lost = 0u;
-
-    for (int16 i = (int16)TF_JIDIAN_ROW;
-         i > (int16)TF_JIDIAN_ROW - (int16)RA_CHECK_ROWS; i--)
-    {
-        if (!g_tf.row_valid[i])
-            continue;
-
-        if (g_tf.right_edge[i] >= (int16)(TF_IMG_W - RA_EDGE_MARGIN))
-            right_lost++;
-
-        if (g_tf.left_edge[i] <= (int16)RA_EDGE_MARGIN)
-            left_lost++;
-    }
-
-    /* 本帧检测结果 */
-    uint8 this_frame = 0u;
-
-    if (right_lost >= RA_LOST_THRESH && left_lost >= RA_LOST_THRESH)
-        this_frame = 3u;
-    else if (right_lost >= RA_LOST_THRESH)
-        this_frame = 1u;
-    else if (left_lost >= RA_LOST_THRESH)
-        this_frame = 2u;
-
-    /* 状态确认逻辑 */
-    if (this_frame != 0u && this_frame == s_ra_candidate)
-    {
-        if (s_ra_confirm_cnt < RA_CONFIRM_FRAMES)
-            s_ra_confirm_cnt++;
-
-        if (s_ra_confirm_cnt >= RA_CONFIRM_FRAMES)
-        {
-            g_ra_flag = this_frame;
-
-            s_ra_timeout_cnt++;
-            if (s_ra_timeout_cnt >= RA_TIMEOUT_FRAMES)
-            {
-                g_ra_flag = 0u;
-                s_ra_confirm_cnt = 0u;
-                s_ra_candidate = 0u;
-                s_ra_timeout_cnt = 0u;
-            }
-        }
-    }
-    else if (this_frame != 0u)
-    {
-        s_ra_candidate = this_frame;
-        s_ra_confirm_cnt = 1u;
-        s_ra_timeout_cnt = 0u;
+        for (uint8 c = col_start; c <= col_end; c++)
+            if (is_white(row_start, (int16)c))
+                cnt++;
     }
     else
     {
-        s_ra_confirm_cnt = 0u;
-        s_ra_candidate = 0u;
-        s_ra_timeout_cnt = 0u;
+        for (uint8 r = row_start; r <= row_end; r++)
+            if (is_white(r, (int16)col_start))
+                cnt++;
+    }
+    return cnt;
+}
+
+/* ========================================================================
+ * 函数: find_inflection_points
+ * 功能: 从图像底部向上扫描，寻找左右边线的跳变点(拐点)
+ * 说明: 相邻行边线位置跳变 > INTER_JUMP_THRESH 列即判定为拐点
+ *       拐点 row = 跳变之前的行（较低行），col = 跳变前的边线位置
+ * ======================================================================== */
+static void find_inflection_points(InflectionPoint_t *left_ip,
+                                   InflectionPoint_t *right_ip)
+{
+    left_ip->valid = 0u;
+    left_ip->row = 0;
+    left_ip->col = 0;
+    right_ip->valid = 0u;
+    right_ip->row = 0;
+    right_ip->col = 0;
+
+    for (int16 row = (int16)TF_JIDIAN_ROW - 1;
+         row >= (int16)TF_SEARCH_END_ROW; row--)
+    {
+        if (!g_tf.row_valid[row] || !g_tf.row_valid[row + 1])
+            continue;
+
+        if (!left_ip->valid)
+        {
+            int16 jump = g_tf.left_edge[row] - g_tf.left_edge[row + 1];
+            if (jump < 0) jump = -jump;
+            if (jump > INTER_JUMP_THRESH)
+            {
+                left_ip->valid = 1u;
+                left_ip->row = row + 1;
+                left_ip->col = g_tf.left_edge[row + 1];
+            }
+        }
+
+        if (!right_ip->valid)
+        {
+            int16 jump = g_tf.right_edge[row] - g_tf.right_edge[row + 1];
+            if (jump < 0) jump = -jump;
+            if (jump > INTER_JUMP_THRESH)
+            {
+                right_ip->valid = 1u;
+                right_ip->row = row + 1;
+                right_ip->col = g_tf.right_edge[row + 1];
+            }
+        }
+
+        if (left_ip->valid && right_ip->valid)
+            break;
+    }
+}
+
+/* ========================================================================
+ * 函数: detect_intersection
+ * 功能: 拐点法路口检测（替代旧 right_angle_detect）
+ *
+ * 状态机: READY → LOCKED → COOLDOWN → READY
+ *   READY:    扫描拐点，2帧确认后设置 g_ra_flag，进入 LOCKED
+ *   LOCKED:   锁定 g_ra_flag 不清零，等待 Pid.c 动作完成后清零
+ *   COOLDOWN: 冷却期，防止立即重触发
+ *
+ * g_ra_flag: 0=正常 1=右转 2=左转 3=十字
+ * Pid.c 负责清零 g_ra_flag（动作完成后），检测与控制分离
+ * ======================================================================== */
+void detect_intersection(void)
+{
+    /* 丢线时全部复位 */
+    if (g_tf.line_lost)
+    {
         g_ra_flag = 0u;
+        s_inter_lock_cnt = 0u;
+        s_inter_cooldown_cnt = 0u;
+        s_inter_confirm_cnt = 0u;
+        s_inter_candidate = 0u;
+        return;
+    }
+
+    /* ---- COOLDOWN 阶段 ---- */
+    if (s_inter_cooldown_cnt > 0u)
+    {
+        s_inter_cooldown_cnt++;
+        if (s_inter_cooldown_cnt >= INTER_COOLDOWN_FRAMES)
+        {
+            s_inter_cooldown_cnt = 0u;
+            s_inter_confirm_cnt = 0u;
+            s_inter_candidate = 0u;
+        }
+        return;
+    }
+
+    /* ---- LOCKED 阶段：g_ra_flag 被锁定，等待 Pid.c 清零 ---- */
+    if (s_inter_lock_cnt > 0u)
+    {
+        if (g_ra_flag == 0u)
+        {
+            /* Pid.c 已清零 → 进入 COOLDOWN */
+            s_inter_lock_cnt = 0u;
+            s_inter_cooldown_cnt = 1u;
+        }
+        else
+        {
+            s_inter_lock_cnt++;
+            if (s_inter_lock_cnt >= INTER_MAX_LOCK_FRAMES)
+            {
+                /* 超时保护：强制清零 */
+                g_ra_flag = 0u;
+                s_inter_lock_cnt = 0u;
+                s_inter_cooldown_cnt = 1u;
+            }
+        }
+        return;
+    }
+
+    /* ---- READY 阶段：扫描拐点 ---- */
+    InflectionPoint_t left_ip, right_ip;
+    find_inflection_points(&left_ip, &right_ip);
+
+    g_inter_result.left_ip = left_ip;
+    g_inter_result.right_ip = right_ip;
+
+    /* 拐点行号约束：必须靠近车身底部（≥INTER_IP_MIN_ROW）才触发，防止远处提前拐弯 */
+    {
+        uint8 ip_close = 0u;
+        if (left_ip.valid && left_ip.row >= (int16)INTER_IP_MIN_ROW)
+            ip_close = 1u;
+        if (right_ip.valid && right_ip.row >= (int16)INTER_IP_MIN_ROW)
+            ip_close = 1u;
+        if (!ip_close)
+        {
+            s_inter_confirm_cnt = 0u;
+            s_inter_candidate = 0u;
+            g_inter_result.detected_type = 0u;
+            return;
+        }
+    }
+
+    uint8 detected = 0u;
+    g_inter_result.box_road_count = 0u;
+    g_inter_result.box_road_mask = 0u;
+    g_inter_result.box_top = 0u;
+    g_inter_result.box_bottom = 0u;
+    g_inter_result.box_left = 0u;
+    g_inter_result.box_right = 0u;
+
+    if (left_ip.valid && right_ip.valid)
+    {
+        /* 双侧拐点：构建矩形框，统计4条边上的道路像素 */
+        uint8 box_top = (left_ip.row < right_ip.row)
+                            ? (uint8)left_ip.row : (uint8)right_ip.row;
+        uint8 box_bottom = (left_ip.row > right_ip.row)
+                               ? (uint8)left_ip.row : (uint8)right_ip.row;
+        uint8 box_left = (left_ip.col < right_ip.col)
+                             ? (uint8)left_ip.col : (uint8)right_ip.col;
+        uint8 box_right = (left_ip.col > right_ip.col)
+                              ? (uint8)left_ip.col : (uint8)right_ip.col;
+
+        g_inter_result.box_top = box_top;
+        g_inter_result.box_bottom = box_bottom;
+        g_inter_result.box_left = box_left;
+        g_inter_result.box_right = box_right;
+
+        if ((box_right - box_left) >= INTER_MIN_BOX_SIZE &&
+            (box_bottom - box_top) >= INTER_MIN_BOX_SIZE)
+        {
+            if (count_white_on_edge(box_top, box_top,
+                                    box_left, box_right) >= INTER_BOX_EDGE_COUNT)
+                { g_inter_result.box_road_count++;
+                  g_inter_result.box_road_mask |= 0x01u; }
+            if (count_white_on_edge(box_bottom, box_bottom,
+                                    box_left, box_right) >= INTER_BOX_EDGE_COUNT)
+                { g_inter_result.box_road_count++;
+                  g_inter_result.box_road_mask |= 0x02u; }
+            if (count_white_on_edge(box_top, box_bottom,
+                                    box_left, box_left) >= INTER_BOX_EDGE_COUNT)
+                { g_inter_result.box_road_count++;
+                  g_inter_result.box_road_mask |= 0x04u; }
+            if (count_white_on_edge(box_top, box_bottom,
+                                    box_right, box_right) >= INTER_BOX_EDGE_COUNT)
+                { g_inter_result.box_road_count++;
+                  g_inter_result.box_road_mask |= 0x08u; }
+        }
+
+        /* 根据框边道路判定方向 */
+        if (g_inter_result.box_road_count >= 3u)
+            detected = 3u;
+        else if ((g_inter_result.box_road_mask & 0x02u) &&
+                 (g_inter_result.box_road_mask & 0x08u))
+            detected = 1u;
+        else if ((g_inter_result.box_road_mask & 0x02u) &&
+                 (g_inter_result.box_road_mask & 0x04u))
+            detected = 2u;
+    }
+    else if (right_ip.valid)
+    {
+        detected = 1u;
+    }
+    else if (left_ip.valid)
+    {
+        detected = 2u;
+    }
+
+    g_inter_result.detected_type = detected;
+
+    /* ---- 确认防抖：连续 INTER_CONFIRM_FRAMES 帧相同才触发 ---- */
+    if (detected != 0u && detected == s_inter_candidate)
+    {
+        s_inter_confirm_cnt++;
+        if (s_inter_confirm_cnt >= INTER_CONFIRM_FRAMES)
+        {
+            g_ra_flag = detected;
+            s_inter_lock_cnt = 1u;
+            s_inter_confirm_cnt = 0u;
+            s_inter_candidate = 0u;
+        }
+    }
+    else if (detected != 0u)
+    {
+        s_inter_candidate = detected;
+        s_inter_confirm_cnt = 1u;
+    }
+    else
+    {
+        s_inter_confirm_cnt = 0u;
+        s_inter_candidate = 0u;
     }
 }
 /* ========================================================================

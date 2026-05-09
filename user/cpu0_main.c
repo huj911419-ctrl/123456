@@ -51,8 +51,8 @@ int core0_main(void)
         /* 直角预判检测（基于当前赛道二值图，必须在 track_fusion_update 之后） */
         right_angle_pre_detect();
 
-        /* 直角检测 */
-        right_angle_detect();
+        /* 拐点法路口检测 */
+        detect_intersection();
 
         // base_speed 直接由菜单设置，不再自动计算
         // base_speed = (int16)motor_speed * 20;

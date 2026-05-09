@@ -48,6 +48,43 @@ void draw_line(void)
         tft180_draw_point(tft_mid,   tft_row, RGB565_RED);
     }
 
+    /* 拐点法检测框绘制：双侧拐点有效时画 CYAN 色矩形框 */
+    if (g_inter_result.left_ip.valid && g_inter_result.right_ip.valid)
+    {
+        int16 x0 = (int16)(TFT_COL_SCALE * (float)g_inter_result.box_left);
+        int16 y0 = (int16)(TFT_COL_SCALE * (float)g_inter_result.box_top);
+        int16 x1 = (int16)(TFT_COL_SCALE * (float)g_inter_result.box_right);
+        int16 y1 = (int16)(TFT_COL_SCALE * (float)g_inter_result.box_bottom);
+        if (x0 >= 0 && x1 < 128 && y0 >= 0 && y1 < 80 && x0 < x1 && y0 < y1)
+        {
+            tft180_draw_line((uint16)x0, (uint16)y0, (uint16)x1, (uint16)y0, RGB565_CYAN);
+            tft180_draw_line((uint16)x0, (uint16)y1, (uint16)x1, (uint16)y1, RGB565_CYAN);
+            tft180_draw_line((uint16)x0, (uint16)y0, (uint16)x0, (uint16)y1, RGB565_CYAN);
+            tft180_draw_line((uint16)x1, (uint16)y0, (uint16)x1, (uint16)y1, RGB565_CYAN);
+        }
+    }
+    /* 拐点位置：黄色3x3十字标记 */
+    if (g_inter_result.left_ip.valid)
+    {
+        int16 ip_x = (int16)(TFT_COL_SCALE * (float)g_inter_result.left_ip.col);
+        int16 ip_y = (int16)(TFT_COL_SCALE * (float)g_inter_result.left_ip.row);
+        if (ip_x >= 1 && ip_x < 127 && ip_y >= 1 && ip_y < 79)
+        {
+            tft180_draw_line((uint16)(ip_x - 1), (uint16)ip_y, (uint16)(ip_x + 1), (uint16)ip_y, RGB565_YELLOW);
+            tft180_draw_line((uint16)ip_x, (uint16)(ip_y - 1), (uint16)ip_x, (uint16)(ip_y + 1), RGB565_YELLOW);
+        }
+    }
+    if (g_inter_result.right_ip.valid)
+    {
+        int16 ip_x = (int16)(TFT_COL_SCALE * (float)g_inter_result.right_ip.col);
+        int16 ip_y = (int16)(TFT_COL_SCALE * (float)g_inter_result.right_ip.row);
+        if (ip_x >= 1 && ip_x < 127 && ip_y >= 1 && ip_y < 79)
+        {
+            tft180_draw_line((uint16)(ip_x - 1), (uint16)ip_y, (uint16)(ip_x + 1), (uint16)ip_y, RGB565_YELLOW);
+            tft180_draw_line((uint16)ip_x, (uint16)(ip_y - 1), (uint16)ip_x, (uint16)(ip_y + 1), RGB565_YELLOW);
+        }
+    }
+
     /* ��������������ֵ����ʾ�ڵ�ͼ�·������ڵ�ͼ��*/
      tft180_show_string(0,  82, "ERR:");
     tft180_show_int   (36, 82, (int32)g_tf.error,          4);// λ�����  (��=ƫ�� ��=ƫ��)

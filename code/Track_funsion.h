@@ -64,25 +64,50 @@ extern TrackFusion_t g_tf;
  */
 extern uint8 bin_image[TF_IMG_H][TF_IMG_W];
 
-/* ==================== 直角检测参数 ==================== */
-#define RA_CHECK_ROWS 15            // 只检测底部多少行，越小对弯道越不敏感
-#define RA_EDGE_MARGIN 3            // 边界接近图像边缘的阈值，越小越严格
-#define RA_LOST_THRESH 8            // 底部丢线超过多少列判定为直角弯，越小越严格
-#define RA_CONFIRM_FRAMES 2         // 需要几帧确认，建议2~3帧，1太快，4太慢
-#define RA_TIMEOUT_FRAMES 50        // 标志最长消失帧数，50帧约1秒，超时强制归位
+/* ==================== 拐点法路口检测参数 ==================== */
+#define INTER_JUMP_THRESH  30     // 相邻行边线跳变阈值（列数），超过此值认为拐点
+#define INTER_IP_MIN_ROW   100    // 拐点触发最小行号（拐点必须在行100~116之间才会触发检测，防止远处提前拐弯）
+#define INTER_BOX_EDGE_COUNT 5    // 矩形框边白像素数阈值（累计像素数）
+#define INTER_MIN_BOX_SIZE 3      // 最小框宽/高（像素），小于此值跳过框边检查
+#define INTER_CONFIRM_FRAMES 2    // 确认帧数，建议2~3帧
+#define INTER_LOCK_FRAMES    30   // 最小锁定帧数（防止转弯中途误清零）
+#define INTER_COOLDOWN_FRAMES 15  // 冷却帧数（完成后防立即重触发）
+#define INTER_MAX_LOCK_FRAMES 120 // 最大锁定时长（超时保护）
 
-/* ==================== 直角检测结果 ==================== */
+/* ==================== 拐点数据结构 ==================== */
+typedef struct
+{
+    uint8 valid;   // 该拐点是否有效
+    int16 row;     // 拐点所在行号（跳变之前的行，即较低的边界）
+    int16 col;     // 拐点所在列号（跳变前的边线位置）
+} InflectionPoint_t;
+
+/* ==================== 路口检测结果 ==================== */
+typedef struct
+{
+    InflectionPoint_t left_ip;      // 左边界拐点
+    InflectionPoint_t right_ip;     // 右边界拐点
+    uint8 box_top;                  // 识别框上沿行号
+    uint8 box_bottom;               // 识别框下沿行号
+    uint8 box_left;                 // 识别框左沿列号
+    uint8 box_right;                // 识别框右沿列号
+    uint8 box_road_count;           // 矩形框4条边中检测到道路的边数 (0~4)
+    uint8 box_road_mask;            // 道路边掩码: bit0=上沿 bit1=下沿 bit2=左边 bit3=右边
+    uint8 detected_type;            // 本帧检测结果: 0=正常 1=右转 2=左转 3=十字
+} IntersectionResult_t;
+
+/* ==================== 路口检测结果 ==================== */
 /*
- * g_ra_flag : 0=无直角  1=左直角弯  2=右直角弯  3=十字/T形路口
+ * g_ra_flag : 0=无直角  1=右直角弯  2=左直角弯  3=十字/T形路口
  *
- * 判断原理：
- *   只统计底部 RA_CHECK_ROWS 行，丢边方向即为弯道方向
- *   右侧边界接近图像右边缘 + 右侧丢线 = 左直角弯
- *   左侧边界接近图像左边缘 + 左侧丢线 = 右直角弯
- *   两侧同时丢线         + 赛道到达底部 = 十字/T形
- *   需 RA_CONFIRM_FRAMES 帧连续确认，防止误触发
+ * 拐点法判断原理：
+ *   从图像底部向上扫描，找到相邻行边线位置跳变 > INTER_JUMP_THRESH 的行
+ *   左右拐点构建矩形框，统计4条框边的道路像素，≥3边有路=十字，2边=直角弯
+ *   需 INTER_CONFIRM_FRAMES 帧连续确认，防止误触发
+ *   detect_intersection() 负责发现入口（上升沿），Pid.c 负责清零
  */
-extern uint8 g_ra_flag; // 外部变量，判定是否有直角
+extern uint8 g_ra_flag;
+extern IntersectionResult_t g_inter_result;
 
 /* ==================== 直角预判参数（远处边线丢线检测，用于提前减速）==================== */
 #define RA_PRE_START_ROW 75    // 预判起始行（中上部）
@@ -97,11 +122,11 @@ void track_fusion_init(void);
 void track_fusion_update(void);
 
 /* 每帧在 track_fusion_update() 之后调用
- * 更新 g_ra_flag
- * 0=无直角  1=左直角弯  2=右直角弯  3=十字/T形 */
-void right_angle_detect(void);
+ * 拐点法路口检测，更新 g_ra_flag
+ * 0=无直角  1=右直角弯  2=左直角弯  3=十字/T形 */
+void detect_intersection(void);
 
-/* right_angle_detect() 之后调用，用边线丢线法在中上部提前发现直角
+/* detect_intersection() 之后调用，用边线丢线法在中上部提前发现直角
  * 更新 g_ra_pre_flag: 1=远处看到直角需减速  0=正常 */
 void right_angle_pre_detect(void);
 #endif /* TRACK_FUSION_H */
