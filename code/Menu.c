@@ -39,7 +39,7 @@ int16 motor_enable = 0;       // 电机使能   0=停止 1=运行
 int16 motor_run_time = 60;      // 电机运行时长（秒） 范围 3~60
 
 // ---------- 摄像头参数 ----------
-int16 cam_threshold = 128;    // 阈值二值化值 范围 0~255
+int16 threshold_bias = -10;    // Otsu阈值偏移量 范围 -50~50
 int16 cam_exposure = 200;      // 曝光时间   范围 100~500
 
 // ---------- PID参数 ----------
@@ -50,15 +50,25 @@ int16 pid_kd = 16;             // Kd，实际 STEER_KD = pid_kd*0.6
 // ---------- IMU参数 ----------
 int16 yaw_kp = 10;             // Yaw 补偿系数，实际值为 yaw_kp/10.0（即 1.0）
 
+// ---------- 速度自适应参数 ----------
+int16 sp_err_t1 = 5;           // 偏差阈值1（直道）
+int16 sp_err_t2 = 30;          // 偏差阈值2（急弯）
+int16 sp_ratio_1 = 100;        // 直道速度百分比
+int16 sp_ratio_2 = 40;         // 弯道速度百分比
+int16 steer_speed_k = 5;       // 转向速度耦合系数
+
+// ---------- 直角弯参数 ----------
+int16 ra_enter_frames = 5;     // 进入直角过渡帧数
+int16 ra_exit_frames = 8;      // 退出直角过渡帧数
+
 // ================================================================
 //  每个页面定义对应的 MenuItem 数组
 //  格式：{ "显示名", &变量, 最小值, 最大值, 步进 }
 // ================================================================
 
-// 电机页面的参数列表（2个参数）
+// 电机页面的参数列表（1个参数）
 static MenuItem items_motor[] = {
     {"Speed", &motor_speed, 0, 400, 20},
-    {"Dir", &motor_dir, 0, 1, 1},
 };
 
 // 主页面参数列表（2个参数）
@@ -69,8 +79,8 @@ static MenuItem items_main[] = {
 
 // 摄像头页面参数列表（2个参数）
 static MenuItem items_cam[] = {
-    {"Thresh", &cam_threshold, 0, 255, 5},   // 每步加5
-    {"Expose", &cam_exposure, 100, 500, 10}, // 每步加10
+    {"ThrBias", &threshold_bias, -50, 50, 5}, // Otsu阈值偏移
+    {"Expose", &cam_exposure, 100, 500, 10},  // 每步加10
 };
 
 // PID页面参数列表（3个参数）
@@ -83,6 +93,21 @@ static MenuItem items_pid[] = {
 // IMU页面参数列表（1个参数）
 static MenuItem items_imu[] = {
     {"YAW Kp", &yaw_kp, 0, 100, 1}, // 实际YAW_Kp = yaw_kp/10.0
+};
+
+// 速度自适应页面参数列表（5个参数）
+static MenuItem items_speed[] = {
+    {"ErrT1",    &sp_err_t1,      1,  50,  1},  // 直道偏差阈值
+    {"ErrT2",    &sp_err_t2,     10,  80,  1},  // 急弯偏差阈值
+    {"RatStr",   &sp_ratio_1,    20, 100,  5},  // 直道速度百分比
+    {"RatCrv",   &sp_ratio_2,    20, 100,  5},  // 弯道速度百分比
+    {"StrSpdK",  &steer_speed_k,  0,  50,  1},  // 转向速度耦合系数
+};
+
+// 直角弯参数页面（2个参数）
+static MenuItem items_ra[] = {
+    {"RAEnter",  &ra_enter_frames, 1, 20, 1},   // 进入过渡帧数
+    {"RAExit",   &ra_exit_frames,  1, 20, 1},   // 退出过渡帧数
 };
 
 // ================================================================
@@ -103,7 +128,7 @@ static MenuPageDef g_pages[PAGE_MAX] = {
     {
         .title = "MOTOR SET",
         .items = items_motor,
-        .item_count = 2,
+        .item_count = 1,
         .draw = NULL,
     },
 
@@ -128,6 +153,22 @@ static MenuPageDef g_pages[PAGE_MAX] = {
         .title = "IMU SET",
         .items = items_imu,
         .item_count = 1,
+        .draw = NULL,
+    },
+
+    // PAGE_SPEED - 速度自适应设置页面
+    {
+        .title = "SPEED SET",
+        .items = items_speed,
+        .item_count = 5,
+        .draw = NULL,
+    },
+
+    // PAGE_RA - 直角弯参数设置页面
+    {
+        .title = "RA SET",
+        .items = items_ra,
+        .item_count = 2,
         .draw = NULL,
     },
 

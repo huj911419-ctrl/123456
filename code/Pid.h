@@ -6,10 +6,17 @@
 extern int16 base_speed; // 基础速度
 
 // 菜单实时可调的 PID 变量（定义在 Menu.c）
-extern int16 motor_speed; // 电机速度 0~100
+extern int16 motor_speed; // 电机速度 0~400
 extern int16 pid_kp;      // 转向 P，STEER_KP = pid_kp * 0.8
 extern int16 pid_ki;      // 速度 I，SPEED_KI = pid_ki * 0.25
 extern int16 pid_kd;      // 转向 D，STEER_KD = pid_kd * 0.6
+
+// 速度自适应参数（定义在 Menu.c）
+extern int16 sp_err_t1;     // 偏差阈值1（直道，低于此值全速）
+extern int16 sp_err_t2;     // 偏差阈值2（急弯，高于此值最低速）
+extern int16 sp_ratio_1;    // 直道速度百分比 (0~100)
+extern int16 sp_ratio_2;    // 弯道速度百分比 (0~100)
+extern int16 steer_speed_k; // 转向速度耦合系数 (0~50, 代表0.000~0.050)
 
 // ================================================================
 // 转向 PD 参数（菜单变量驱动，无需重新编译即可调参）
@@ -18,8 +25,17 @@ extern int16 pid_kd;      // 转向 D，STEER_KD = pid_kd * 0.6
 #define STEER_KD  ((float)pid_kd * 0.6f)   // 转向D，默认8→4.8
 #define STEER_MAX 4000.0f // 转向输出限幅
 
-// 死区：偏差绝对值小于此值时转向输出为0，防止小抖动
-#define STEER_DEADZONE 2 // 转向死区阈值
+// 软死区：偏差在此范围内使用二次曲线过渡，消除硬死区的"突然转向"感
+// 例如偏差=3时输出=0.5*P*3=9.6(柔和)，而不是突然跳到6.4*3=19.2
+#define STEER_DEADZONE 2  // 完全死区（偏差 < 此值输出0）
+#define STEER_SOFT_END 6  // 软过渡结束点（偏差 > 此值全P输出）
+                           // 死区 ~ 软结束之间：二次曲线平滑过渡
+
+// 转向输出变化率限制（每帧最大变化量），防止电机指令突变
+#define STEER_SLEW_MAX 250.0f  // 每11ms最多变化250，全行程需~16帧≈176ms
+
+// 转向输出低通滤波系数（0~1，越大越平滑但响应越慢）
+#define STEER_OUTPUT_FILTER 0.5f
 
 // ================================================================
 // 速度 PI 参数
@@ -34,7 +50,7 @@ extern int16 pid_kd;      // 转向 D，STEER_KD = pid_kd * 0.6
 // ================================================================
 // 速度相关参数
 // ================================================================
-#define MAX_DUTY 1000.0f // 输出限幅
+#define MAX_DUTY 5000.0f // 输出限幅（电机驱动协议支持±10000）
 
 // 低通滤波系数：0~1，越大越平滑（抑制摄像头帧间噪声）
 #define ERROR_FILTER_ALPHA 0.65f

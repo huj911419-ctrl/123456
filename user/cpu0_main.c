@@ -1,5 +1,6 @@
 #include "zf_common_headfile.h"
 #include "IMU.h"
+#include "Menu.h"
 
 #pragma section all "cpu0_dsram"
 
@@ -18,6 +19,7 @@ int core0_main(void)
 
     /* 初始化摄像头 */
     mt9v03x_init();
+    mt9v03x_set_exposure_time((uint16)cam_exposure);
 
     /* 初始化赛道融合检测 */
     track_fusion_init();

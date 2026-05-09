@@ -3,6 +3,8 @@
 
 #include "zf_common_headfile.h"
 
+extern int16 threshold_bias; // Otsu阈值偏移量（菜单可调）
+
 /* ================================================================
  *  track_fusion.h / track_fusion.c - 赛道融合与循迹模块
  *
@@ -26,6 +28,8 @@
 #define TF_JIDIAN_ROW (TF_IMG_H - 4) // 底部极值检测行 = 116
 #define TF_SEARCH_END_ROW 8          // 循迹搜索起始行
 #define TF_LOCAL_RANGE 18            // 局部搜索范围
+#define TF_LOOKAHEAD_START_ROW 70    // 前瞻起始行（中上部）
+#define TF_LOOKAHEAD_END_ROW 40      // 前瞻终止行
 #define TF_MAX_MISS_ROWS 5           // 最大允许丢线行数
 #define TF_MIN_TRACK_WIDTH 4         // 有效赛道最小宽度
 #define TF_MAX_TRACK_WIDTH 160       // 有效赛道最大宽度
@@ -40,6 +44,8 @@ typedef struct
     uint8 row_valid[TF_IMG_H];    // 该行是否有效
 
     int16 error;                  // 加权平均偏差（左=负偏 右=正偏）
+    int16 lookahead_error;        // 前瞻行偏差（图像中上部，用于弯道预判）
+    int16 error_trend;            // 偏差趋势 = lookahead_error - error（正=前方弯更急）
     uint16 valid_row_count;       // 有效行数
     uint8 line_lost;              // 丢线标志
 

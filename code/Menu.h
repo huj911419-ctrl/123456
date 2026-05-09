@@ -10,6 +10,8 @@ typedef enum
     PAGE_CAM,
     PAGE_PID,
     PAGE_IMU,
+    PAGE_SPEED,
+    PAGE_RA,
     PAGE_MAX
 } MenuPage;
 
@@ -33,10 +35,22 @@ typedef struct
 extern MenuPage now_page;
 extern uint8 menu_cursor;
 extern int16 motor_speed;
-extern int16 motor_dir;
 extern int16 motor_enable;
 extern int16 motor_run_time;
 extern int16 yaw_kp;
+extern int16 threshold_bias;
+extern int16 cam_exposure;
+
+// 速度自适应参数
+extern int16 sp_err_t1;
+extern int16 sp_err_t2;
+extern int16 sp_ratio_1;
+extern int16 sp_ratio_2;
+extern int16 steer_speed_k;
+
+// 直角弯参数
+extern int16 ra_enter_frames;
+extern int16 ra_exit_frames;
 
 void key_init_all(void);
 void key_process(void);

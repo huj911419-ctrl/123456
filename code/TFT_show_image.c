@@ -61,4 +61,9 @@ void draw_line(void)
     // Yaw 信息（显示为 yaw*10 的整数，方便看一位小数）
     tft180_show_int(130, 30, (int32)(yaw_angle * 10), 4);   // yaw角
     tft180_show_int(130, 40, (int32)yaw_rate, 4);           // yaw角速度
+    // 前瞻信息
+    tft180_show_string(0, 90, "LA:");
+    tft180_show_int(24, 90, (int32)g_tf.lookahead_error, 4);
+    tft180_show_string(60, 90, "TR:");
+    tft180_show_int(84, 90, (int32)g_tf.error_trend, 4);
 }

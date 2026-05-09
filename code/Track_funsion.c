@@ -323,6 +323,8 @@ void track_fusion_init(void)
         g_tf.row_valid[i] = 0u;
     }
     g_tf.error = 0;
+    g_tf.lookahead_error = 0;
+    g_tf.error_trend = 0;
     g_tf.valid_row_count = 0u;
     g_tf.line_lost = 0u;
     g_tf.left_jidian = (uint8)TF_IMG_CENTER;
@@ -364,7 +366,7 @@ void track_fusion_update(void)
     if (s_otsu_cnt >= TF_OTSU_INTERVAL)
     {
         s_otsu_cnt = 0u;
-        int16 raw = (int16)calc_otsu() + TF_THRESHOLD_BIAS;
+        int16 raw = (int16)calc_otsu() + threshold_bias;
         if (raw < 20)
             raw = 20;
         if (raw > 240)
@@ -442,6 +444,25 @@ void track_fusion_update(void)
 
     g_tf.error = -(avg_center - (int16)TF_IMG_CENTER);
     g_tf.line_lost = 0u;
+
+    /* 6. 计算前瞻行偏差（中上部行，用于弯道趋势预判） */
+    {
+        int32 la_sum = 0, la_wtotal = 0;
+        for (int16 row = TF_LOOKAHEAD_START_ROW; row >= TF_LOOKAHEAD_END_ROW; row--)
+        {
+            if (g_tf.row_valid[row])
+            {
+                int32 w = (int32)(TF_LOOKAHEAD_START_ROW - row + 1);
+                la_sum += (int32)g_tf.center_line[row] * w;
+                la_wtotal += w;
+            }
+        }
+        int16 la_center = (la_wtotal > 0)
+                              ? (int16)(la_sum / la_wtotal)
+                              : (int16)TF_IMG_CENTER;
+        g_tf.lookahead_error = -(la_center - (int16)TF_IMG_CENTER);
+        g_tf.error_trend = g_tf.lookahead_error - g_tf.error;
+    }
 }
 
 /* ========================================================================
