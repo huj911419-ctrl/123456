@@ -6,10 +6,7 @@
 typedef enum
 {
     PAGE_MAIN = 0,
-    PAGE_MOTOR,
-    PAGE_CAM,
     PAGE_PID,
-    PAGE_IMU,
     PAGE_SPEED,
     PAGE_RA,
     PAGE_ROUTE,
@@ -23,6 +20,7 @@ typedef struct
     int16 min;
     int16 max;
     int16 step;
+    const char *desc;  // 参数说明
 } MenuItem;
 
 typedef struct
@@ -41,9 +39,8 @@ extern int16 route_seq[20];
 extern int16 route_len;
 extern int16 route_step;
 extern int16 detect_count;
-extern int16 yaw_kp;
-extern int16 threshold_bias;
 extern int16 cam_exposure;
+extern int16 threshold_bias;
 
 // 速度自适应参数
 extern int16 sp_err_t1;
@@ -52,10 +49,7 @@ extern int16 sp_ratio_1;
 extern int16 sp_ratio_2;
 extern int16 steer_speed_k;
 
-// 直角弯参数
-extern int16 ra_enter_frames;
-extern int16 ra_exit_frames;
-extern int16 ra_turn_frames;
+// 直角弯参数（在 Pid.h 中声明）
 
 void key_init_all(void);
 void key_process(void);

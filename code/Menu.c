@@ -1,7 +1,5 @@
 #include "Menu.h"
 #include "Track_funsion.h"
-#include "string.h"
-#include "stdio.h"
 
 // ================================================================
 //  硬件引脚定义
@@ -34,7 +32,6 @@
 
 // ---------- 主页参数 ----------
 int16 motor_speed = 50;       // 电机速度   范围 0~100，base_speed = motor_speed*8
-int16 motor_dir = 1;           // 电机方向   0=反转 1=正转
 int16 motor_enable = 0;       // 电机使能   0=停止 1=运行
 int16 detect_count = 0;       // 路口检测计数目标（0=禁用）
 int16 route_seq[20] = {0};    // 路线序列: 0=直行 1=右转 2=左转
@@ -43,15 +40,12 @@ int16 route_step = 0;         // 当前步骤 0~(len-1)
 
 // ---------- 摄像头参数 ----------
 int16 threshold_bias = -10;    // Otsu阈值偏移量 范围 -50~50
-int16 cam_exposure = 200;      // 曝光时间   范围 100~500
+int16 cam_exposure = 350;      // 曝光时间   范围 100~500（偏振片补偿，默认350）
 
 // ---------- PID参数 ----------
-int16 pid_kp = 8;             // Kp，实际 STEER_KP = pid_kp*0.8
+int16 pid_kp = 4;             // Kp，实际 STEER_KP = pid_kp*0.8
 int16 pid_ki = 2;              // Ki，实际 SPEED_KI = pid_ki*0.25
-int16 pid_kd = 16;             // Kd，实际 STEER_KD = pid_kd*0.6
-
-// ---------- IMU参数 ----------
-int16 yaw_kp = 10;             // Yaw 补偿系数，实际值为 yaw_kp/10.0（即 1.0）
+int16 pid_kd = 20;             // Kd，实际 STEER_KD = pid_kd*0.6
 
 // ---------- 速度自适应参数 ----------
 int16 sp_err_t1 = 5;           // 偏差阈值1（直道）
@@ -61,73 +55,67 @@ int16 sp_ratio_2 = 40;         // 弯道速度百分比
 int16 steer_speed_k = 5;       // 转向速度耦合系数
 
 // ---------- 直角弯参数 ----------
-int16 ra_enter_frames = 5;     // 进入直角过渡帧数
-int16 ra_exit_frames = 8;      // 退出直角过渡帧数
-int16 ra_turn_frames = 20;     // 直角弯维持帧数（TURNING阶段）
+int16 ra_hard_inner = 0;       // 内轮duty（0=停转，负=反转更猛）
+int16 ra_hard_outer = 500;    // 外轮duty
+int16 ra_hard_yaw   = 60;      // 退出yaw角度 (30~85)
+int16 ra_slow_row   = 70;      // 减速触发行号 (30~110)
+int16 ra_slow_pct   = 60;      // 减速百分比 (10~100)
+int16 ra_turn_row   = 100;     // 硬转触发行号 (50~115)
+int16 ra_approach_frames = 15; // APPROACH阶段持续帧数 (5ms/帧=75ms，快速进弯)
 
 // ================================================================
 //  每个页面定义对应的 MenuItem 数组
-//  格式：{ "显示名", &变量, 最小值, 最大值, 步进 }
+//  格式：{ "显示名", &变量, 最小值, 最大值, 步进, "说明" }
 // ================================================================
 
-// 电机页面的参数列表（1个参数）
-static MenuItem items_motor[] = {
-    {"Speed", &motor_speed, 0, 400, 20},
-};
-
-// 主页面参数列表（2个参数）
+// 主页面（4个参数）
 static MenuItem items_main[] = {
-    {"Enable", &motor_enable, 0, 1, 1},
-    {"DetCnt", &detect_count, 0, 20, 1},
+    {"Enable", &motor_enable, 0,   1,  1, "0=Stop 1=Run"},
+    {"Speed",  &motor_speed,  0, 400, 20, "Speed (x8=actual)"},
+    {"DetCnt", &detect_count, 0,  20,  1, "Stop after N (0=off)"},
+    {"Exp",    &cam_exposure,100, 500, 10, "Exposure time"},
 };
 
-// 摄像头页面参数列表（2个参数）
-static MenuItem items_cam[] = {
-    {"ThrBias", &threshold_bias, -50, 50, 5}, // Otsu阈值偏移
-    {"Expose", &cam_exposure, 100, 500, 10},  // 每步加10
-};
-
-// PID页面参数列表（3个参数）
+// PID页面（3个参数）
 static MenuItem items_pid[] = {
-    {"Kp", &pid_kp, 0, 100, 1}, // STEER_KP = pid_kp*0.8
-    {"Ki", &pid_ki, 0, 50, 1},  // SPEED_KI = pid_ki*0.25
-    {"Kd", &pid_kd, 0, 50, 1},  // STEER_KD = pid_kd*0.6
+    {"Kp",     &pid_kp, 0, 100, 1, "Steer P: bigger=sharper"},
+    {"Ki",     &pid_ki, 0,  50, 1, "Speed I: bigger=faster"},
+    {"Kd",     &pid_kd, 0,  50, 1, "Steer D: damp oscillation"},
 };
 
-// IMU页面参数列表（1个参数）
-static MenuItem items_imu[] = {
-    {"YAW Kp", &yaw_kp, 0, 100, 1}, // 实际YAW_Kp = yaw_kp/10.0
-};
-
-// 速度自适应页面参数列表（5个参数）
+// 速度自适应页面（5个参数，改名）
 static MenuItem items_speed[] = {
-    {"ErrT1",    &sp_err_t1,      1,  50,  1},  // 直道偏差阈值
-    {"ErrT2",    &sp_err_t2,     10,  80,  1},  // 急弯偏差阈值
-    {"RatStr",   &sp_ratio_1,    20, 100,  5},  // 直道速度百分比
-    {"RatCrv",   &sp_ratio_2,    20, 100,  5},  // 弯道速度百分比
-    {"StrSpdK",  &steer_speed_k,  0,  50,  1},  // 转向速度耦合系数
+    {"StrErr",  &sp_err_t1,      1,  50,  1, "Straight err threshold"},
+    {"CrvErr",  &sp_err_t2,     10,  80,  1, "Curve err threshold"},
+    {"StrSpd%", &sp_ratio_1,    20, 100,  5, "Straight speed %"},
+    {"CrvSpd%", &sp_ratio_2,    20, 100,  5, "Curve speed %"},
+    {"SpdCpl",  &steer_speed_k,  0,  50,  1, "Speed-steer coupling"},
 };
 
-// 直角弯参数页面（2个参数）
+// 直角弯参数页面（7个参数）
 static MenuItem items_ra[] = {
-    {"RAEnter",  &ra_enter_frames, 1, 20, 1},   // 进入过渡帧数
-    {"RATurn",   &ra_turn_frames,  5, 50, 1},   // TURNING维持帧数
-    {"RAExit",   &ra_exit_frames,  1, 20, 1},   // 退出过渡帧数
+    {"SlwRow",  &ra_slow_row,        30,  110,   5, "Slowdown IP row"},
+    {"SlwPct",  &ra_slow_pct,        10,  100,   5, "Slowdown speed %"},
+    {"TrnRow",  &ra_turn_row,        50,  115,   5, "Approach IP row"},
+    {"AproF",   &ra_approach_frames,  5,  100,   5, "Approach frames (5ms)"},
+    {"Outer",   &ra_hard_outer,     500, 5000, 100, "Outer wheel duty"},
+    {"Inner",   &ra_hard_inner,   -2000, 5000, 100, "Inner wheel duty"},
+    {"Yaw",     &ra_hard_yaw,        30,   85,   5, "Exit yaw angle(deg)"},
 };
 
-// 路线序列页面参数列表（Len + 10个方向步骤）
+// 路线序列页面（Len + 10个方向步骤）
 static MenuItem items_route[] = {
-    {"Len",      &route_len,     1, 20, 1},
-    {"Step00",   &route_seq[0],  0,  2, 1},
-    {"Step01",   &route_seq[1],  0,  2, 1},
-    {"Step02",   &route_seq[2],  0,  2, 1},
-    {"Step03",   &route_seq[3],  0,  2, 1},
-    {"Step04",   &route_seq[4],  0,  2, 1},
-    {"Step05",   &route_seq[5],  0,  2, 1},
-    {"Step06",   &route_seq[6],  0,  2, 1},
-    {"Step07",   &route_seq[7],  0,  2, 1},
-    {"Step08",   &route_seq[8],  0,  2, 1},
-    {"Step09",   &route_seq[9],  0,  2, 1},
+    {"Len",    &route_len,    1, 20, 1, "Total route steps"},
+    {"Step00", &route_seq[0], 0,  2, 1, "0=Straight 1=Right 2=Left"},
+    {"Step01", &route_seq[1], 0,  2, 1, "0=Straight 1=Right 2=Left"},
+    {"Step02", &route_seq[2], 0,  2, 1, "0=Straight 1=Right 2=Left"},
+    {"Step03", &route_seq[3], 0,  2, 1, "0=Straight 1=Right 2=Left"},
+    {"Step04", &route_seq[4], 0,  2, 1, "0=Straight 1=Right 2=Left"},
+    {"Step05", &route_seq[5], 0,  2, 1, "0=Straight 1=Right 2=Left"},
+    {"Step06", &route_seq[6], 0,  2, 1, "0=Straight 1=Right 2=Left"},
+    {"Step07", &route_seq[7], 0,  2, 1, "0=Straight 1=Right 2=Left"},
+    {"Step08", &route_seq[8], 0,  2, 1, "0=Straight 1=Right 2=Left"},
+    {"Step09", &route_seq[9], 0,  2, 1, "0=Straight 1=Right 2=Left"},
 };
 
 // ================================================================
@@ -140,27 +128,11 @@ static MenuPageDef g_pages[PAGE_MAX] = {
     {
         .title = "MAIN",
         .items = items_main,
-        .item_count = 2,
+        .item_count = 4,
         .draw = NULL,
     },
 
-    // PAGE_MOTOR - 电机设置页面
-    {
-        .title = "MOTOR SET",
-        .items = items_motor,
-        .item_count = 1,
-        .draw = NULL,
-    },
-
-    // PAGE_CAM - 摄像头设置页面
-    {
-        .title = "CAM SET",
-        .items = items_cam,
-        .item_count = 2,
-        .draw = NULL,
-    },
-
-    // PAGE_PID - PID参数设置页面
+    // PAGE_PID - PID参数（含IMU）
     {
         .title = "PID SET",
         .items = items_pid,
@@ -168,15 +140,7 @@ static MenuPageDef g_pages[PAGE_MAX] = {
         .draw = NULL,
     },
 
-    // PAGE_IMU - IMU参数设置页面
-    {
-        .title = "IMU SET",
-        .items = items_imu,
-        .item_count = 1,
-        .draw = NULL,
-    },
-
-    // PAGE_SPEED - 速度自适应设置页面
+    // PAGE_SPEED - 速度自适应
     {
         .title = "SPEED SET",
         .items = items_speed,
@@ -184,15 +148,15 @@ static MenuPageDef g_pages[PAGE_MAX] = {
         .draw = NULL,
     },
 
-    // PAGE_RA - 直角弯参数设置页面
+    // PAGE_RA - 直角弯参数
     {
         .title = "RA SET",
         .items = items_ra,
-        .item_count = 3,
+        .item_count = 7,
         .draw = NULL,
     },
 
-    // PAGE_ROUTE - 路线序列设置页面
+    // PAGE_ROUTE - 路线序列
     {
         .title = "ROUTE",
         .items = items_route,
@@ -413,6 +377,26 @@ void key_process(void)
 }
 
 // ================================================================
+//  内部函数：手动拼接字符串（避免 sprintf 开销）
+// ================================================================
+static uint8 append_str(char *dst, uint8 pos, const char *src)
+{
+    while (*src) dst[pos++] = *src++;
+    return pos;
+}
+
+static uint8 append_int(char *dst, uint8 pos, int16 val)
+{
+    int32 v = val;
+    if (v < 0) { dst[pos++] = '-'; v = -v; }
+    char tmp[6];
+    uint8 n = 0;
+    do { tmp[n++] = '0' + (v % 10); v /= 10; } while (v > 0);
+    for (uint8 i = n; i > 0; i--) dst[pos++] = tmp[i - 1];
+    return pos;
+}
+
+// ================================================================
 //  内部函数：默认绘制（标题 + 参数列表 + 底部提示）
 // ================================================================
 static void default_draw(MenuPageDef *page)
@@ -434,15 +418,26 @@ static void default_draw(MenuPageDef *page)
         for (uint8 i = 0; i < page->item_count; i++)
         {
             MenuItem *item = &page->items[i];
-            const char *cursor_mark = (i == menu_cursor) ? ">" : " ";
-            sprintf(buf, "%s%-10s%d", cursor_mark, item->label, *item->value);
+            uint8 pos = 0;
+
+            // 光标标记
+            buf[pos++] = (i == menu_cursor) ? '>' : ' ';
+
+            // 标签（左对齐，补空格到10字符）
+            pos = append_str(buf, pos, item->label);
+            while (pos < 11) buf[pos++] = ' ';
+
+            // 数值
+            pos = append_int(buf, pos, *item->value);
+            buf[pos] = '\0';
+
             tft180_show_string(70, start_y + i * 8, buf);
         }
     }
 
-    // 底部按键提示（非主���面）
-    if (now_page != PAGE_MAIN)
-        tft180_show_string(0, 120, "K1/K2:Page K3/K4:+-");
+    // 底部：显示当前选中参数的说明
+    if (now_page != PAGE_MAIN && page->item_count > 0 && menu_cursor < page->item_count)
+        tft180_show_string(0, 120, (char *)page->items[menu_cursor].desc);
 }
 
 // ================================================================

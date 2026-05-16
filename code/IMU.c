@@ -77,11 +77,7 @@ void imu_update(void)
     raw_rate -= s_gyro_z_offset;
 
     // 死区处理：角速度太小认为是噪声
-    if (raw_rate > GYRO_Z_DEADBAND)
-        raw_rate = raw_rate;
-    else if (raw_rate < -GYRO_Z_DEADBAND)
-        raw_rate = raw_rate;
-    else
+    if (raw_rate > -GYRO_Z_DEADBAND && raw_rate < GYRO_Z_DEADBAND)
         raw_rate = 0.0f;
 
     // 低通滤波
