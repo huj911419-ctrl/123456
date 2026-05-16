@@ -55,7 +55,10 @@ int core0_main(void)
         /* 更新赛道融合检测结果 */
         track_fusion_update();
 
-        /* 拐点法路口检测 */
+        /* 直角预判检测（远距离，必须在 track_fusion_update 之后） */
+        right_angle_pre_detect();
+
+        /* 拐点画框路口检测（替代原 right_angle_detect） */
         detect_intersection();
 
         /* 按键处理 */

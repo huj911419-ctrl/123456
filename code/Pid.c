@@ -1,21 +1,19 @@
 #include "Pid.h"
 #include "Menu.h"
+#include "Track_funsion.h"
+#include "IMU.h"
 
 int16 base_speed = 0;
 
 // ================= 静态变量 =================
 static float s_steer_last_pos_err = 0.0f;
-static float s_steer_last_raw_err = 0.0f;   // D项用：原始误差（未滤波）
+static float s_steer_last_raw_err = 0.0f;
 static float s_prev_steer_output = 0.0f;
 static uint8 s_steer_d_reset_flag = 0u;
 
 static float s_speed_integral = 0.0f;
 
-// 运行停止 + 直角弯状态机
-static uint8 s_is_cross_turn = 0;
-static uint8 s_intersection_done = 0;
-static uint8 s_finish_flag = 0;
-static uint16 s_finish_cnt = 0;
+static uint32 s_motor_run_counter = 0;
 
 // 直角弯状态机
 typedef enum { RA_ST_NONE, RA_ST_ACTIVE } RaState;
@@ -26,14 +24,8 @@ static uint8 s_ra_dir = 0;
 static uint16 s_ra_approach_cnt = 0;
 static uint16 s_ra_timer = 0;
 static uint16 s_ra_hard_cnt = 0;
-static uint8 s_ra_ip_row = 0u;      /* RA期间锁定的拐点行号 */
-static uint16 s_ra_phase_cnt = 0u;  /* 当前阶段持续帧数 */
-
-// 十字路口直行导航帧计数
-static uint16 s_cross_nav_cnt = 0;
-
-// 丢线恢复
-static uint8 s_line_lost_cnt = 0;
+static uint8 s_ra_ip_row = 0u;
+static uint16 s_ra_phase_cnt = 0u;
 
 // ================================================================
 // 转向 PD 控制器（P项用滤波误差，D项用原始误差差分）
@@ -42,13 +34,12 @@ static float steer_pd_calc(int16 pos_err)
 {
     static float s_filtered_err = 0.0f;
 
-    // 1. 误差低通滤波（仅给 P 项用，抑制帧间噪声）
     s_filtered_err = s_filtered_err * ERROR_FILTER_ALPHA + (float)pos_err * (1.0f - ERROR_FILTER_ALPHA);
     float err = s_filtered_err;
     float err_abs = (err >= 0) ? err : -err;
     float raw_err = (float)pos_err;
 
-    // 2. 完全死区：偏差极小，输出归零
+    // 完全死区
     if (err_abs <= (float)STEER_DEADZONE)
     {
         s_steer_last_pos_err = err;
@@ -57,7 +48,7 @@ static float steer_pd_calc(int16 pos_err)
         return 0.0f;
     }
 
-    // 3. P 项 + 软过渡
+    // P项 + 软过渡
     float p_scale = 1.0f;
     if (err_abs < (float)STEER_SOFT_END)
     {
@@ -67,7 +58,7 @@ static float steer_pd_calc(int16 pos_err)
     }
     float p_out = STEER_KP * err * p_scale;
 
-    // 4. D 项：用原始误差差分（保留微分的提前性）
+    // D项：用原始误差差分（保留微分的提前性）
     float d_out = 0.0f;
     if (s_steer_d_reset_flag == 0u)
     {
@@ -82,13 +73,13 @@ static float steer_pd_calc(int16 pos_err)
 
     float output = p_out + d_out;
 
-    // 5. 硬限幅
+    // 硬限幅
     if (output > STEER_MAX)
         output = STEER_MAX;
     else if (output < -STEER_MAX)
         output = -STEER_MAX;
 
-    // 6. 变化率限制
+    // 变化率限制
     float delta = output - s_prev_steer_output;
     if (delta > STEER_SLEW_MAX)
         output = s_prev_steer_output + STEER_SLEW_MAX;
@@ -123,12 +114,11 @@ static float speed_pi_calc(float target, float actual, float *integral, int16 po
 }
 
 // ================================================================
-// 输出限幅（含 NaN 保护）
+// 输出限幅
 // ================================================================
 static int16 clamp_duty(float val)
 {
-    if (val != val)  /* NaN 检测：NaN != NaN */
-        return 0;
+    if (val != val) return 0;
     if (val > MAX_DUTY)
         val = MAX_DUTY;
     else if (val < -MAX_DUTY)
@@ -161,37 +151,6 @@ static int16 calc_adapted_speed(int16 base, int16 pos_err_abs)
 }
 
 // ================================================================
-// 轨道恢复检查
-// ================================================================
-static uint8 track_ok(void)
-{
-    return (g_tf.line_lost == 0u && g_tf.valid_row_count >= 15u) ? 1u : 0u;
-}
-
-// ================================================================
-// 路口完成回调
-// ================================================================
-static void action_done(void)
-{
-    s_intersection_done++;
-
-    if (s_is_cross_turn)
-    {
-        route_step++;
-        s_cross_nav_cnt = 0;
-        s_is_cross_turn = 0;
-    }
-
-    g_ra_flag = 0u;
-
-    if (detect_count > 0 && s_intersection_done >= (uint8)detect_count)
-    {
-        s_finish_flag = 1u;
-        s_finish_cnt = 0;
-    }
-}
-
-// ================================================================
 // 直角弯状态机复位
 // ================================================================
 static void ra_reset(void)
@@ -216,14 +175,9 @@ void line_pid_init(void)
     s_prev_steer_output = 0.0f;
     s_steer_d_reset_flag = 1u;
     s_speed_integral = 0.0f;
-    s_is_cross_turn = 0;
-    s_intersection_done = 0;
-    s_finish_flag = 0;
-    s_finish_cnt = 0;
+    s_motor_run_counter = 0;
 
     ra_reset();
-    s_cross_nav_cnt = 0;
-    s_line_lost_cnt = 0;
 }
 
 // ================================================================
@@ -251,7 +205,7 @@ static RaResult ra_state_machine_step(void)
 {
     RaResult r = { 0, 0, 1.0f };
 
-    /* 检测到拐点 → 激活 RA */
+    /* 检测到直角弯 → 激活 RA（仅 type 1=右转 2=左转） */
     if ((g_ra_flag == 1 || g_ra_flag == 2) && s_ra_state == RA_ST_NONE)
     {
         s_ra_dir = (uint8)g_ra_flag;
@@ -283,12 +237,12 @@ static RaResult ra_state_machine_step(void)
     {
         ra_reset();
         turn_right_led_off();
-        action_done();
+        g_ra_flag = 0u;
         line_pid_reset_derivative();
         return r;
     }
 
-    /* 阶段升级：锁定值 OR 超时，满足任一即推进 */
+    /* 阶段升级 */
     if (s_ra_phase >= RA_PH_APPROACH)
     {
         if (s_ra_approach_cnt >= (uint16)ra_approach_frames)
@@ -340,61 +294,6 @@ static RaResult ra_state_machine_step(void)
 }
 
 // ================================================================
-// 十字路口处理（返回 1=已处理，0=未处理）
-// ================================================================
-static uint8 cross_intersection_step(void)
-{
-    if (g_ra_flag != 3)
-        return 0u;
-
-    s_is_cross_turn = 1;
-    uint8 dir = (route_step < route_len) ? (uint8)route_seq[route_step] : 0u;
-
-    if (dir == 0)
-    {
-        s_cross_nav_cnt++;
-        float cross_speed = (float)base_speed * 0.6f;
-        small_driver_set_duty(clamp_duty(cross_speed), clamp_duty(cross_speed));
-        if (s_cross_nav_cnt > 40u && track_ok())
-            action_done();
-    }
-    else
-    {
-        s_ra_dir = dir;
-        s_ra_state = RA_ST_ACTIVE;
-        s_ra_phase = RA_PH_WAIT;
-        turn_right_led_on();
-    }
-    return 1u;
-}
-
-// ================================================================
-// 丢线恢复（返回 1=已处理，0=未处理）
-// ================================================================
-static uint8 line_lost_step(void)
-{
-    if (!g_tf.line_lost)
-    {
-        s_line_lost_cnt = 0;
-        return 0u;
-    }
-
-    s_line_lost_cnt++;
-    uint8 lost_thresh = 12u - (uint8)((uint16)base_speed / 100u);
-    if (lost_thresh < 5u) lost_thresh = 5u;
-    if (s_line_lost_cnt > lost_thresh)
-    {
-        float lost_speed = (float)base_speed * 0.5f;
-        float lost_steer = s_prev_steer_output * 0.7f;
-        small_driver_set_duty(clamp_duty(lost_speed + lost_steer),
-                              clamp_duty(lost_speed - lost_steer));
-        s_speed_integral *= 0.95f;
-        return 1u;
-    }
-    return 0u;
-}
-
-// ================================================================
 // 正常巡线 PID
 // ================================================================
 static void normal_pid_step(int16 pos_err, int16 pos_err_abs)
@@ -409,6 +308,14 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs)
                   + (float)g_tf.lookahead_error * la_ratio;
     }
     float steer = steer_pd_calc((int16)mixed_err);
+
+    /* Yaw补偿 */
+    {
+        float yaw_kp_val = (float)yaw_kp / 10.0f;
+        float yaw_abs = yaw_angle >= 0 ? yaw_angle : -yaw_angle;
+        if (yaw_abs > YAW_DEADZONE)
+            steer += yaw_kp_val * yaw_angle;
+    }
 
     /* 速度自适应：error 和 trend 独立处理 */
     int16 trend_abs = g_tf.error_trend >= 0 ? g_tf.error_trend : -g_tf.error_trend;
@@ -429,7 +336,7 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs)
     float ff = target_speed * SPEED_FF_RATIO;
     float speed_out = ff + speed_pi_calc(target_speed - ff, avg_actual, &s_speed_integral, pos_err_abs);
 
-    /* 转向速度耦合（加上限） */
+    /* 转向速度耦合 */
     float speed_factor = 1.0f + (float)base_speed * (float)steer_speed_k * 0.001f;
     if (speed_factor > SPEED_FACTOR_MAX)
         speed_factor = SPEED_FACTOR_MAX;
@@ -447,36 +354,20 @@ void line_pid_control(void)
     {
         small_driver_set_duty(0, 0);
         s_speed_integral = 0.0f;
-        s_is_cross_turn = 0;
-        s_intersection_done = 0;
-        s_finish_flag = 0;
-        s_finish_cnt = 0;
+        s_motor_run_counter = 0;
         ra_reset();
-        s_cross_nav_cnt = 0;
-        s_line_lost_cnt = 0;
-        route_step = 0;
         return;
     }
 
-    /* 收尾阶段：渐停 */
-    if (s_finish_flag)
+    s_motor_run_counter++;
+    if (s_motor_run_counter >= (uint32)motor_run_time * 1000 / 11)
     {
-        s_finish_cnt++;
-        if (s_finish_cnt > FINISH_TOTAL_FRAMES)
-        {
-            motor_enable = 0;
-            small_driver_set_duty(0, 0);
-            return;
-        }
-        if (s_finish_cnt > FINISH_FADE_START)
-        {
-            float fade = 1.0f - (float)(s_finish_cnt - FINISH_FADE_START)
-                       / (float)FINISH_FADE_FRAMES;
-            if (fade < 0.0f) fade = 0.0f;
-            float fade_speed = (float)base_speed * fade;
-            small_driver_set_duty(clamp_duty(fade_speed), clamp_duty(fade_speed));
-            return;
-        }
+        motor_enable = 0;
+        small_driver_set_duty(0, 0);
+        s_speed_integral = 0.0f;
+        s_motor_run_counter = 0;
+        ra_reset();
+        return;
     }
 
     int16 pos_err = g_tf.error;
@@ -489,13 +380,37 @@ void line_pid_control(void)
 
     base_speed = (int16)((int32)motor_speed * 8 * ra.speed_scale);
 
-    /* 丢线恢复（仅非RA状态） */
-    if (!ra.need_pid && line_lost_step())
-        return;
+    /* 直角预判减速 + 锁存防闪 + 超时防误触（仅非RA状态） */
+    if (s_ra_state == RA_ST_NONE)
+    {
+        static uint8 s_pre_lock = 0;
+        static uint8 s_pre_timeout = 0;
 
-    /* 十字路口（仅非RA状态） */
-    if (!ra.need_pid && cross_intersection_step())
-        return;
+        if (g_ra_pre_flag && g_ra_flag == 0)
+        {
+            s_pre_lock = 1;
+            s_pre_timeout = 0;
+        }
+
+        if (g_ra_flag != 0)
+        {
+            s_pre_lock = 0;
+        }
+
+        if (s_pre_lock)
+        {
+            base_speed = base_speed / 7;
+            if (!g_ra_pre_flag)
+            {
+                s_pre_timeout++;
+                if (s_pre_timeout > 30)
+                {
+                    s_pre_lock = 0;
+                    s_pre_timeout = 0;
+                }
+            }
+        }
+    }
 
     /* 正常巡线 PID */
     normal_pid_step(pos_err, pos_err_abs);

@@ -33,7 +33,6 @@ extern int16 steer_speed_k; // 转向速度耦合系数 (0~50, 代表0.000~0.050
 #define STEER_KP  ((float)pid_kp * 0.8f)
 #define STEER_KD  ((float)pid_kd * 0.6f)
 #define STEER_MAX 4000.0f
-
 #define STEER_DEADZONE 2
 #define STEER_SOFT_END 6
 #define STEER_SLEW_MAX 250.0f
@@ -45,11 +44,7 @@ extern int16 steer_speed_k; // 转向速度耦合系数 (0~50, 代表0.000~0.050
 #define SPEED_KI ((float)pid_ki * 0.25f)
 #define SPEED_I_MAX 500.0f
 #define SPEED_I_SEPARATION 20
-
-// 速度前馈比例（目标速度的固定比例直接输出，减少PI滞后）
 #define SPEED_FF_RATIO 0.3f
-
-// 转向速度耦合上限
 #define SPEED_FACTOR_MAX 5.0f
 
 // ================================================================
@@ -61,19 +56,17 @@ extern int16 steer_speed_k; // 转向速度耦合系数 (0~50, 代表0.000~0.050
 #define ERROR_FILTER_ALPHA 0.65f
 
 // ================================================================
-// 收尾阶段帧数（11ms/帧）
+// Yaw 补偿参数
 // ================================================================
-#define FINISH_TOTAL_FRAMES  273u  // 3秒总时长
-#define FINISH_FADE_START    182u  // 2秒后开始减速
-#define FINISH_FADE_FRAMES    91u  // 1秒减速期
+#define YAW_DEADZONE 1.0f
 
 // ================================================================
 // 直角弯状态机参数（11ms/帧）
 // ================================================================
-#define RA_HARD_TIMEOUT    45u   // HARD阶段单独超时(495ms)，防止转圈
+#define RA_HARD_TIMEOUT    45u   // HARD阶段单独超时(495ms)
 #define RA_TIMEOUT_FRAMES  300u   // RA总超时(3.3秒)
-#define RA_WAIT_TIMEOUT    80u   // WAIT阶段最大帧数(880ms)，拐点消失时兜底
-#define RA_SLOW_TIMEOUT    60u   // SLOW阶段最大帧数(660ms)，拐点消失时兜底
+#define RA_WAIT_TIMEOUT    80u   // WAIT阶段最大帧数(880ms)
+#define RA_SLOW_TIMEOUT    60u   // SLOW阶段最大帧数(660ms)
 
 // ================================================================
 // 函数接口

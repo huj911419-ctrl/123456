@@ -3,11 +3,11 @@
 
 #include "zf_common_headfile.h"
 
-extern int16 threshold_bias; // Otsu阈值偏移量（菜单可调）
+extern int16 threshold_bias;
 
 /* ================================================================
- *  Otsu二值化循迹 + 拐点法路口检测
- *  图像压缩 188×120 → 94×60（2×2块平均）
+ *  Otsu二值化循迹 + 迷宫搜线 + 拐点画框检测
+ *  图像压缩 188x120 -> 94x60（最近邻插值）
  * ================================================================ */
 
 /* ==================== 压缩图像尺寸定义 ==================== */
@@ -22,17 +22,21 @@ extern int16 threshold_bias; // Otsu阈值偏移量（菜单可调）
 
 /* ==================== 循迹算法参数 ==================== */
 #define TF_OTSU_INTERVAL 2           // 每隔几帧计算一次阈值
-#define TF_THRESHOLD_BIAS (-10)      // 阈值偏移量
 #define TF_JIDIAN_ROW (TF_IMG_H - 4) // 底部极值检测行 = 56
 #define TF_SEARCH_END_ROW 4          // 循迹搜索起始行（压缩后）
-#define TF_LOCAL_RANGE 12            // 局部搜索范围（压缩后比例）
-#define TF_ROW_STEP 1                // 扫描步长 1=每行
+#define TF_LOCAL_RANGE 10            // 局部搜索范围（压缩后=原18/2）
+#define TF_MAX_MISS_ROWS 5           // 最大允许丢线行数
+#define TF_MIN_TRACK_WIDTH 2         // 有效赛道最小宽度（压缩后=原4/2）
+#define TF_MAX_TRACK_WIDTH 80        // 有效赛道最大宽度（压缩后=原160/2）
+#define TF_INVALID (-1)              // 无效值标记
+
+/* ==================== 前瞻参数 ==================== */
 #define TF_LOOKAHEAD_START_ROW 35    // 前瞻起始行（压缩后=原70）
 #define TF_LOOKAHEAD_END_ROW 20      // 前瞻终止行（压缩后=原40）
-#define TF_MAX_MISS_ROWS 5           // 最大允许丢线行数
-#define TF_MIN_TRACK_WIDTH 2         // 有效赛道最小宽度（压缩后=原4）
-#define TF_MAX_TRACK_WIDTH 40        // 有效赛道最大宽度（压缩后=原160）
-#define TF_INVALID (-1)              // 无效值标记
+
+/* ==================== 二值化常量 ==================== */
+#define Image_WHITE 255u
+#define Image_BLACK 0u
 
 /* ==================== 数据结构定义 ==================== */
 typedef struct
@@ -50,32 +54,30 @@ typedef struct
 
     uint8 left_jidian;
     uint8 right_jidian;
-    uint8 threshold;
+
+    int8 left_dir[TF_IMG_H];
+    int8 right_dir[TF_IMG_H];
 } TrackFusion_t;
 
 extern TrackFusion_t g_tf;
 
 /* ==================== 二值化图像 ==================== */
-extern uint8 bin_image[TF_IMG_H][TF_IMG_W];
+extern uint8 Image_Binarize[TF_IMG_H][TF_IMG_W];
 
 /* ==================== 压缩灰度图像 ==================== */
-extern uint8 compressed_gray[COMP_H][COMP_W];
+extern uint8 image_0[COMP_H][COMP_W];
 
-/* ==================== 拐点法路口检测参数 ==================== */
-#define INTER_JUMP_THRESH      10         // 压缩后跳变阈值（原20）
+/* ==================== Otsu阈值 ==================== */
+extern uint16 Image_Threshold;
+
+/* ==================== 路口检测参数 ==================== */
 #define INTER_COOLDOWN_FRAMES  60
 #define INTER_MAX_LOCK_FRAMES  300
-#define INTER_BOX_START_ROW    25         // 压缩后，拐点行号>=此值才开始画框（原50）
+#define INTER_BOX_START_ROW    25    // 压缩后，拐点行号>=此值才开始画框
 
-/* 拐点增强检测参数 */
-#define IP_STABLE_WINDOW       3          // 跳变前稳定检查行数
-#define IP_CHECK_WINDOW        3          // 跳变后方向持续检查行数
-#define IP_MIN_CONTINUE        2          // 跳变后最少持续有效行数
-#define IP_STABLE_VAR_MAX      30         // 跳变前边缘方差上限（越小越严格）
-
-#define BOX_HEIGHT         40             // 压缩后框高
-#define BOX_WIDTH          60             // 压缩后框宽
-#define INTER_BOX_MIN_STREAK 5            // 框边最少连续白点数（防单点误判）
+#define BOX_HEIGHT         40        // 压缩后框高
+#define BOX_WIDTH          60        // 压缩后框宽
+#define INTER_BOX_MIN_STREAK 5       // 框边最少连续白点数
 
 /* ==================== 拐点数据结构 ==================== */
 typedef struct
@@ -94,18 +96,25 @@ typedef struct
     uint8 box_bottom;
     uint8 box_left;
     uint8 box_right;
-    uint8 detected_type;            // 0=正常 1=右转 2=左转 3=十字
+    uint8 detected_type;     // 0=正常 1=右转 2=左转 3=左右 4=十字 5=上右 6=上左右
 } IntersectionResult_t;
 
+/* ==================== 直角预判参数（压缩坐标） ==================== */
+#define RA_PRE_START_ROW 38        // 预判起始行（压缩后=原75/2）
+#define RA_PRE_END_ROW 28          // 预判终止行（压缩后=原55/2）
+#define RA_PRE_LOST_THRESH 3       // 丢边行数阈值（压缩后=原5取整）
+#define RA_PRE_EDGE_MARGIN 3       // 边线贴近图像边缘的阈值（压缩后=原5取整）
+
 /* ==================== 导出变量 ==================== */
-extern uint8 g_ra_flag;               // 0=无 1=右转 2=左转 3=十字
+extern uint8 g_ra_flag;               // 0=无 1=右转 2=左转 3=左右 4=十字 5=上右 6=上左右
+extern uint8 g_ra_pre_flag;           // 1=远处看到直角需减速 0=正常
 extern IntersectionResult_t g_inter_result;
 extern uint8 g_ip_max_row;
-extern uint8 g_debug_detected;
 
 /* ==================== 函数接口 ==================== */
 void track_fusion_init(void);
 void track_fusion_update(void);
+void right_angle_pre_detect(void);
 void detect_intersection(void);
 
 #endif /* TRACK_FUSION_H */
