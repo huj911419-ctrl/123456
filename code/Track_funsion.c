@@ -14,6 +14,15 @@ int16 threshold_bias = 0;
 static uint8 s_otsu_cnt = 0;
 static uint32 s_hist[256];
 
+/* First miss row and last valid center for inflection detection */
+static int16 s_first_miss_row = -1;
+static int16 s_last_valid_center = TF_IMG_CENTER;
+
+#define IP_COL_BUF_SIZE 8
+static int16 s_center_buf[IP_COL_BUF_SIZE];
+static uint8 s_center_buf_cnt = 0u;
+int16 ip_col_offset = 5;  // 0=鍊掓暟绗�1涓紝1=鍊掓暟绗�2涓�...
+
 /* ========================================================================
  * Image compression: 188x120 -> 94x60 (nearest-neighbor)
  * ======================================================================== */
@@ -121,7 +130,7 @@ static void denoise_binary_image(void)
 }
 
 /* ========================================================================
- * Binary image helper
+ * Binary image helpers
  * ======================================================================== */
 static inline uint8 is_white(int16 row, int16 col)
 {
@@ -130,256 +139,130 @@ static inline uint8 is_white(int16 row, int16 col)
     return (Image_Binarize[row][col] == Image_WHITE) ? 1u : 0u;
 }
 
-/* Same row may be visited multiple times: left = min x, right = max x */
-static inline void maze_set_left_edge(int16 row, int16 col, int8 dir)
+static inline uint8 is_left_edge(int16 row, int16 col)
 {
-    if (g_tf.left_edge[row] == TF_INVALID || col < g_tf.left_edge[row])
-    {
-        g_tf.left_edge[row] = col;
-        g_tf.left_dir[row] = dir;
-    }
+    if (col < 1 || col >= TF_IMG_W - 1) return 0u;
+    return (!is_white(row, col - 1) && is_white(row, col) && is_white(row, col + 1)) ? 1u : 0u;
 }
 
-static inline void maze_set_right_edge(int16 row, int16 col, int8 dir)
+static inline uint8 is_right_edge(int16 row, int16 col)
 {
-    if (g_tf.right_edge[row] == TF_INVALID || col > g_tf.right_edge[row])
-    {
-        g_tf.right_edge[row] = col;
-        g_tf.right_dir[row] = dir;
-    }
-}
-
-/* Stop when left and right tracers meet (same row, columns within 1) */
-static inline uint8 maze_tracers_met(int16 row, int16 right_cx)
-{
-    if (g_tf.left_edge[row] == TF_INVALID)
-        return 0u;
-    int16 d = right_cx - g_tf.left_edge[row];
-    if (d < 0) d = -d;
-    return (d <= 1) ? 1u : 0u;
+    if (col < 1 || col >= TF_IMG_W - 1) return 0u;
+    return (is_white(row, col - 1) && is_white(row, col) && !is_white(row, col + 1)) ? 1u : 0u;
 }
 
 /* ========================================================================
- * Maze edge tracing on binary image
+ * Edge scanning functions (boundary-safe)
  * ======================================================================== */
-
-static const int8 maze_face_dir[4][2] = {{0,-1},{1,0},{0,1},{-1,0}};
-static const int8 maze_left_front[4][2] = {{-1,-1},{1,-1},{1,1},{-1,1}};
-static const int8 maze_right_front[4][2] = {{1,-1},{1,1},{-1,1},{-1,-1}};
-
-#define MAZE_MAX_STEPS 300
-#define MAZE_MAX_IP 10
-
-/* Inflection points found during maze tracing (direction changes) */
-static InflectionPoint_t s_maze_ips[MAZE_MAX_IP];
-static uint8 s_maze_ip_cnt = 0u;
-
-/* Record maze inflection point (direction change during tracing) */
-static void maze_ip_add(int16 row, int16 col)
+static int16 scan_left_edge_right(int16 row, int16 start, int16 end)
 {
-    if (s_maze_ip_cnt >= MAZE_MAX_IP) return;
-    if (row < 0 || row >= TF_IMG_H || col < 0 || col >= TF_IMG_W) return;
-    s_maze_ips[s_maze_ip_cnt].valid = 1u;
-    s_maze_ips[s_maze_ip_cnt].row = row;
-    s_maze_ips[s_maze_ip_cnt].col = col;
-    s_maze_ip_cnt++;
+    if (start < 1) start = 1;
+    if (end >= TF_IMG_W - 1) end = TF_IMG_W - 2;
+    if (start > end) return TF_INVALID;
+    for (int16 c = start; c <= end; c++)
+        if (is_left_edge(row, c)) return c;
+    return TF_INVALID;
 }
 
-static void maze_trace_edges(void)
+static int16 scan_left_edge_left(int16 row, int16 start, int16 end)
 {
-    const uint8 start_row = (uint8)TF_JIDIAN_ROW;
-    int16 l_start_x = -1, r_start_x = -1;
+    if (start >= TF_IMG_W - 1) start = TF_IMG_W - 2;
+    if (end < 1) end = 1;
+    if (start < end) return TF_INVALID;
+    for (int16 c = start; c >= end; c--)
+        if (is_left_edge(row, c)) return c;
+    return TF_INVALID;
+}
 
-    for (int16 c = TF_IMG_CENTER; c >= 1; c--)
+static int16 scan_right_edge_left(int16 row, int16 start, int16 end)
+{
+    if (start >= TF_IMG_W - 1) start = TF_IMG_W - 2;
+    if (end < 1) end = 1;
+    if (start < end) return TF_INVALID;
+    for (int16 c = start; c >= end; c--)
+        if (is_right_edge(row, c)) return c;
+    return TF_INVALID;
+}
+
+static int16 scan_right_edge_right(int16 row, int16 start, int16 end)
+{
+    if (start < 1) start = 1;
+    if (end >= TF_IMG_W - 1) end = TF_IMG_W - 2;
+    if (start > end) return TF_INVALID;
+    for (int16 c = start; c <= end; c++)
+        if (is_right_edge(row, c)) return c;
+    return TF_INVALID;
+}
+
+static inline uint8 valid_pair(int16 lb, int16 rb)
+{
+    if (lb == TF_INVALID || rb == TF_INVALID) return 0u;
+    int16 w = rb - lb;
+    return (w >= TF_MIN_TRACK_WIDTH && w <= TF_MAX_TRACK_WIDTH) ? 1u : 0u;
+}
+
+/* ========================================================================
+ * Baseline detection at bottom row
+ * ======================================================================== */
+static uint8 find_jidian1(void)
+{
+    const int16 row = (int16)TF_JIDIAN_ROW;
+    const int16 mid = (int16)TF_IMG_CENTER;
+    const int16 qtr = (int16)(TF_IMG_W / 4);
+    const int16 tqtr = (int16)(TF_IMG_W * 3 / 4);
+    int16 lb = TF_INVALID, rb = TF_INVALID;
+
+    if (is_white(row, mid - 1) && is_white(row, mid) && is_white(row, mid + 1))
     {
-        if (is_white((int16)start_row, c) && !is_white((int16)start_row, c - 1))
-        {
-            l_start_x = c;
-            break;
-        }
+        lb = scan_left_edge_left(row, mid, 1);
+        rb = scan_right_edge_right(row, mid, TF_IMG_W - 2);
     }
-    for (int16 c = TF_IMG_CENTER; c < TF_IMG_W - 1; c++)
+    else if (is_white(row, qtr - 1) && is_white(row, qtr) && is_white(row, qtr + 1))
     {
-        if (is_white((int16)start_row, c) && !is_white((int16)start_row, c + 1))
-        {
-            r_start_x = c;
-            break;
-        }
+        lb = scan_left_edge_left(row, qtr, 1);
+        rb = scan_right_edge_right(row, qtr, TF_IMG_W - 2);
     }
-
-    if (l_start_x < 0 || r_start_x < 0 || l_start_x >= r_start_x)
+    else if (is_white(row, tqtr - 1) && is_white(row, tqtr) && is_white(row, tqtr + 1))
     {
-        g_tf.valid_row_count = 0u;
-        s_maze_ip_cnt = 0u;
-        return;
+        lb = scan_left_edge_left(row, tqtr, 1);
+        rb = scan_right_edge_right(row, tqtr, TF_IMG_W - 2);
     }
-
-    s_maze_ip_cnt = 0u;
-
-    g_tf.left_jidian = (uint8)l_start_x;
-    g_tf.right_jidian = (uint8)r_start_x;
-
-    /* Left trace */
+    else
     {
-        int16 cx = l_start_x + 1, cy = (int16)start_row;
-        uint8 dir = 0;
-        uint8 turn_cnt = 0;
-        uint16 steps = 0;
-        int8 prev_growth_dir = 0;
-
-        maze_set_left_edge((int16)start_row, cx, 0);
-
-        while (steps++ < MAZE_MAX_STEPS)
-        {
-            int16 fr = cy + maze_face_dir[dir][1];
-            int16 fc = cx + maze_face_dir[dir][0];
-            uint8 f_ok = is_white(fr, fc);
-            if (!f_ok)
-            {
-                dir = (dir + 1) & 3;
-                if (++turn_cnt >= 4) break;
-                continue;
-            }
-
-            int16 lfr = cy + maze_left_front[dir][1];
-            int16 lfc = cx + maze_left_front[dir][0];
-            uint8 lf_ok = is_white(lfr, lfc);
-            int8 dx, dy;
-            if (lf_ok)
-            {
-                dx = maze_left_front[dir][0];
-                dy = maze_left_front[dir][1];
-                dir = (dir + 3) & 3;
-            }
-            else
-            {
-                dx = maze_face_dir[dir][0];
-                dy = maze_face_dir[dir][1];
-            }
-
-            int16 nx = cx + dx, ny = cy + dy;
-            if (nx < 0 || nx >= TF_IMG_W || ny < 0 || ny >= TF_IMG_H) break;
-
-            if (steps >= 5 && ny == (int16)start_row &&
-                nx == l_start_x + 1) break;
-
-            cx = nx; cy = ny;
-            turn_cnt = 0;
-
-            int8 growth_dir = (int8)(dx * 3 - dy);
-            maze_set_left_edge(cy, cx, growth_dir);
-
-            if (prev_growth_dir != 0 && growth_dir != prev_growth_dir)
-                maze_ip_add(cy, cx);
-            prev_growth_dir = growth_dir;
-
-            if (cy <= (int16)TF_SEARCH_END_ROW) break;
-        }
+        lb = scan_left_edge_right(row, 1, TF_IMG_W - 2);
+        if (lb != TF_INVALID)
+            rb = scan_right_edge_left(row, TF_IMG_W - 2, lb + TF_MIN_TRACK_WIDTH);
     }
 
-    /* Right trace */
-    {
-        int16 cx = r_start_x - 1, cy = (int16)start_row;
-        uint8 dir = 0;
-        uint8 turn_cnt = 0;
-        uint16 steps = 0;
-        int8 prev_growth_dir = 0;
+    if (!valid_pair(lb, rb)) return 0u;
+    g_tf.left_jidian = (uint8)lb;
+    g_tf.right_jidian = (uint8)rb;
+    return 1u;
+}
 
-        maze_set_right_edge((int16)start_row, cx, 0);
+/* ========================================================================
+ * Row-by-row edge search (local range from previous row)
+ * ======================================================================== */
+static uint8 search_row_edges(int16 row, int16 prev_lb, int16 prev_rb,
+                              int16 *out_lb, int16 *out_rb)
+{
+    int16 lb = TF_INVALID, rb = TF_INVALID;
+    const int16 R = TF_LOCAL_RANGE;
+    const int16 MID = TF_IMG_CENTER;
 
-        while (steps++ < MAZE_MAX_STEPS)
-        {
-            int16 fr = cy + maze_face_dir[dir][1];
-            int16 fc = cx + maze_face_dir[dir][0];
-            uint8 f_ok = is_white(fr, fc);
-            if (!f_ok)
-            {
-                dir = (dir + 3) & 3;
-                if (++turn_cnt >= 4) break;
-                continue;
-            }
+    /* Left edge search: local 鈫� widen 鈫� full scan */
+    lb = scan_left_edge_right(row, prev_lb - R, prev_lb + R);
+    if (lb == TF_INVALID) lb = scan_left_edge_left(row, prev_lb + R, prev_lb - R);
+    if (lb == TF_INVALID) lb = scan_left_edge_left(row, MID, 1);
 
-            int16 rfr = cy + maze_right_front[dir][1];
-            int16 rfc = cx + maze_right_front[dir][0];
-            uint8 rf_ok = is_white(rfr, rfc);
-            int8 dx, dy;
-            if (rf_ok)
-            {
-                dx = maze_right_front[dir][0];
-                dy = maze_right_front[dir][1];
-                dir = (dir + 1) & 3;
-            }
-            else
-            {
-                dx = maze_face_dir[dir][0];
-                dy = maze_face_dir[dir][1];
-            }
+    /* Right edge search: local 鈫� widen 鈫� full scan */
+    rb = scan_right_edge_left(row, prev_rb + R, prev_rb - R);
+    if (rb == TF_INVALID) rb = scan_right_edge_right(row, prev_rb - R, prev_rb + R);
+    if (rb == TF_INVALID) rb = scan_right_edge_right(row, MID, TF_IMG_W - 2);
 
-            int16 nx = cx + dx, ny = cy + dy;
-            if (nx < 0 || nx >= TF_IMG_W || ny < 0 || ny >= TF_IMG_H) break;
-
-            if (steps >= 5 && ny == (int16)start_row &&
-                nx == r_start_x - 1) break;
-
-            cx = nx; cy = ny;
-            turn_cnt = 0;
-
-            int8 growth_dir = (int8)(dx * 3 - dy);
-            maze_set_right_edge(cy, cx, growth_dir);
-
-            if (prev_growth_dir != 0 && growth_dir != prev_growth_dir)
-                maze_ip_add(cy, cx);
-            prev_growth_dir = growth_dir;
-
-            if (maze_tracers_met(cy, cx))
-                break;
-
-            if (cy <= (int16)TF_SEARCH_END_ROW) break;
-        }
-    }
-
-    /* Build center line and row validity */
-    uint16 valid_cnt = 0u;
-    int16 half_w = (TF_MIN_TRACK_WIDTH + TF_MAX_TRACK_WIDTH) / 4;
-
-    for (int16 row = (int16)start_row; row >= (int16)TF_SEARCH_END_ROW; row--)
-    {
-        uint8 has_l = (g_tf.left_edge[row] != TF_INVALID) ? 1u : 0u;
-        uint8 has_r = (g_tf.right_edge[row] != TF_INVALID) ? 1u : 0u;
-
-        if (has_l && has_r)
-        {
-            int16 w = g_tf.right_edge[row] - g_tf.left_edge[row];
-            if (w >= TF_MIN_TRACK_WIDTH && w <= TF_MAX_TRACK_WIDTH)
-            {
-                g_tf.center_line[row] = (g_tf.left_edge[row] + g_tf.right_edge[row]) / 2;
-                g_tf.row_valid[row] = 1u;
-                valid_cnt++;
-            }
-            else
-            {
-                g_tf.center_line[row] = (g_tf.left_edge[row] + g_tf.right_edge[row]) / 2;
-                g_tf.row_valid[row] = 0u;
-            }
-        }
-        else if (has_l)
-        {
-            g_tf.center_line[row] = g_tf.left_edge[row] + half_w;
-            g_tf.row_valid[row] = 0u;
-        }
-        else if (has_r)
-        {
-            g_tf.center_line[row] = g_tf.right_edge[row] - half_w;
-            g_tf.row_valid[row] = 0u;
-        }
-        else
-        {
-            g_tf.center_line[row] = TF_INVALID;
-            g_tf.row_valid[row] = 0u;
-        }
-    }
-
-    g_tf.valid_row_count = valid_cnt;
+    *out_lb = lb;
+    *out_rb = rb;
+    return valid_pair(lb, rb);
 }
 
 /* ========================================================================
@@ -394,8 +277,6 @@ void track_fusion_init(void)
         g_tf.right_edge[i] = TF_INVALID;
         g_tf.center_line[i] = TF_INVALID;
         g_tf.row_valid[i] = 0u;
-        g_tf.left_dir[i] = 0;
-        g_tf.right_dir[i] = 0;
     }
     g_tf.error = 0;
     g_tf.lookahead_error = 0;
@@ -437,15 +318,10 @@ static int16 calc_weighted_center(int16 start_row, int16 end_row, uint8 top_heav
 }
 
 /* ========================================================================
- * Per-frame update: compress -> Otsu -> binarize -> denoise -> maze trace
+ * Per-frame update: compress -> Otsu -> binarize -> denoise -> scan edges
  * ======================================================================== */
 void track_fusion_update(void)
 {
-    /* 0. Frame sync */
-    while (!mt9v03x_finish_flag)
-        ;
-    mt9v03x_finish_flag = 0;
-
     /* 1. Clear per-frame data */
     for (uint8 i = 0; i < TF_IMG_H; i++)
     {
@@ -453,8 +329,6 @@ void track_fusion_update(void)
         g_tf.right_edge[i] = TF_INVALID;
         g_tf.center_line[i] = TF_INVALID;
         g_tf.row_valid[i] = 0u;
-        g_tf.left_dir[i] = 0;
-        g_tf.right_dir[i] = 0;
     }
     g_tf.error = 0;
     g_tf.valid_row_count = 0u;
@@ -477,8 +351,58 @@ void track_fusion_update(void)
     /* 5. Denoise (4-neighbor filter) */
     denoise_binary_image();
 
-    /* 6. Maze edge tracing */
-    maze_trace_edges();
+    /* 6. Find baseline at bottom row */
+    if (!find_jidian1())
+    {
+        g_tf.line_lost = 1u;
+        return;
+    }
+
+    const int16 jrow = (int16)TF_JIDIAN_ROW;
+    int16 prev_lb = (int16)g_tf.left_jidian;
+    int16 prev_rb = (int16)g_tf.right_jidian;
+
+    g_tf.left_edge[jrow] = prev_lb;
+    g_tf.right_edge[jrow] = prev_rb;
+    g_tf.center_line[jrow] = (prev_lb + prev_rb) / 2;
+    g_tf.row_valid[jrow] = 1u;
+    g_tf.valid_row_count = 1u;
+
+    /* 7. Row-by-row upward edge search */
+    uint8 miss_streak = 0u;
+    int16 end_row = (int16)TF_SEARCH_END_ROW;
+    s_first_miss_row = -1;
+    s_center_buf_cnt = 0u;
+    s_last_valid_center = (prev_lb + prev_rb) / 2;
+
+    for (int16 row = jrow - 1; row >= end_row; row--)
+    {
+        int16 lb, rb;
+        if (search_row_edges(row, prev_lb, prev_rb, &lb, &rb))
+        {
+            g_tf.left_edge[row] = lb;
+            g_tf.right_edge[row] = rb;
+            g_tf.center_line[row] = (lb + rb) / 2;
+            g_tf.row_valid[row] = 1u;
+            g_tf.valid_row_count++;
+            prev_lb = lb;
+            prev_rb = rb;
+            s_last_valid_center = g_tf.center_line[row];
+            s_center_buf[s_center_buf_cnt % IP_COL_BUF_SIZE] = g_tf.center_line[row];
+            s_center_buf_cnt++;
+            miss_streak = 0u;
+        }
+        else
+        {
+            g_tf.left_edge[row] = lb;
+            g_tf.right_edge[row] = rb;
+            g_tf.row_valid[row] = 0u;
+            miss_streak++;
+            if (miss_streak == 2 && s_first_miss_row < 0)
+                s_first_miss_row = row + 1;  /* row+1 = last valid row before miss */
+            if (miss_streak >= TF_MAX_MISS_ROWS) break;
+        }
+    }
 
     if (g_tf.valid_row_count == 0u)
     {
@@ -486,15 +410,12 @@ void track_fusion_update(void)
         return;
     }
 
-    /* 7. Weighted center-line error (bottom-heavy for normal tracking) */
-    int16 jrow = (int16)TF_JIDIAN_ROW;
-    int16 end_row = (int16)TF_SEARCH_END_ROW;
-
+    /* 8. Weighted center-line error (bottom-heavy for normal tracking) */
     int16 avg_center = calc_weighted_center(jrow, end_row, 0);
     g_tf.error = -(avg_center - (int16)TF_IMG_CENTER);
     g_tf.line_lost = 0u;
 
-    /* 8. Lookahead error (top-heavy for curve prediction) */
+    /* 9. Lookahead error (top-heavy for curve prediction) */
     {
         int16 la_center = calc_weighted_center(
             (int16)TF_LOOKAHEAD_START_ROW, (int16)TF_LOOKAHEAD_END_ROW, 1);
@@ -502,7 +423,7 @@ void track_fusion_update(void)
         g_tf.error_trend = g_tf.lookahead_error - g_tf.error;
     }
 
-    /* 9. Scale errors to original coordinate system (x2) for PID compatibility */
+    /* 10. Scale errors to original coordinate system (x2) for PID compatibility */
     g_tf.error = g_tf.error * 2;
     g_tf.lookahead_error = g_tf.lookahead_error * 2;
     g_tf.error_trend = g_tf.error_trend * 2;
@@ -554,7 +475,13 @@ void right_angle_pre_detect(void)
 }
 
 /* ========================================================================
- * Inflection point detection (maze direction change) + box drawing
+ * Inflection point detection (scan upward from lost row) + box drawing
+ *
+ * Method: when row-by-row scanning loses track, scan upward from that
+ * row to find white pixels at the leftmost/rightmost image columns.
+ * White at left edge  鈫� left turn,  inflection at right side of track
+ * White at right edge 鈫� right turn, inflection at left side of track
+ * White at both edges 鈫� cross,      inflection at center
  * ======================================================================== */
 
 uint8 g_ra_flag = 0u;
@@ -566,7 +493,60 @@ static uint8 s_inter_cooldown_cnt = 0u;
 static uint8 s_inter_confirm_cnt = 0u;
 static uint8 s_inter_candidate = 0u;
 
-/* Main intersection detection: use maze-detected inflection points + box + classification */
+/* Find inflection point: scan upward from lost row,
+ * find lowest white pixel at left/right image boundary.
+ * Returns which side has white via found_side: 1=right, 2=left, 3=both */
+static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
+                                    InflectionPoint_t *ip, uint8 *found_side)
+{
+    ip->valid = 0u; ip->row = 0; ip->col = 0;
+    *found_side = 0u;
+
+    int16 left_white_row = -1;
+    int16 right_white_row = -1;
+
+    for (int16 row = lost_row; row >= (int16)TF_SEARCH_END_ROW; row--)
+    {
+        /* Check leftmost column for white */
+        if (left_white_row < 0 && Image_Binarize[row][0] == Image_WHITE)
+            left_white_row = row;
+
+        /* Check rightmost column for white */
+        if (right_white_row < 0 && Image_Binarize[row][TF_IMG_W - 1] == Image_WHITE)
+            right_white_row = row;
+
+        /* Both found, no need to scan further */
+        if (left_white_row >= 0 && right_white_row >= 0)
+            break;
+    }
+
+    /* Take the one closer to camera (larger row number) */
+    int16 ip_row = -1;
+    if (left_white_row >= 0 && right_white_row >= 0)
+    {
+        ip_row = (left_white_row > right_white_row) ? left_white_row : right_white_row;
+        *found_side = 3u; /* both sides */
+    }
+    else if (right_white_row >= 0)
+    {
+        ip_row = right_white_row;
+        *found_side = 1u; /* right side has road 鈫� right turn */
+    }
+    else if (left_white_row >= 0)
+    {
+        ip_row = left_white_row;
+        *found_side = 2u; /* left side has road 鈫� left turn */
+    }
+
+    if (ip_row < 0) return 0u;
+
+    ip->valid = 1u;
+    ip->row = ip_row;
+    ip->col = last_center;
+    return 1u;
+}
+
+/* Main intersection detection */
 void detect_intersection(void)
 {
     if (s_inter_cooldown_cnt > 0u)
@@ -576,32 +556,28 @@ void detect_intersection(void)
         return;
     }
 
-    /* Find inflection point closest to camera (largest row) from maze results */
-    InflectionPoint_t best_ip;
-    best_ip.valid = 0u; best_ip.row = 0; best_ip.col = 0;
+    /* Find inflection point from lost row */
+    InflectionPoint_t ip;
+    ip.valid = 0u; ip.row = 0; ip.col = 0;
+    uint8 found_side = 0u; /* 1=right, 2=left, 3=both */
 
-    for (uint8 i = 0; i < s_maze_ip_cnt; i++)
+    if (s_first_miss_row >= 0)
+        find_ip_from_lost_row(s_first_miss_row, s_last_valid_center, &ip, &found_side);
+
+    /* 鐢ㄥ�掓暟绗琋涓湁鏁堣鐨勪腑鐐逛綔涓烘鍒楀彿 */
+    if (ip.valid && s_center_buf_cnt > 0u)
     {
-        if (s_maze_ips[i].valid && s_maze_ips[i].row > best_ip.row)
-            best_ip = s_maze_ips[i];
+        uint8 offset = (uint8)ip_col_offset;
+        uint8 total = s_center_buf_cnt;
+        if (offset >= total) offset = total - 1;
+        uint8 idx = (uint8)((total - 1 - offset) % IP_COL_BUF_SIZE);
+        ip.col = s_center_buf[idx];
     }
 
-    /* Find left-most and right-most inflection points for display */
-    InflectionPoint_t left_ip, right_ip;
-    left_ip.valid = 0u; left_ip.row = 0; left_ip.col = TF_IMG_W;
-    right_ip.valid = 0u; right_ip.row = 0; right_ip.col = 0;
+    g_inter_result.left_ip = ip;
+    g_inter_result.right_ip = ip;
 
-    for (uint8 i = 0; i < s_maze_ip_cnt; i++)
-    {
-        if (!s_maze_ips[i].valid) continue;
-        if (s_maze_ips[i].col < left_ip.col)  left_ip  = s_maze_ips[i];
-        if (s_maze_ips[i].col > right_ip.col) right_ip = s_maze_ips[i];
-    }
-
-    g_inter_result.left_ip  = left_ip.valid  ? left_ip  : best_ip;
-    g_inter_result.right_ip = right_ip.valid ? right_ip : best_ip;
-
-    g_ip_max_row = best_ip.valid ? (uint8)best_ip.row : 0u;
+    g_ip_max_row = ip.valid ? (uint8)ip.row : 0u;
 
     if (s_inter_lock_cnt > 0u)
     {
@@ -616,17 +592,17 @@ void detect_intersection(void)
         return;
     }
 
-    if (!best_ip.valid) return;
+    if (!ip.valid) return;
 
     /* Inflection point too far, skip box drawing */
     if (g_ip_max_row < INTER_BOX_START_ROW) return;
 
-    /* Build bounding box around inflection point(s) */
+    /* Build bounding box: extend to image edges on left/right so white detection works */
     uint8 detected = 0u;
 
-    int16 cx, cy;
-    cx = best_ip.col;
-    cy = best_ip.row;
+    int16 cy = ip.row;
+
+    int16 cx = ip.col;
 
     int16 b_top = cy - BOX_HEIGHT / 2;
     int16 b_bottom = cy + BOX_HEIGHT / 2;
@@ -643,63 +619,50 @@ void detect_intersection(void)
     g_inter_result.box_left = (uint8)b_left;
     g_inter_result.box_right = (uint8)b_right;
 
-    /* Check top/left/right edges of box for continuous white pixels (road exists) */
-    uint8 top_has_road = 0u;
-    uint8 left_has_road = 0u;
-    uint8 right_has_road = 0u;
-
+    /* Check each box edge for continuous white pixels */
+    uint8 top_has = 0u, left_has = 0u, right_has = 0u;
     {
-        uint8 streak = 0u;
+        uint8 streak;
+        /* Top edge */
+        streak = 0u;
         for (int16 c = b_left; c <= b_right; c++)
         {
             if (Image_Binarize[b_top][c] == Image_WHITE)
-            {
-                streak++;
-                if (streak >= INTER_BOX_MIN_STREAK) { top_has_road = 1u; break; }
-            }
+            { streak++; if (streak >= INTER_BOX_MIN_STREAK) { top_has = 1u; break; } }
             else { streak = 0u; }
         }
-    }
-    {
-        uint8 streak = 0u;
+        /* Left edge */
+        streak = 0u;
         for (int16 r = b_top; r <= b_bottom; r++)
         {
             if (Image_Binarize[r][b_left] == Image_WHITE)
-            {
-                streak++;
-                if (streak >= INTER_BOX_MIN_STREAK) { left_has_road = 1u; break; }
-            }
+            { streak++; if (streak >= INTER_BOX_MIN_STREAK) { left_has = 1u; break; } }
             else { streak = 0u; }
         }
-    }
-    {
-        uint8 streak = 0u;
+        /* Right edge */
+        streak = 0u;
         for (int16 r = b_top; r <= b_bottom; r++)
         {
             if (Image_Binarize[r][b_right] == Image_WHITE)
-            {
-                streak++;
-                if (streak >= INTER_BOX_MIN_STREAK) { right_has_road = 1u; break; }
-            }
+            { streak++; if (streak >= INTER_BOX_MIN_STREAK) { right_has = 1u; break; } }
             else { streak = 0u; }
         }
     }
 
-    /* Direction classification
-     * 1=right only  2=left only  3=left+right  4=cross(top+left+right)
-     * 5=top+right   6=top+left+right */
-    if (top_has_road && left_has_road && right_has_road)
+    /* 鍒嗙被锛堟杈规娴嬶級锛氫笂+宸�=3  涓�+鍙�=4  宸�+鍙�=5  涓�+宸�+鍙�=6
+     * 鍗曡竟鐢� found_side锛堝浘鍍忚竟鐣屾娴嬶級锛氬彸=1  宸�=2 */
+    if (top_has && left_has && right_has)
         detected = 6u;
-    else if (top_has_road && right_has_road)
-        detected = 5u;
-    else if (left_has_road && right_has_road)
+    else if (top_has && left_has)
         detected = 3u;
-    else if (right_has_road)
-        detected = 1u;
-    else if (left_has_road)
-        detected = 2u;
-    else if (top_has_road)
+    else if (top_has && right_has)
         detected = 4u;
+    else if (left_has && right_has)
+        detected = 5u;
+    else if (found_side == 1u)
+        detected = 1u;
+    else if (found_side == 2u)
+        detected = 2u;
 
     g_inter_result.detected_type = detected;
 

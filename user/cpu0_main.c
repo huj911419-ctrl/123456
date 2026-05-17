@@ -52,6 +52,10 @@ int core0_main(void)
 
     while (TRUE)
     {
+        /* 帧同步 */
+        while (!mt9v03x_finish_flag);
+        mt9v03x_finish_flag = 0;
+
         /* 更新赛道融合检测结果 */
         track_fusion_update();
 

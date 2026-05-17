@@ -19,7 +19,7 @@
 #define RELEASE_CNT 10
 
 // ---------- 主页参数 ----------
-int16 motor_speed = 50;
+int16 motor_speed = 80;
 int16 motor_dir = 1;
 int16 motor_enable = 0;
 int16 motor_run_time = 60;
@@ -28,7 +28,7 @@ int16 motor_run_time = 60;
 int16 cam_exposure = 200;
 
 // ---------- PID参数 ----------
-int16 pid_kp = 8;
+int16 pid_kp = 6;
 int16 pid_ki = 2;
 int16 pid_kd = 16;
 
@@ -43,10 +43,10 @@ int16 steer_speed_k = 5;
 int16 ra_hard_inner = 0;
 int16 ra_hard_outer = 500;
 int16 ra_hard_yaw   = 60;
-int16 ra_slow_row   = 70;
+int16 ra_slow_row   = 40;
 int16 ra_slow_pct   = 60;
-int16 ra_turn_row   = 100;
-int16 ra_approach_frames = 15;
+int16 ra_turn_row   = 55;
+int16 ra_approach_frames = 10;
 
 // ---------- IMU参数 ----------
 int16 yaw_kp = 10;
@@ -92,6 +92,7 @@ static MenuItem items_ra[] = {
     {"Outer",   &ra_hard_outer,     500, 5000, 100},
     {"Inner",   &ra_hard_inner,   -2000, 5000, 100},
     {"Yaw",     &ra_hard_yaw,        30,   85,   5},
+    {"IpCol",   &ip_col_offset,       0,    7,   1},
 };
 
 static MenuItem items_imu[] = {
@@ -108,7 +109,7 @@ static MenuPageDef g_pages[PAGE_MAX] = {
     { .title = "CAM",      .items = items_cam,    .item_count = 2, .draw = NULL },
     { .title = "PID",      .items = items_pid,    .item_count = 3, .draw = NULL },
     { .title = "SPEED",    .items = items_speed,  .item_count = 5, .draw = NULL },
-    { .title = "RA",       .items = items_ra,     .item_count = 7, .draw = NULL },
+    { .title = "RA",       .items = items_ra,     .item_count = 8, .draw = NULL },
     { .title = "IMU",      .items = items_imu,    .item_count = 1, .draw = NULL },
 };
 

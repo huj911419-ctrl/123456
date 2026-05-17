@@ -169,4 +169,5 @@ void draw_line(void)
     tft180_show_int(130, 20, g_ra_flag, 3);
     tft180_show_int(130, 30, (int32)(yaw_angle * 10), 4);
     tft180_show_int(130, 40, (int32)yaw_rate, 4);
+    tft180_show_int(130, 50, (int32)g_ip_max_row, 3);
 }

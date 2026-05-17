@@ -24,8 +24,43 @@ static uint8 s_ra_dir = 0;
 static uint16 s_ra_approach_cnt = 0;
 static uint16 s_ra_timer = 0;
 static uint16 s_ra_hard_cnt = 0;
+static uint8 s_ra_orig_flag = 0u;  // 记录触发RA的原始flag
 static uint8 s_ra_ip_row = 0u;
 static uint16 s_ra_phase_cnt = 0u;
+
+// ================================================================
+// 路口自定义行为（3/4/5/6）
+// ================================================================
+#define ACT_STRAIGHT 0
+#define ACT_RIGHT    1
+#define ACT_LEFT     2
+
+typedef struct {
+    uint8 count;   // 第几次出现该flag
+    uint8 flag;    // g_ra_flag值（3/4/5/6）
+    uint8 action;  // 执行动作
+} IntersectionRule;
+
+// ★★★ 用户在这里写规则 ★★★
+static const IntersectionRule user_rules[] = {
+    { 1, 4, 1 },     // 第1次遇到3→右转
+    { 1, 5, 2 },  // 第1次遇到4→直行
+    { 1, 3, 2 },
+    { 2, 5, 1 },
+    { 2, 4, 1 },
+    { 3, 5, 1 },
+
+
+    // 继续添加...
+};
+#define USER_RULE_COUNT (sizeof(user_rules) / sizeof(user_rules[0]))
+
+static uint8 s_inter_count[7] = {0};
+static uint8 s_ra_straight = 0u;  // 1=直行通过，不升级到HARD
+
+static uint8 s_rules_done = 0u;
+static uint16 s_rules_done_timer = 0u;
+#define RULES_DONE_DELAY 136u  // 1.5s / 11ms ≈ 136帧
 
 // ================================================================
 // 转向 PD 控制器（P项用滤波误差，D项用原始误差差分）
@@ -163,6 +198,8 @@ static void ra_reset(void)
     s_ra_hard_cnt = 0;
     s_ra_ip_row = 0u;
     s_ra_phase_cnt = 0u;
+    s_ra_straight = 0u;
+    s_ra_orig_flag = 0u;
 }
 
 // ================================================================
@@ -178,6 +215,11 @@ void line_pid_init(void)
     s_motor_run_counter = 0;
 
     ra_reset();
+
+    for (uint8 i = 0; i < 7; i++)
+        s_inter_count[i] = 0;
+    s_rules_done = 0u;
+    s_rules_done_timer = 0u;
 }
 
 // ================================================================
@@ -209,11 +251,49 @@ static RaResult ra_state_machine_step(void)
     if ((g_ra_flag == 1 || g_ra_flag == 2) && s_ra_state == RA_ST_NONE)
     {
         s_ra_dir = (uint8)g_ra_flag;
+        s_ra_orig_flag = (uint8)g_ra_flag;
         s_ra_state = RA_ST_ACTIVE;
         s_ra_phase = RA_PH_WAIT;
         s_ra_ip_row = g_ip_max_row;
         s_ra_phase_cnt = 0u;
         turn_right_led_on();
+    }
+
+    /* 检测到路口 3/4/5/6 → 查表执行用户定义的动作 */
+    if ((g_ra_flag >= 3 && g_ra_flag <= 6) && s_ra_state == RA_ST_NONE)
+    {
+        s_inter_count[g_ra_flag]++;
+
+        uint8 action = ACT_STRAIGHT;
+        for (uint8 i = 0; i < USER_RULE_COUNT; i++)
+        {
+            if (user_rules[i].flag == g_ra_flag &&
+                user_rules[i].count == s_inter_count[g_ra_flag])
+            {
+                action = user_rules[i].action;
+                break;
+            }
+        }
+
+        if (action == ACT_RIGHT || action == ACT_LEFT)
+        {
+            s_ra_dir = (action == ACT_RIGHT) ? 1u : 2u;
+            s_ra_orig_flag = g_ra_flag;
+            s_ra_state = RA_ST_ACTIVE;
+            s_ra_phase = RA_PH_WAIT;
+            s_ra_ip_row = g_ip_max_row;
+            s_ra_phase_cnt = 0u;
+            turn_right_led_on();
+        }
+        else
+        {
+            s_ra_orig_flag = g_ra_flag;
+            s_ra_state = RA_ST_ACTIVE;
+            s_ra_phase = RA_PH_SLOW;
+            s_ra_phase_cnt = 0u;
+            s_ra_ip_row = g_ip_max_row;
+            s_ra_straight = 1u;
+        }
     }
 
     if (s_ra_state != RA_ST_ACTIVE)
@@ -226,24 +306,44 @@ static RaResult ra_state_machine_step(void)
     if (g_ip_max_row > s_ra_ip_row)
         s_ra_ip_row = g_ip_max_row;
 
-    /* 退出条件 */
+    /* 退出条件（3/4/5/6路口转弯需要更长的最小HARD时间） */
+    uint8 min_hard = (s_ra_orig_flag >= 3u) ? 45u : 15u;
     uint8 camera_done = (s_ra_phase == RA_PH_HARD
+                         && s_ra_hard_cnt >= min_hard
                          && g_tf.line_lost == 0u
-                         && g_tf.valid_row_count >= 15u) ? 1u : 0u;
+                         && g_tf.valid_row_count >= 20u) ? 1u : 0u;
     uint8 hard_timeout = (s_ra_phase == RA_PH_HARD && s_ra_hard_cnt > RA_HARD_TIMEOUT) ? 1u : 0u;
     uint8 timeout = (s_ra_timer > RA_TIMEOUT_FRAMES) ? 1u : 0u;
+    uint8 straight_done = (s_ra_straight && s_ra_timer > 30u && g_ra_flag == 0u) ? 1u : 0u;
 
-    if (camera_done || hard_timeout || timeout)
+    if (camera_done || hard_timeout || timeout || straight_done)
     {
         ra_reset();
         turn_right_led_off();
         g_ra_flag = 0u;
         line_pid_reset_derivative();
+
+        /* 检查所有规则是否已执行完 */
+        if (!s_rules_done)
+        {
+            uint8 all_done = 1u;
+            for (uint8 i = 0; i < USER_RULE_COUNT; i++)
+            {
+                if (s_inter_count[user_rules[i].flag] < user_rules[i].count)
+                { all_done = 0u; break; }
+            }
+            if (all_done) s_rules_done = 1u;
+        }
+
         return r;
     }
 
-    /* 阶段升级 */
-    if (s_ra_phase >= RA_PH_APPROACH)
+    /* 阶段升级（直行时不升级，只在SLOW减速等路口过去） */
+    if (s_ra_straight)
+    {
+        /* 直行：不升级，保持SLOW直到timeout退出 */
+    }
+    else if (s_ra_phase >= RA_PH_APPROACH)
     {
         if (s_ra_approach_cnt >= (uint16)ra_approach_frames)
             s_ra_phase = RA_PH_HARD;
@@ -269,8 +369,8 @@ static RaResult ra_state_machine_step(void)
         float outer = (float)ra_hard_outer;
         float inner = (float)ra_hard_inner;
         float out_l, out_r;
-        if (s_ra_dir == 1)  { out_l = outer; out_r = inner; }
-        else                { out_l = inner; out_r = outer; }
+        if (s_ra_dir == 1)  { out_l = inner; out_r = outer; }
+        else                { out_l = outer; out_r = inner; }
         small_driver_set_duty(clamp_duty(out_l), clamp_duty(out_r));
         r.should_return = 1u;
     }
@@ -368,6 +468,23 @@ void line_pid_control(void)
         s_motor_run_counter = 0;
         ra_reset();
         return;
+    }
+
+    /* 规则全部执行完后 1.5s 停车 */
+    if (s_rules_done)
+    {
+        s_rules_done_timer++;
+        if (s_rules_done_timer >= RULES_DONE_DELAY)
+        {
+            motor_enable = 0;
+            small_driver_set_duty(0, 0);
+            s_speed_integral = 0.0f;
+            s_motor_run_counter = 0;
+            s_rules_done = 0u;
+            s_rules_done_timer = 0u;
+            ra_reset();
+            return;
+        }
     }
 
     int16 pos_err = g_tf.error;
