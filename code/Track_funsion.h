@@ -70,7 +70,7 @@ extern uint16 Image_Threshold;
 /* ==================== 路口检测参数 ==================== */
 #define INTER_COOLDOWN_FRAMES  60
 #define INTER_MAX_LOCK_FRAMES  300
-#define INTER_BOX_START_ROW    25    // 压缩后，拐点行号>=此值才开始画框
+#define INTER_BOX_START_ROW    30    // 压缩后，拐点行号>=此值才开始画框
 
 #define BOX_HEIGHT         20        // 压缩后框高
 #define BOX_WIDTH          40        // 压缩后框宽
@@ -108,6 +108,8 @@ extern uint8 g_ra_pre_flag;           // 1=远处看到直角需减速 0=正常
 extern IntersectionResult_t g_inter_result;
 extern uint8 g_ip_max_row;
 extern int16 ip_col_offset;
+extern int16 ip_left_col;
+extern int16 ip_right_col;
 
 /* ==================== 函数接口 ==================== */
 void track_fusion_init(void);

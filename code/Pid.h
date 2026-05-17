@@ -33,7 +33,7 @@ extern int16 steer_speed_k; // 转向速度耦合系数 (0~50, 代表0.000~0.050
 #define STEER_KP  ((float)pid_kp * 0.8f)
 #define STEER_KD  ((float)pid_kd * 0.6f)
 #define STEER_MAX 4000.0f
-#define STEER_DEADZONE 2
+#define STEER_DEADZONE 1
 #define STEER_SOFT_END 6
 #define STEER_SLEW_MAX 250.0f
 

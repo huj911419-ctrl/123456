@@ -21,7 +21,9 @@ static int16 s_last_valid_center = TF_IMG_CENTER;
 #define IP_COL_BUF_SIZE 8
 static int16 s_center_buf[IP_COL_BUF_SIZE];
 static uint8 s_center_buf_cnt = 0u;
-int16 ip_col_offset = 5;  // 0=鍊掓暟绗�1涓紝1=鍊掓暟绗�2涓�...
+int16 ip_col_offset = 5;  // 0=倒数第1个，1=倒数第2个...
+int16 ip_left_col = 19;   // 左检测列（TF_IMG_W/5）
+int16 ip_right_col = 70;  // 右检测列（TF_IMG_W*4/5）
 
 /* ========================================================================
  * Image compression: 188x120 -> 94x60 (nearest-neighbor)
@@ -391,6 +393,15 @@ void track_fusion_update(void)
             s_center_buf[s_center_buf_cnt % IP_COL_BUF_SIZE] = g_tf.center_line[row];
             s_center_buf_cnt++;
             miss_streak = 0u;
+
+            /* 边线找到了但检测列有白点 → 有路口，停 */
+            uint8 lw = (Image_Binarize[row][ip_left_col] == Image_WHITE) ? 1u : 0u;
+            uint8 rw = (Image_Binarize[row][ip_right_col] == Image_WHITE) ? 1u : 0u;
+            if (lw || rw)
+            {
+                if (s_first_miss_row < 0) s_first_miss_row = row;
+                break;
+            }
         }
         else
         {
@@ -400,7 +411,7 @@ void track_fusion_update(void)
             miss_streak++;
             if (miss_streak == 2 && s_first_miss_row < 0)
                 s_first_miss_row = row + 1;  /* row+1 = last valid row before miss */
-            if (miss_streak >= TF_MAX_MISS_ROWS) break;
+            if (miss_streak >= 2) break;  /* 边线断就停 */
         }
     }
 
@@ -505,14 +516,17 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
     int16 left_white_row = -1;
     int16 right_white_row = -1;
 
+    int16 left_check_col = ip_left_col;
+    int16 right_check_col = ip_right_col;
+
     for (int16 row = lost_row; row >= (int16)TF_SEARCH_END_ROW; row--)
     {
-        /* Check leftmost column for white */
-        if (left_white_row < 0 && Image_Binarize[row][0] == Image_WHITE)
+        /* Check left 1/5 column for white */
+        if (left_white_row < 0 && Image_Binarize[row][left_check_col] == Image_WHITE)
             left_white_row = row;
 
-        /* Check rightmost column for white */
-        if (right_white_row < 0 && Image_Binarize[row][TF_IMG_W - 1] == Image_WHITE)
+        /* Check right 4/5 column for white */
+        if (right_white_row < 0 && Image_Binarize[row][right_check_col] == Image_WHITE)
             right_white_row = row;
 
         /* Both found, no need to scan further */
