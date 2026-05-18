@@ -43,9 +43,9 @@ int16 steer_speed_k = 5;
 int16 ra_hard_inner = 0;
 int16 ra_hard_outer = 500;
 int16 ra_hard_yaw   = 60;
-int16 ra_slow_row   = 40;
+int16 ra_slow_row   = 45;
 int16 ra_slow_pct   = 60;
-int16 ra_turn_row   = 55;
+int16 ra_turn_row   = 60;
 int16 ra_approach_frames = 3;
 
 // ---------- IMU参数 ----------
@@ -56,18 +56,9 @@ int16 yaw_kp = 10;
 // ================================================================
 
 static MenuItem items_main[] = {
-    {"Enable", &motor_enable, 0, 1, 1},
+    {"Enable",  &motor_enable, 0, 1, 1},
+    {"Speed",   &motor_speed,  0, 400, 20},
     {"RunTime", &motor_run_time, 3, 60, 1},
-};
-
-static MenuItem items_motor[] = {
-    {"Speed", &motor_speed, 0, 400, 20},
-    {"Dir", &motor_dir, 0, 1, 1},
-};
-
-static MenuItem items_cam[] = {
-    {"Bias", &threshold_bias, -50, 50, 5},
-    {"Expose", &cam_exposure, 100, 500, 10},
 };
 
 static MenuItem items_pid[] = {
@@ -97,22 +88,15 @@ static MenuItem items_ra[] = {
     {"IpR",     &ip_right_col,       47,   93,   1},
 };
 
-static MenuItem items_imu[] = {
-    {"YAW Kp", &yaw_kp, 0, 100, 1},
-};
-
 // ================================================================
 //  页面定义
 // ================================================================
 
 static MenuPageDef g_pages[PAGE_MAX] = {
-    { .title = "MAIN",     .items = items_main,   .item_count = 2, .draw = NULL },
-    { .title = "MOTOR",    .items = items_motor,  .item_count = 2, .draw = NULL },
-    { .title = "CAM",      .items = items_cam,    .item_count = 2, .draw = NULL },
-    { .title = "PID",      .items = items_pid,    .item_count = 3, .draw = NULL },
-    { .title = "SPEED",    .items = items_speed,  .item_count = 5, .draw = NULL },
-    { .title = "RA",       .items = items_ra,     .item_count = 10, .draw = NULL },
-    { .title = "IMU",      .items = items_imu,    .item_count = 1, .draw = NULL },
+    { .title = "MAIN",  .items = items_main,   .item_count = 3,  .draw = NULL },
+    { .title = "PID",   .items = items_pid,     .item_count = 3,  .draw = NULL },
+    { .title = "SPEED", .items = items_speed,   .item_count = 5,  .draw = NULL },
+    { .title = "RA",    .items = items_ra,      .item_count = 10, .draw = NULL },
 };
 
 // ================================================================

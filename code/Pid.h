@@ -10,6 +10,7 @@ extern int16 motor_speed; // 电机速度 0~400
 extern int16 pid_kp;      // 转向 P，STEER_KP = pid_kp * 0.8
 extern int16 pid_ki;      // 速度 I，SPEED_KI = pid_ki * 0.25
 extern int16 pid_kd;      // 转向 D，STEER_KD = pid_kd * 0.6
+extern int16 yaw_kp;      // Yaw补偿增益，yaw_comp = yaw_kp/10 * yaw_angle
 
 // 直角弯参数（定义在 Menu.c）
 extern int16 ra_hard_inner;       // 内轮duty（负=反转）

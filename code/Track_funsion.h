@@ -26,8 +26,8 @@ extern int16 threshold_bias;
 #define TF_SEARCH_END_ROW 4          // 循迹搜索起始行（压缩后）
 #define TF_LOCAL_RANGE 10            // 局部搜索范围（压缩后=原18/2）
 #define TF_MAX_MISS_ROWS 5           // 最大允许丢线行数
-#define TF_MIN_TRACK_WIDTH 2         // 有效赛道最小宽度（压缩后=原4/2）
-#define TF_MAX_TRACK_WIDTH 80        // 有效赛道最大宽度（压缩后=原160/2）
+#define TF_MIN_TRACK_WIDTH 4         // 有效赛道最小宽度（压缩后=原4/2）
+#define TF_MAX_TRACK_WIDTH 30        // 有效赛道最大宽度（压缩后=原160/2）
 #define TF_INVALID (-1)              // 无效值标记
 
 /* ==================== 前瞻参数 ==================== */

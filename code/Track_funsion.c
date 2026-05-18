@@ -22,8 +22,8 @@ static int16 s_last_valid_center = TF_IMG_CENTER;
 static int16 s_center_buf[IP_COL_BUF_SIZE];
 static uint8 s_center_buf_cnt = 0u;
 int16 ip_col_offset = 5;  // 0=倒数第1个，1=倒数第2个...
-int16 ip_left_col = 19;   // 左检测列（TF_IMG_W/5）
-int16 ip_right_col = 70;  // 右检测列（TF_IMG_W*4/5）
+int16 ip_left_col = 9;    // 左检测列（TF_IMG_W/10）
+int16 ip_right_col = 84;  // 右检测列（TF_IMG_W*9/10）
 
 /* ========================================================================
  * Image compression: 188x120 -> 94x60 (nearest-neighbor)
@@ -252,12 +252,12 @@ static uint8 search_row_edges(int16 row, int16 prev_lb, int16 prev_rb,
     const int16 R = TF_LOCAL_RANGE;
     const int16 MID = TF_IMG_CENTER;
 
-    /* Left edge search: local 鈫� widen 鈫� full scan */
+    /* Left edge search: local -> widen -> full scan */
     lb = scan_left_edge_right(row, prev_lb - R, prev_lb + R);
     if (lb == TF_INVALID) lb = scan_left_edge_left(row, prev_lb + R, prev_lb - R);
     if (lb == TF_INVALID) lb = scan_left_edge_left(row, MID, 1);
 
-    /* Right edge search: local 鈫� widen 鈫� full scan */
+    /* Right edge search: local -> widen -> full scan */
     rb = scan_right_edge_left(row, prev_rb + R, prev_rb - R);
     if (rb == TF_INVALID) rb = scan_right_edge_right(row, prev_rb - R, prev_rb + R);
     if (rb == TF_INVALID) rb = scan_right_edge_right(row, MID, TF_IMG_W - 2);
@@ -394,7 +394,7 @@ void track_fusion_update(void)
             s_center_buf_cnt++;
             miss_streak = 0u;
 
-            /* 边线找到了但检测列有白点 → 有路口，停 */
+            /* 边线找到了但检测列有白点 -> 有路口，停 */
             uint8 lw = (Image_Binarize[row][ip_left_col] == Image_WHITE) ? 1u : 0u;
             uint8 rw = (Image_Binarize[row][ip_right_col] == Image_WHITE) ? 1u : 0u;
             if (lw || rw)
@@ -488,11 +488,12 @@ void right_angle_pre_detect(void)
 /* ========================================================================
  * Inflection point detection (scan upward from lost row) + box drawing
  *
- * Method: when row-by-row scanning loses track, scan upward from that
- * row to find white pixels at the leftmost/rightmost image columns.
- * White at left edge  鈫� left turn,  inflection at right side of track
- * White at right edge 鈫� right turn, inflection at left side of track
- * White at both edges 鈫� cross,      inflection at center
+ * Method: after losing the track during row-by-row scanning,
+ * scan upward from that row to find white pixels at the
+ * leftmost/rightmost columns of the image.
+ * White at left edge  -> left turn,  inflection at right side of track
+ * White at right edge -> right turn, inflection at left side of track
+ * White at both edges -> crossroad,  inflection in the middle
  * ======================================================================== */
 
 uint8 g_ra_flag = 0u;
@@ -544,12 +545,12 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
     else if (right_white_row >= 0)
     {
         ip_row = right_white_row;
-        *found_side = 1u; /* right side has road 鈫� right turn */
+        *found_side = 1u; /* right side has road -> right turn */
     }
     else if (left_white_row >= 0)
     {
         ip_row = left_white_row;
-        *found_side = 2u; /* left side has road 鈫� left turn */
+        *found_side = 2u; /* left side has road -> left turn */
     }
 
     if (ip_row < 0) return 0u;
@@ -578,7 +579,7 @@ void detect_intersection(void)
     if (s_first_miss_row >= 0)
         find_ip_from_lost_row(s_first_miss_row, s_last_valid_center, &ip, &found_side);
 
-    /* 鐢ㄥ�掓暟绗琋涓湁鏁堣鐨勪腑鐐逛綔涓烘鍒楀彿 */
+    /* 用倒数第N个有效行的中点作框列号 */
     if (ip.valid && s_center_buf_cnt > 0u)
     {
         uint8 offset = (uint8)ip_col_offset;
@@ -663,8 +664,8 @@ void detect_intersection(void)
         }
     }
 
-    /* 鍒嗙被锛堟杈规娴嬶級锛氫笂+宸�=3  涓�+鍙�=4  宸�+鍙�=5  涓�+宸�+鍙�=6
-     * 鍗曡竟鐢� found_side锛堝浘鍍忚竟鐣屾娴嬶級锛氬彸=1  宸�=2 */
+    /* 分类（框边检测）：上+左=3  上+右=4  左+右=5  上+左+右=6
+     * 单边用 found_side（图像边界检测）：右=1  左=2 */
     if (top_has && left_has && right_has)
         detected = 6u;
     else if (top_has && left_has)

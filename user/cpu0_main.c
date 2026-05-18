@@ -2,6 +2,8 @@
 #include "IMU.h"
 #include "Menu.h"
 
+extern int16 cam_exposure;
+
 #pragma section all "cpu0_dsram"
 
 int core0_main(void)
