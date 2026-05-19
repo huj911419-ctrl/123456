@@ -15,9 +15,11 @@ int core0_main(void)
     debug_init();
 
     /* 配置显示字体和方向 */
+#if !RACE_MODE
     tft180_set_font(TFT180_6X8_FONT);
     tft180_set_dir(TFT180_CROSSWISE);
     tft180_init();
+#endif
 
     /* 初始化摄像头 */
     mt9v03x_init();

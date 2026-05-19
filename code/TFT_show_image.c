@@ -2,6 +2,7 @@
 #include "Track_funsion.h"
 #include "Function.h"
 #include "IMU.h"
+#include "Pid.h"
 
 
 /* ================================================================
@@ -14,9 +15,9 @@
  *        蓝色线=左边界  绿色线=右边界  红色线=中线
  * ================================================================ */
 
-#define TFT_COL_SCALE_C   1.36f   // 94 -> 128
+#define TFT_COL_SCALE_C   1.15f   // 94 -> 108, leave room for right status text
 #define TFT_ROW_SCALE_C   1.35f   // 60 -> 81
-#define TFT_IMG_DISP_W    128u
+#define TFT_IMG_DISP_W    108u
 #define TFT_IMG_DISP_H    81u
 
 #ifndef RGB565_YELLOW
@@ -85,21 +86,22 @@ static void draw_inflection_overlay(void)
 {
     uint8 has_box = 0u;
 
-    if (g_inter_result.left_ip.valid)
+    if (g_ra_flag != 0u && g_inter_result.left_ip.valid)
     {
         tft_draw_x_mark(tft_map_col(g_inter_result.left_ip.col),
                         tft_map_row(g_inter_result.left_ip.row),
                         IP_MARK_SIZE, RGB565_YELLOW);
     }
 
-    if (g_inter_result.right_ip.valid)
+    if (g_ra_flag != 0u && g_inter_result.right_ip.valid)
     {
         tft_draw_x_mark(tft_map_col(g_inter_result.right_ip.col),
                         tft_map_row(g_inter_result.right_ip.row),
                         IP_MARK_SIZE, RGB565_MAGENTA);
     }
 
-    if (g_inter_result.left_ip.valid || g_inter_result.right_ip.valid)
+    if (g_ra_flag != 0u &&
+        (g_inter_result.left_ip.valid || g_inter_result.right_ip.valid))
     {
         if (g_inter_result.box_bottom > g_inter_result.box_top &&
             g_inter_result.box_right > g_inter_result.box_left)
@@ -127,7 +129,7 @@ void draw_line(void)
     tft180_show_gray_image(0, 0,
         Image_Binarize[0],
         COMP_W, COMP_H,
-        128, 81,
+        TFT_IMG_DISP_W, TFT_IMG_DISP_H,
         1);
 
     /* 丢线时显示 LOST（仍叠加拐点与框） */
@@ -176,4 +178,14 @@ void draw_line(void)
     tft180_show_int(130, 50, (int32)g_ip_max_row, 3);
     tft180_show_string(112, 60, "IM");
     tft180_show_int(130, 60, (int32)(imu_ready ? (imu_error ? 2 : 1) : 0), 1);
+    tft180_show_string(112, 70, "ST");
+    tft180_show_int(130, 70, (int32)ra_dbg_state, 1);
+    tft180_show_string(112, 80, "PH");
+    tft180_show_int(130, 80, (int32)ra_dbg_phase, 1);
+    tft180_show_string(112, 90, "BS");
+    tft180_show_int(130, 90, (int32)base_speed, 4);
+    tft180_show_string(112, 100, "RY");
+    tft180_show_int(130, 100, (int32)ra_dbg_yaw10, 4);
+    tft180_show_string(112, 110, "HC");
+    tft180_show_int(130, 110, (int32)ra_dbg_hard_cnt, 3);
 }
