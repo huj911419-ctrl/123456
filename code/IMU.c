@@ -1,103 +1,193 @@
 #include "IMU.h"
 
-// ================================================================
-//  全局变量
-// ================================================================
-volatile float yaw_angle = 0.0f;   // 累积偏航角（度）
-volatile float yaw_rate  = 0.0f;   // 当前角速度（度/秒）
+/*
+ * IMU yaw integration layer.
+ *
+ * Sensor: IMU660RC over SPI0, using raw gyro data.
+ * Output convention:
+ *   yaw_angle > 0: right turn
+ *   yaw_angle < 0: left turn
+ *
+ * This module only measures yaw. It does not drive the motors directly.
+ */
 
-static float s_gyro_z_offset = 0.0f;  // 陀螺仪 Z 轴零偏（标定值）
-static float s_yaw_rate_filtered = 0.0f;  // 滤波后的角速度
+volatile float yaw_angle = 0.0f;
+volatile float yaw_rate  = 0.0f;
+volatile uint8 imu_ready = 0u;
+volatile uint8 imu_error = 1u;
+volatile int16 imu_offset_dps10 = 0;
 
-#define GYRO_Z_DEADBAND  0.15f  // 角速度死区（度/秒），小于此值归零
-#define YAW_CALIB_COUNT  200    // 零偏标定采样次数（200次 * 5ms ≈ 1秒）
-#define YAW_CALIB_VAR_MAX 0.1f  // 标定方差上限，超过说明有抖动需重来
-#define YAW_RATE_FILTER  0.8f   // 低通滤波系数 (0~1)，值越大越平滑
+#define IMU_UPDATE_PERIOD_US     5000u
+#define IMU_UPDATE_DT_SEC        0.005f
 
-// ================================================================
-//  函数接口：IMU 初始化 + 零偏标定
-// ================================================================
-void imu_init(void)
+#define IMU_INIT_RETRY           3u
+#define IMU_CALIB_RETRY          3u
+#define IMU_CALIB_DISCARD        20u
+#define IMU_CALIB_SAMPLES        180u
+#define IMU_CALIB_DELAY_MS       5u
+
+#define IMU_Z_SIGN               (-1.0f)
+#define IMU_RATE_DEADBAND_DPS    0.35f
+#define IMU_RATE_FILTER_ALPHA    0.65f
+#define IMU_RATE_LIMIT_DPS       1200.0f
+#define IMU_CALIB_VAR_MAX        6.0f
+#define IMU_RESET_SKIP_SAMPLES   2u
+
+static float s_gyro_z_offset = 0.0f;
+static float s_yaw_rate_filtered = 0.0f;
+static uint8 s_reset_skip = 0u;
+
+static float imu_absf(float v)
 {
-    // 初始化 IMU660RC（禁用四元数模式，使用原始数据模式）
-    while (1)
-    {
-        if (imu660rc_init(IMU660RC_QUARTERNION_DISABLE))
-            printf("\r\n IMU660RC init error.");
-        else
-            break;
-    }
-
-    // 零偏标定：静止状态采集，带方差检测
-    // 此时小车必须静止不动！
-    for (int retry = 0; retry < 3; retry++)
-    {
-        float sum = 0.0f, sum_sq = 0.0f;
-        for (int i = 0; i < YAW_CALIB_COUNT; i++)
-        {
-            imu660rc_get_gyro();
-            float val = -imu660rc_gyro_transition(imu660rc_gyro_z);
-            sum    += val;
-            sum_sq += val * val;
-            system_delay_ms(5);
-        }
-        float mean     = sum / (float)YAW_CALIB_COUNT;
-        float variance = sum_sq / (float)YAW_CALIB_COUNT - mean * mean;
-
-        if (variance < YAW_CALIB_VAR_MAX)
-        {
-            s_gyro_z_offset = mean;
-            break;
-        }
-        // 方差过大，抖动严重，重试
-        if (retry == 2)
-            s_gyro_z_offset = mean; // 第3次强制用当前值
-    }
-
-    // 清零
-    yaw_angle = 0.0f;
-    yaw_rate  = 0.0f;
-
-    // 配置 5ms PIT 中断（CCU60_CH1），在 isr.c 中调用 imu_update()
-    pit_init(CCU60_CH1, 5000);
+    return (v >= 0.0f) ? v : -v;
 }
 
-// ================================================================
-//  函数接口：Yaw 数据更新（在 5ms PIT 中断中调用）
-// ================================================================
-void imu_update(void)
+static float imu_clampf(float v, float min_v, float max_v)
 {
-    // 读取陀螺仪原始数据
+    if (v < min_v) return min_v;
+    if (v > max_v) return max_v;
+    return v;
+}
+
+static float imu_read_z_rate_dps(void)
+{
     imu660rc_get_gyro();
+    return IMU_Z_SIGN * imu660rc_gyro_transition(imu660rc_gyro_z);
+}
 
-    // 转换为度/秒，Z轴取反（芯片朝下安装）
-    float raw_rate = -imu660rc_gyro_transition(imu660rc_gyro_z);
+static void imu_clear_state(void)
+{
+    yaw_angle = 0.0f;
+    yaw_rate = 0.0f;
+    s_yaw_rate_filtered = 0.0f;
+    s_reset_skip = IMU_RESET_SKIP_SAMPLES;
+}
 
-    // 减去零偏
-    raw_rate -= s_gyro_z_offset;
-
-    // 死区处理：角速度太小认为是噪声
-    if (raw_rate > -GYRO_Z_DEADBAND && raw_rate < GYRO_Z_DEADBAND)
-        raw_rate = 0.0f;
-
-    // 低通滤波
-    s_yaw_rate_filtered = s_yaw_rate_filtered * YAW_RATE_FILTER + raw_rate * (1.0f - YAW_RATE_FILTER);
-    yaw_rate = s_yaw_rate_filtered;
-
-    // 累积角度：角速度 * 时间（5ms = 0.005s）
-    yaw_angle += yaw_rate * 0.005f;
-
-    // 归一化到 [-180, 180]
+static void imu_normalize_yaw(void)
+{
     if (yaw_angle > 180.0f)
         yaw_angle -= 360.0f;
     else if (yaw_angle < -180.0f)
         yaw_angle += 360.0f;
 }
 
-// ================================================================
-//  函数接口：清零 yaw_angle
-// ================================================================
+static uint8 imu_calibrate_zero(void)
+{
+    float best_offset = 0.0f;
+    float best_var = 1000000.0f;
+    uint8 best_valid = 0u;
+
+    for (uint8 retry = 0u; retry < IMU_CALIB_RETRY; retry++)
+    {
+        float sum = 0.0f;
+        float sum_sq = 0.0f;
+
+        for (uint16 i = 0u; i < IMU_CALIB_DISCARD; i++)
+        {
+            (void)imu_read_z_rate_dps();
+            system_delay_ms(IMU_CALIB_DELAY_MS);
+        }
+
+        for (uint16 i = 0u; i < IMU_CALIB_SAMPLES; i++)
+        {
+            float v = imu_read_z_rate_dps();
+            sum += v;
+            sum_sq += v * v;
+            system_delay_ms(IMU_CALIB_DELAY_MS);
+        }
+
+        {
+            float sample_count = (float)IMU_CALIB_SAMPLES;
+            float mean = sum / sample_count;
+            float variance = sum_sq / sample_count - mean * mean;
+            if (variance < 0.0f) variance = 0.0f;
+
+            if (variance < best_var)
+            {
+                best_var = variance;
+                best_offset = mean;
+                best_valid = 1u;
+            }
+
+            if (variance <= IMU_CALIB_VAR_MAX)
+                break;
+        }
+    }
+
+    if (!best_valid)
+        return 1u;
+
+    s_gyro_z_offset = best_offset;
+    imu_offset_dps10 = (int16)(best_offset * 10.0f);
+
+    /* Use the best offset even if the car moved during calibration. */
+    return (best_var <= IMU_CALIB_VAR_MAX) ? 0u : 1u;
+}
+
+void imu_init(void)
+{
+    imu_ready = 0u;
+    imu_error = 1u;
+    s_gyro_z_offset = 0.0f;
+    imu_offset_dps10 = 0;
+    imu_clear_state();
+
+    for (uint8 retry = 0u; retry < IMU_INIT_RETRY; retry++)
+    {
+        if (imu660rc_init(IMU660RC_QUARTERNION_DISABLE) == 0u)
+        {
+            system_delay_ms(50);
+
+            /*
+             * Calibrate while the car is still. If the variance is too high,
+             * keep the best offset and still enable yaw so the TFT can expose
+             * the problem immediately.
+             */
+            imu_error = imu_calibrate_zero();
+            imu_clear_state();
+            imu_ready = 1u;
+            pit_init(CCU60_CH1, IMU_UPDATE_PERIOD_US);
+            return;
+        }
+
+        system_delay_ms(100);
+    }
+
+    imu_ready = 0u;
+    imu_error = 1u;
+}
+
+void imu_update(void)
+{
+    float rate;
+
+    if (!imu_ready)
+        return;
+
+    rate = imu_read_z_rate_dps() - s_gyro_z_offset;
+    rate = imu_clampf(rate, -IMU_RATE_LIMIT_DPS, IMU_RATE_LIMIT_DPS);
+
+    if (imu_absf(rate) < IMU_RATE_DEADBAND_DPS)
+        rate = 0.0f;
+
+    if (s_reset_skip > 0u)
+    {
+        s_reset_skip--;
+        s_yaw_rate_filtered = 0.0f;
+        yaw_rate = 0.0f;
+        return;
+    }
+
+    s_yaw_rate_filtered =
+        s_yaw_rate_filtered * IMU_RATE_FILTER_ALPHA +
+        rate * (1.0f - IMU_RATE_FILTER_ALPHA);
+
+    yaw_rate = s_yaw_rate_filtered;
+    yaw_angle += yaw_rate * IMU_UPDATE_DT_SEC;
+    imu_normalize_yaw();
+}
+
 void imu_reset_yaw(void)
 {
-    yaw_angle = 0.0f;
+    imu_clear_state();
 }

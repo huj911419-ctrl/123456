@@ -17,6 +17,7 @@ static uint32 s_hist[256];
 /* First miss row and last valid center for inflection detection */
 static int16 s_first_miss_row = -1;
 static int16 s_last_valid_center = TF_IMG_CENTER;
+static int16 s_jidian_row = TF_JIDIAN_ROW;
 
 #define IP_COL_BUF_SIZE 8
 static int16 s_center_buf[IP_COL_BUF_SIZE];
@@ -203,12 +204,8 @@ static inline uint8 valid_pair(int16 lb, int16 rb)
     return (w >= TF_MIN_TRACK_WIDTH && w <= TF_MAX_TRACK_WIDTH) ? 1u : 0u;
 }
 
-/* ========================================================================
- * Baseline detection at bottom row
- * ======================================================================== */
-static uint8 find_jidian1(void)
+static uint8 find_jidian_at_row(int16 row, int16 *out_lb, int16 *out_rb)
 {
-    const int16 row = (int16)TF_JIDIAN_ROW;
     const int16 mid = (int16)TF_IMG_CENTER;
     const int16 qtr = (int16)(TF_IMG_W / 4);
     const int16 tqtr = (int16)(TF_IMG_W * 3 / 4);
@@ -237,9 +234,43 @@ static uint8 find_jidian1(void)
     }
 
     if (!valid_pair(lb, rb)) return 0u;
+    *out_lb = lb;
+    *out_rb = rb;
+    return 1u;
+}
+
+/* ========================================================================
+ * Baseline detection. Try bottom row first, then move upward.
+ * ======================================================================== */
+static uint8 find_jidian1(void)
+{
+    int16 lb = TF_INVALID, rb = TF_INVALID;
+
+    for (int16 row = (int16)TF_JIDIAN_ROW;
+         row >= (int16)TF_JIDIAN_MIN_ROW;
+         row--)
+    {
+        if (find_jidian_at_row(row, &lb, &rb))
+        {
+            s_jidian_row = row;
+            g_tf.left_jidian = (uint8)lb;
+            g_tf.right_jidian = (uint8)rb;
+            return 1u;
+        }
+    }
+
+    s_jidian_row = (int16)TF_JIDIAN_ROW;
+    return 0u;
+}
+
+static void set_jidian_row_data(int16 row, int16 lb, int16 rb)
+{
     g_tf.left_jidian = (uint8)lb;
     g_tf.right_jidian = (uint8)rb;
-    return 1u;
+    g_tf.left_edge[row] = lb;
+    g_tf.right_edge[row] = rb;
+    g_tf.center_line[row] = (lb + rb) / 2;
+    g_tf.row_valid[row] = 1u;
 }
 
 /* ========================================================================
@@ -290,6 +321,7 @@ void track_fusion_init(void)
     Image_Threshold = 60;
     threshold_bias = 0;
     s_otsu_cnt = (uint8)TF_OTSU_INTERVAL;
+    s_jidian_row = (int16)TF_JIDIAN_ROW;
 
     for (i = 0; i < COMP_H; i++)
         for (j = 0; j < COMP_W; j++)
@@ -360,14 +392,11 @@ void track_fusion_update(void)
         return;
     }
 
-    const int16 jrow = (int16)TF_JIDIAN_ROW;
+    const int16 jrow = s_jidian_row;
     int16 prev_lb = (int16)g_tf.left_jidian;
     int16 prev_rb = (int16)g_tf.right_jidian;
 
-    g_tf.left_edge[jrow] = prev_lb;
-    g_tf.right_edge[jrow] = prev_rb;
-    g_tf.center_line[jrow] = (prev_lb + prev_rb) / 2;
-    g_tf.row_valid[jrow] = 1u;
+    set_jidian_row_data(jrow, prev_lb, prev_rb);
     g_tf.valid_row_count = 1u;
 
     /* 7. Row-by-row upward edge search */
@@ -409,9 +438,9 @@ void track_fusion_update(void)
             g_tf.right_edge[row] = rb;
             g_tf.row_valid[row] = 0u;
             miss_streak++;
-            if (miss_streak == 2 && s_first_miss_row < 0)
+            if (miss_streak == 4 && s_first_miss_row < 0)
                 s_first_miss_row = row + 1;  /* row+1 = last valid row before miss */
-            if (miss_streak >= 2) break;  /* 边线断就停 */
+            if (miss_streak >= 4) break;  /* 边线断就停 */
         }
     }
 
@@ -522,13 +551,27 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
 
     for (int16 row = lost_row; row >= (int16)TF_SEARCH_END_ROW; row--)
     {
-        /* Check left 1/5 column for white */
-        if (left_white_row < 0 && Image_Binarize[row][left_check_col] == Image_WHITE)
-            left_white_row = row;
+        /* Check left: 5 columns around left_check_col, need >=3 white */
+        if (left_white_row < 0)
+        {
+            uint8 cnt = 0u;
+            int16 c0 = left_check_col - 2;
+            if (c0 < 0) c0 = 0;
+            for (int16 c = c0; c < c0 + 5 && c < TF_IMG_W; c++)
+                if (Image_Binarize[row][c] == Image_WHITE) cnt++;
+            if (cnt >= 3) left_white_row = row;
+        }
 
-        /* Check right 4/5 column for white */
-        if (right_white_row < 0 && Image_Binarize[row][right_check_col] == Image_WHITE)
-            right_white_row = row;
+        /* Check right: 5 columns around right_check_col, need >=3 white */
+        if (right_white_row < 0)
+        {
+            uint8 cnt = 0u;
+            int16 c0 = right_check_col - 2;
+            if (c0 < 0) c0 = 0;
+            for (int16 c = c0; c < c0 + 5 && c < TF_IMG_W; c++)
+                if (Image_Binarize[row][c] == Image_WHITE) cnt++;
+            if (cnt >= 3) right_white_row = row;
+        }
 
         /* Both found, no need to scan further */
         if (left_white_row >= 0 && right_white_row >= 0)
@@ -564,6 +607,10 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
 /* Main intersection detection */
 void detect_intersection(void)
 {
+    /* 已确认路口，不再重复检测 */
+    if (g_ra_flag != 0u)
+        return;
+
     if (s_inter_cooldown_cnt > 0u)
     {
         s_inter_cooldown_cnt++;
@@ -576,7 +623,16 @@ void detect_intersection(void)
     ip.valid = 0u; ip.row = 0; ip.col = 0;
     uint8 found_side = 0u; /* 1=right, 2=left, 3=both */
 
-    if (s_first_miss_row >= 0)
+    /* 追踪质量好（有效行多），不太可能是真路口 */
+    if (g_tf.valid_row_count > INTER_MIN_VALID_ROWS)
+    {
+        s_inter_confirm_cnt = 0u;
+        s_inter_candidate = 0u;
+        return;
+    }
+
+    /* miss必须发生在靠近车头的行（远处丢线可能是元件干扰） */
+    if (s_first_miss_row >= 0 && s_first_miss_row >= INTER_MIN_MISS_ROW)
         find_ip_from_lost_row(s_first_miss_row, s_last_valid_center, &ip, &found_side);
 
     /* 用倒数第N个有效行的中点作框列号 */

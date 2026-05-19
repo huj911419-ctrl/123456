@@ -23,6 +23,7 @@ extern int16 threshold_bias;
 /* ==================== 循迹算法参数 ==================== */
 #define TF_OTSU_INTERVAL 2           // 每隔几帧计算一次阈值
 #define TF_JIDIAN_ROW (TF_IMG_H - 4) // 底部极值检测行 = 56
+#define TF_JIDIAN_MIN_ROW (TF_IMG_H - 15) // 底部找不到起点时，最多向上搜索到45行
 #define TF_SEARCH_END_ROW 4          // 循迹搜索起始行（压缩后）
 #define TF_LOCAL_RANGE 10            // 局部搜索范围（压缩后=原18/2）
 #define TF_MAX_MISS_ROWS 5           // 最大允许丢线行数
@@ -71,6 +72,8 @@ extern uint16 Image_Threshold;
 #define INTER_COOLDOWN_FRAMES  60
 #define INTER_MAX_LOCK_FRAMES  300
 #define INTER_BOX_START_ROW    30    // 压缩后，拐点行号>=此值才开始画框
+#define INTER_MIN_MISS_ROW     35    // miss必须发生在行35以下（靠近车头）才算
+#define INTER_MIN_VALID_ROWS   25    // 有效行数>此值时，追踪质量好，不触发路口检测
 
 #define BOX_HEIGHT         20        // 压缩后框高
 #define BOX_WIDTH          40        // 压缩后框宽

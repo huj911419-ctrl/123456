@@ -3,6 +3,8 @@
 #include "Track_funsion.h"
 #include "IMU.h"
 
+#define YAW_COMP_ENABLE 0
+
 int16 base_speed = 0;
 
 // ================= 静态变量 =================
@@ -415,6 +417,7 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs)
     }
     float steer = steer_pd_calc((int16)mixed_err);
 
+#if YAW_COMP_ENABLE
     /* Yaw补偿 */
     {
         float yaw_kp_val = (float)yaw_kp / 10.0f;
@@ -422,6 +425,7 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs)
         if (yaw_abs > YAW_DEADZONE)
             steer += yaw_kp_val * yaw_angle;
     }
+#endif
 
     /* 速度自适应：error 和 trend 独立处理 */
     int16 trend_abs = g_tf.error_trend >= 0 ? g_tf.error_trend : -g_tf.error_trend;

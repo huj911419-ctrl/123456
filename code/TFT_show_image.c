@@ -166,8 +166,14 @@ void draw_line(void)
     tft180_show_int(36, 114, (int32)Image_Threshold, 3);
     tft180_show_int(130,  0, motor_value.receive_left_speed_data, 3);
     tft180_show_int(130, 10, motor_value.receive_right_speed_data, 3);
+    tft180_show_string(112, 20, "RA");
     tft180_show_int(130, 20, g_ra_flag, 3);
-    tft180_show_int(130, 30, (int32)(yaw_angle * 10), 4);
+    tft180_show_string(112, 30, "Y:");
+    tft180_show_int(130, 30, (int32)(yaw_angle * 10.0f), 4);
+    tft180_show_string(112, 40, "W:");
     tft180_show_int(130, 40, (int32)yaw_rate, 4);
+    tft180_show_string(112, 50, "IP");
     tft180_show_int(130, 50, (int32)g_ip_max_row, 3);
+    tft180_show_string(112, 60, "IM");
+    tft180_show_int(130, 60, (int32)(imu_ready ? (imu_error ? 2 : 1) : 0), 1);
 }

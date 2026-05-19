@@ -1,6 +1,7 @@
 #include "Menu.h"
 #include "Track_funsion.h"
 #include "Pid.h"
+#include "TFT_show_image.h"
 
 // ================================================================
 //  硬件引脚定义
@@ -20,7 +21,6 @@
 
 // ---------- 主页参数 ----------
 int16 motor_speed = 80;
-int16 motor_dir = 1;
 int16 motor_enable = 0;
 int16 motor_run_time = 60;
 
@@ -28,9 +28,9 @@ int16 motor_run_time = 60;
 int16 cam_exposure = 200;
 
 // ---------- PID参数 ----------
-int16 pid_kp = 5;
+int16 pid_kp = 6;
 int16 pid_ki = 2;
-int16 pid_kd =6;
+int16 pid_kd = 8;
 
 // ---------- 速度自适应参数 ----------
 int16 sp_err_t1 = 5;
@@ -43,21 +43,21 @@ int16 steer_speed_k = 5;
 int16 ra_hard_inner = 0;
 int16 ra_hard_outer = 500;
 int16 ra_hard_yaw   = 60;
-int16 ra_slow_row   = 45;
+int16 ra_slow_row   = 40;
 int16 ra_slow_pct   = 60;
-int16 ra_turn_row   = 60;
-int16 ra_approach_frames = 3;
+int16 ra_turn_row   = 55;//作用：
+int16 ra_approach_frames = 5;//作用：
 
 // ---------- IMU参数 ----------
-int16 yaw_kp = 10;
+int16 yaw_kp = 0;
 
 // ================================================================
 //  菜单项定义
 // ================================================================
 
 static MenuItem items_main[] = {
-    {"Enable",  &motor_enable, 0, 1, 1},
-    {"Speed",   &motor_speed,  0, 400, 20},
+    {"Enable", &motor_enable, 0, 1, 1},
+    {"Speed", &motor_speed, 0, 400, 20},
     {"RunTime", &motor_run_time, 3, 60, 1},
 };
 
@@ -93,10 +93,10 @@ static MenuItem items_ra[] = {
 // ================================================================
 
 static MenuPageDef g_pages[PAGE_MAX] = {
-    { .title = "MAIN",  .items = items_main,   .item_count = 3,  .draw = NULL },
-    { .title = "PID",   .items = items_pid,     .item_count = 3,  .draw = NULL },
-    { .title = "SPEED", .items = items_speed,   .item_count = 5,  .draw = NULL },
-    { .title = "RA",    .items = items_ra,      .item_count = 10, .draw = NULL },
+    { .title = "MAIN",     .items = items_main,   .item_count = 3, .draw = NULL },
+    { .title = "PID",      .items = items_pid,    .item_count = 3, .draw = NULL },
+    { .title = "SPEED",    .items = items_speed,  .item_count = 5, .draw = NULL },
+    { .title = "RA",       .items = items_ra,     .item_count = 10, .draw = NULL },
 };
 
 // ================================================================

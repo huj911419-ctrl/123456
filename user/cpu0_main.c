@@ -41,7 +41,7 @@ int core0_main(void)
     line_pid_init();
 
     /* 初始化IMU角度测量单元 */
-    //imu_init();
+    imu_init();
 
     /* 初始化11ms周期中断（PID在ISR中直接调用） */
    pit_ms_init(CCU60_CH0, 11);

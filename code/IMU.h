@@ -3,17 +3,23 @@
 
 #include "zf_common_headfile.h"
 
-// ================================================================
-//  Yaw 数据（在 IMU.c 中定义）
-// ================================================================
-extern volatile float yaw_angle;   // 累积偏航角（度），正值=右转
-extern volatile float yaw_rate;    // 当前角速度（度/秒）
+/*
+ * Yaw-only IMU interface.
+ *
+ * yaw_angle: degrees, normalized to [-180, 180]
+ * yaw_rate : degrees per second
+ * imu_ready: 1 after IMU660RC init succeeds and the 5ms PIT is started
+ * imu_error: 1 when init failed or zero calibration variance was high
+ */
 
-// ================================================================
-//  函数接口
-// ================================================================
-void imu_init(void);       // IMU 初始化 + 零偏标定（上电调用一次）
-void imu_update(void);     // Yaw 数据更新（在 5ms PIT 中断中调用）
-void imu_reset_yaw(void);  // 清零 yaw_angle（直角弯后调用）
+extern volatile float yaw_angle;
+extern volatile float yaw_rate;
+extern volatile uint8 imu_ready;
+extern volatile uint8 imu_error;
+extern volatile int16 imu_offset_dps10;
+
+void imu_init(void);
+void imu_update(void);
+void imu_reset_yaw(void);
 
 #endif /* CODE_IMU_H_ */
