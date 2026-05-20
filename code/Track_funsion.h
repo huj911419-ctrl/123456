@@ -30,6 +30,9 @@ extern int16 threshold_bias;
 #define TF_MAX_MISS_ROWS    5
 #define TF_MIN_TRACK_WIDTH  4
 #define TF_MAX_TRACK_WIDTH  30
+#define TRACK_HALF_WIDTH    8
+#define TRACK_HALF_WIDTH_MIN 4
+#define TRACK_HALF_WIDTH_MAX 14
 #define TF_INVALID          (-1)
 #define TF_OTSU_MIN_THRESHOLD 75
 #define TF_DENOISE_WHITE_MIN 4
@@ -72,6 +75,12 @@ extern uint16 Image_Threshold;
 #define INTER_MIN_VALID_ROWS   25
 #define BOX_HEIGHT             20
 #define BOX_WIDTH              40
+#define INTER_BOX_WIDTH_MIN    28
+#define INTER_BOX_WIDTH_MAX    44
+#define INTER_BOX_WIDTH_SCALE  3
+#define INTER_BOX_HEIGHT_MIN   16
+#define INTER_BOX_HEIGHT_MAX   24
+#define INTER_BOX_HEIGHT_SCALE 2
 #define INTER_BAND_THICKNESS   3
 #define INTER_TOP_MIN_WHITE    8
 #define INTER_SIDE_MIN_WHITE   6
@@ -82,6 +91,7 @@ extern uint16 Image_Threshold;
 #define INTER_TYPE_VOTE_FRAMES 3
 #define INTER_TYPE_VOTE_MIN    2
 #define INTER_FAST_CONFIRM_ENABLE 1
+#define INTER_IP_SIDE_BIAS     6
 #define INTER_SYM_ROW_DELTA    3
 #define INTER_SYM_CENTER_DELTA 8
 #define INTER_SYM_BRANCH_STREAK 18

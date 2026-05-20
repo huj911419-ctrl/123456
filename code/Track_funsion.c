@@ -1,4 +1,5 @@
 #include "Track_funsion.h"
+#include "Pid.h"
 
 /* ========================================================================
  * Global variables
@@ -19,6 +20,7 @@ static uint32 s_hist[256];
 static int16 s_first_miss_row = -1;
 static int16 s_last_valid_center = TF_IMG_CENTER;
 static int16 s_jidian_row = TF_JIDIAN_ROW;
+static int16 s_track_half_width = TRACK_HALF_WIDTH;
 
 #define IP_COL_BUF_SIZE 8
 static int16 s_center_buf[IP_COL_BUF_SIZE];
@@ -231,6 +233,86 @@ static inline uint8 valid_pair(int16 lb, int16 rb)
     return (w >= TF_MIN_TRACK_WIDTH && w <= TF_MAX_TRACK_WIDTH) ? 1u : 0u;
 }
 
+static int16 clamp_edge_col(int16 col)
+{
+    if (col < 1) return 1;
+    if (col > (int16)(TF_IMG_W - 2)) return (int16)(TF_IMG_W - 2);
+    return col;
+}
+
+static int16 clamp_center_col(int16 col)
+{
+    if (col < 0) return 0;
+    if (col > (int16)(TF_IMG_W - 1)) return (int16)(TF_IMG_W - 1);
+    return col;
+}
+
+static int16 active_track_half_width(void)
+{
+    if (s_track_half_width < TRACK_HALF_WIDTH_MIN)
+        return TRACK_HALF_WIDTH_MIN;
+    if (s_track_half_width > TRACK_HALF_WIDTH_MAX)
+        return TRACK_HALF_WIDTH_MAX;
+    return s_track_half_width;
+}
+
+static void update_track_half_width(int16 lb, int16 rb)
+{
+    int16 w = rb - lb;
+    int16 half;
+
+    if (w < TF_MIN_TRACK_WIDTH || w > TF_MAX_TRACK_WIDTH)
+        return;
+
+    half = w / 2;
+    if (half < TRACK_HALF_WIDTH_MIN)
+        half = TRACK_HALF_WIDTH_MIN;
+    if (half > TRACK_HALF_WIDTH_MAX)
+        half = TRACK_HALF_WIDTH_MAX;
+
+    s_track_half_width = (int16)((s_track_half_width * 3 + half + 2) / 4);
+}
+
+static uint8 normalize_edges_for_mode(int16 *lb, int16 *rb)
+{
+    int16 half = active_track_half_width();
+
+    if (g_post_edge_side == EDGE_LEFT)
+    {
+        if (*lb == TF_INVALID)
+            return 0u;
+        *rb = clamp_edge_col((int16)(*lb + half * 2));
+        return (*rb > *lb) ? 1u : 0u;
+    }
+
+    if (g_post_edge_side == EDGE_RIGHT)
+    {
+        if (*rb == TF_INVALID)
+            return 0u;
+        *lb = clamp_edge_col((int16)(*rb - half * 2));
+        return (*rb > *lb) ? 1u : 0u;
+    }
+
+    if (!valid_pair(*lb, *rb))
+        return 0u;
+
+    update_track_half_width(*lb, *rb);
+    return 1u;
+}
+
+static int16 calc_center_from_edges(int16 lb, int16 rb)
+{
+    int16 half = active_track_half_width();
+
+    if (g_post_edge_side == EDGE_LEFT)
+        return clamp_center_col((int16)(lb + half));
+
+    if (g_post_edge_side == EDGE_RIGHT)
+        return clamp_center_col((int16)(rb - half));
+
+    return clamp_center_col((int16)((lb + rb) / 2));
+}
+
 /* ========================================================================
  * Baseline detection at bottom row
  * ======================================================================== */
@@ -270,7 +352,7 @@ static uint8 find_jidian_at_row(int16 row, int16 *out_lb, int16 *out_rb)
             rb = scan_right_edge_left(row, TF_IMG_W - 2, lb + TF_MIN_TRACK_WIDTH);
     }
 
-    if (!valid_pair(lb, rb)) return 0u;
+    if (!normalize_edges_for_mode(&lb, &rb)) return 0u;
 
     *out_lb = lb;
     *out_rb = rb;
@@ -315,9 +397,12 @@ static uint8 search_row_edges(int16 row, int16 prev_lb, int16 prev_rb,
     if (rb == TF_INVALID) rb = scan_right_edge_right(row, prev_rb - R, prev_rb + R);
     if (rb == TF_INVALID) rb = scan_right_edge_right(row, MID, TF_IMG_W - 2);
 
+    if (!normalize_edges_for_mode(&lb, &rb))
+        return 0u;
+
     *out_lb = lb;
     *out_rb = rb;
-    return valid_pair(lb, rb);
+    return 1u;
 }
 
 /* ========================================================================
@@ -345,6 +430,7 @@ void track_fusion_init(void)
     Image_Threshold = (uint16)TF_OTSU_MIN_THRESHOLD;
     threshold_bias = 0;
     s_otsu_cnt = (uint8)TF_OTSU_INTERVAL;
+    s_track_half_width = TRACK_HALF_WIDTH;
 
     for (i = 0; i < COMP_H; i++)
         for (j = 0; j < COMP_W; j++)
@@ -429,7 +515,7 @@ void track_fusion_update(void)
 
     g_tf.left_edge[jrow] = prev_lb;
     g_tf.right_edge[jrow] = prev_rb;
-    g_tf.center_line[jrow] = (prev_lb + prev_rb) / 2;
+    g_tf.center_line[jrow] = calc_center_from_edges(prev_lb, prev_rb);
     g_tf.row_valid[jrow] = 1u;
     g_tf.valid_row_count = 1u;
 
@@ -438,7 +524,7 @@ void track_fusion_update(void)
     int16 end_row = (int16)TF_SEARCH_END_ROW;
     s_first_miss_row = -1;
     s_center_buf_cnt = 0u;
-    s_last_valid_center = (prev_lb + prev_rb) / 2;
+    s_last_valid_center = g_tf.center_line[jrow];
 
     for (int16 row = jrow - 1; row >= end_row; row--)
     {
@@ -447,7 +533,7 @@ void track_fusion_update(void)
         {
             g_tf.left_edge[row] = lb;
             g_tf.right_edge[row] = rb;
-            g_tf.center_line[row] = (lb + rb) / 2;
+            g_tf.center_line[row] = calc_center_from_edges(lb, rb);
             g_tf.row_valid[row] = 1u;
             g_tf.valid_row_count++;
             prev_lb = lb;
@@ -855,7 +941,7 @@ static uint8 inter_side_branch_has_road(int16 row,
     return (max_streak >= INTER_BRANCH_MIN_STREAK) ? 1u : 0u;
 }
 
-static void apply_ip_col_from_buffer(InflectionPoint_t *ip)
+static void apply_ip_col_from_buffer(InflectionPoint_t *ip, uint8 found_side)
 {
     if (ip->valid && s_center_buf_cnt > 0u)
     {
@@ -865,6 +951,14 @@ static void apply_ip_col_from_buffer(InflectionPoint_t *ip)
         uint8 idx = (uint8)((total - 1u - offset) % IP_COL_BUF_SIZE);
         ip->col = s_center_buf[idx];
     }
+
+    if (!ip->valid)
+        return;
+
+    if (found_side == 1u)
+        ip->col = clamp_center_col((int16)(ip->col + INTER_IP_SIDE_BIAS));
+    else if (found_side == 2u)
+        ip->col = clamp_center_col((int16)(ip->col - INTER_IP_SIDE_BIAS));
 }
 
 static int16 abs_i16(int16 v)
@@ -900,14 +994,54 @@ static void clear_inter_result(void)
     g_ip_max_row = 0u;
 }
 
+static int16 clamp_i16(int16 v, int16 min_v, int16 max_v)
+{
+    if (v < min_v) return min_v;
+    if (v > max_v) return max_v;
+    return v;
+}
+
+static int16 estimate_inter_track_width(int16 cy)
+{
+    for (int16 offset = 0; offset <= 8; offset++)
+    {
+        int16 r1 = cy + offset;
+        int16 r2 = cy - offset;
+
+        if (r1 >= 0 && r1 < TF_IMG_H && g_tf.row_valid[r1] &&
+            valid_pair(g_tf.left_edge[r1], g_tf.right_edge[r1]))
+        {
+            return g_tf.right_edge[r1] - g_tf.left_edge[r1];
+        }
+
+        if (offset != 0 && r2 >= 0 && r2 < TF_IMG_H && g_tf.row_valid[r2] &&
+            valid_pair(g_tf.left_edge[r2], g_tf.right_edge[r2]))
+        {
+            return g_tf.right_edge[r2] - g_tf.left_edge[r2];
+        }
+    }
+
+    if (valid_pair((int16)g_tf.left_jidian, (int16)g_tf.right_jidian))
+        return (int16)g_tf.right_jidian - (int16)g_tf.left_jidian;
+
+    return (int16)(BOX_WIDTH / INTER_BOX_WIDTH_SCALE);
+}
+
 static void build_inter_box(int16 cx, int16 cy,
                             int16 *top, int16 *bottom,
                             int16 *left, int16 *right)
 {
-    int16 b_top = cy - BOX_HEIGHT / 2;
-    int16 b_bottom = cy + BOX_HEIGHT / 2;
-    int16 b_left = cx - BOX_WIDTH / 2;
-    int16 b_right = cx + BOX_WIDTH / 2;
+    int16 track_w = estimate_inter_track_width(cy);
+    int16 box_w = clamp_i16((int16)(track_w * INTER_BOX_WIDTH_SCALE),
+                            INTER_BOX_WIDTH_MIN,
+                            INTER_BOX_WIDTH_MAX);
+    int16 box_h = clamp_i16((int16)(track_w * INTER_BOX_HEIGHT_SCALE),
+                            INTER_BOX_HEIGHT_MIN,
+                            INTER_BOX_HEIGHT_MAX);
+    int16 b_top = cy - box_h / 2;
+    int16 b_bottom = cy + box_h / 2;
+    int16 b_left = cx - box_w / 2;
+    int16 b_right = cx + box_w / 2;
 
     if (b_top < 0) b_top = 0;
     if (b_bottom >= TF_IMG_H) b_bottom = TF_IMG_H - 1;
@@ -1033,7 +1167,7 @@ void detect_intersection(void)
         if (s_first_miss_row >= (int16)INTER_MIN_MISS_ROW)
         {
             find_ip_from_lost_row(s_first_miss_row, s_last_valid_center, &ip, &found_side);
-            apply_ip_col_from_buffer(&ip);
+            apply_ip_col_from_buffer(&ip, found_side);
         }
 
         if (ip.valid)
@@ -1090,7 +1224,7 @@ void detect_intersection(void)
         find_ip_from_lost_row(s_first_miss_row, s_last_valid_center, &ip, &found_side);
 
     /* 用倒数第N个有效行的中点作为框列号 */
-    apply_ip_col_from_buffer(&ip);
+    apply_ip_col_from_buffer(&ip, found_side);
 
     g_inter_result.left_ip = ip;
     g_inter_result.right_ip = ip;

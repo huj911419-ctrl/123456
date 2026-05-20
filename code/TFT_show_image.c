@@ -122,6 +122,13 @@ static void draw_inflection_overlay(void)
 
 void draw_line(void)
 {
+    int32 yaw_deg = (yaw_angle >= 0.0f) ?
+                    (int32)(yaw_angle + 0.5f) :
+                    (int32)(yaw_angle - 0.5f);
+    int32 ra_yaw_deg = (ra_dbg_yaw10 >= 0) ?
+                       (int32)((ra_dbg_yaw10 + 5) / 10) :
+                       (int32)((ra_dbg_yaw10 - 5) / 10);
+
     /* 第一步：显示二值化图像
      * Image_Binarize[i][j]=255 显示为白（赛道线）
      * Image_Binarize[i][j]=0   显示为黑（背景）
@@ -171,7 +178,7 @@ void draw_line(void)
     tft180_show_string(112, 20, "RA");
     tft180_show_int(130, 20, g_ra_flag, 3);
     tft180_show_string(112, 30, "Y:");
-    tft180_show_int(130, 30, (int32)(yaw_angle * 10.0f), 4);
+    tft180_show_int(130, 30, yaw_deg, 4);
     tft180_show_string(112, 40, "W:");
     tft180_show_int(130, 40, (int32)yaw_rate, 4);
     tft180_show_string(112, 50, "IP");
@@ -185,7 +192,7 @@ void draw_line(void)
     tft180_show_string(112, 90, "BS");
     tft180_show_int(130, 90, (int32)base_speed, 4);
     tft180_show_string(112, 100, "RY");
-    tft180_show_int(130, 100, (int32)ra_dbg_yaw10, 4);
-    tft180_show_string(112, 110, "HC");
-    tft180_show_int(130, 110, (int32)ra_dbg_hard_cnt, 3);
+    tft180_show_int(130, 100, ra_yaw_deg, 4);
+    tft180_show_string(112, 110, "LG");
+    tft180_show_int(130, 110, (int32)route_dbg_step, 3);
 }
