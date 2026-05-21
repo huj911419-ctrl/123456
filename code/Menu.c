@@ -36,11 +36,11 @@ int16 sp_ratio_2 = 48;
 int16 steer_speed_k = 3;
 int16 steer_ff_k = 12;
 
-int16 ra_hard_inner = 0;
-int16 ra_hard_outer = 760;
+int16 ra_hard_inner = -150;
+int16 ra_hard_outer = 900;
 int16 ra_hard_yaw = 60;
 int16 ra_slow_row = 55;
-int16 ra_slow_pct = 45;
+int16 ra_slow_pct = 40;
 int16 ra_turn_row = 92;
 int16 ra_approach_frames = 10;
 
@@ -110,6 +110,12 @@ static uint8 dip_is_adjust_mode(void)
     uint8 sw1 = (gpio_get_level(SWITCH1) == 0) ? 1u : 0u;
     uint8 sw2 = (gpio_get_level(SWITCH2) == 0) ? 1u : 0u;
     return sw1 | sw2;
+}
+
+static void menu_apply_adjusted_value(void)
+{
+    if (now_page == PAGE_CAM && menu_cursor == 1u)
+        mt9v03x_set_exposure_time((uint16)cam_exposure);
 }
 
 static uint8 key_scan(void)
@@ -282,6 +288,8 @@ void key_process(void)
             else
                 *cur->value = cur->min;
         }
+
+        menu_apply_adjusted_value();
     }
 }
 

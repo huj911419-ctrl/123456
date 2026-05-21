@@ -115,6 +115,28 @@ typedef struct
     uint8 detected_type;
 } IntersectionResult_t;
 
+typedef struct
+{
+    TrackFusion_t tf;
+    IntersectionResult_t inter_result;
+    int16 error;
+    int16 lookahead_error;
+    int16 error_trend;
+    uint16 valid_row_count;
+    uint8 line_lost;
+    uint8 ra_pre_flag;
+    uint8 intersection_flag;
+    uint8 ra_flag;
+    uint8 left_jidian;
+    uint8 right_jidian;
+    uint8 sym_component_flag;
+    uint8 ip_max_row;
+    uint16 image_threshold;
+    uint16 frame_id;
+    uint32 prof_tf_us;
+    uint32 prof_inter_us;
+} VisionSnapshot_t;
+
 /* Right-angle pre-detection parameters. */
 #define RA_PRE_START_ROW    38
 #define RA_PRE_END_ROW      28
@@ -134,5 +156,10 @@ void track_fusion_init(void);
 void track_fusion_update(void);
 void right_angle_pre_detect(void);
 void detect_intersection(void);
+void vision_share_init(void);
+void vision_set_work_snapshot(VisionSnapshot_t *work);
+void vision_publish_from_work(VisionSnapshot_t *work, uint32 tf_us, uint32 inter_us);
+uint8 vision_apply_latest(void);
+void vision_sync_cpu0_ack(void);
 
 #endif /* TRACK_FUSION_H */

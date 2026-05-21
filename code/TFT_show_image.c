@@ -4,6 +4,9 @@
 #include "IMU.h"
 #include "Pid.h"
 
+extern volatile uint32 prof_tf_us;
+extern volatile uint32 prof_inter_us;
+
 
 /* ================================================================
  *  显示逻辑：
@@ -193,6 +196,8 @@ void draw_line(void)
     tft180_show_int(130, 90, (int32)base_speed, 4);
     tft180_show_string(112, 100, "RY");
     tft180_show_int(130, 100, ra_yaw_deg, 4);
-    tft180_show_string(112, 110, "LG");
-    tft180_show_int(130, 110, (int32)route_dbg_step, 3);
+    tft180_show_string(112, 110, "TF");
+    tft180_show_int(130, 110, (int32)prof_tf_us, 4);
+    tft180_show_string(112, 120, "IN");
+    tft180_show_int(130, 120, (int32)prof_inter_us, 4);
 }

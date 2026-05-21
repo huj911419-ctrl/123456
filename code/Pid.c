@@ -927,7 +927,7 @@ static int16 plan_base_speed(int16 target, int16 pos_err_abs, uint8 pre_slow_act
     if (g_sym_component_flag && g_tf.line_lost == 0u)
     {
         s_straight_cnt = 0u;
-        s_straight_active = 1u;
+        target = plan_lookahead_speed(target, pos_err_abs);
         return speed_ramp_apply(target);
     }
 
@@ -1306,7 +1306,7 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs)
     s_prev_target_speed = target_speed;
 
     float speed_ff = target_speed * SPEED_FF_RATIO + accel_ff;
-    float speed_out = speed_ff + speed_pi_calc(target_speed - speed_ff,
+    float speed_out = speed_ff + speed_pi_calc(target_speed,
                                                avg_actual,
                                                &s_speed_integral,
                                                pos_err_abs);
