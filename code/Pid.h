@@ -139,6 +139,15 @@ extern uint8 route_dbg_action;
 #define TURN_SHIELD_NEAR_ALLOW_FRAMES 4u
 #define RULES_DONE_DELAY         136u
 
+/* 直角和丢线保底。 */
+#define RA_FALLBACK_DIRECT_ENABLE 1u
+
+#define LOST_SEARCH_ENTER_FRAMES 3u
+#define LOST_SEARCH_SWITCH_FRAMES 45u
+#define LOST_SEARCH_EXIT_VALID_ROWS 15u
+#define LOST_SEARCH_DUTY 520.0f
+#define LOST_SEARCH_ERR_DEADZONE 4
+
 #define EDGE_BOTH  0u
 #define EDGE_LEFT  1u
 #define EDGE_RIGHT 2u

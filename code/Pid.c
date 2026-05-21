@@ -33,6 +33,11 @@ static uint8 s_edge_active = 0u;
 static uint8 s_edge_side = EDGE_BOTH;
 static uint16 s_edge_cnt = 0u;
 static uint16 s_edge_target = 0u;
+static uint8 s_lost_search_active = 0u;
+static uint8 s_lost_line_cnt = 0u;
+static uint16 s_lost_search_cnt = 0u;
+static uint8 s_lost_search_dir = 1u;
+static int16 s_lost_last_err = 0;
 
 typedef enum { RA_ST_NONE, RA_ST_ACTIVE } RaState;
 typedef enum { RA_PH_WAIT, RA_PH_SLOW, RA_PH_APPROACH, RA_PH_HARD, RA_PH_RECOVER } RaPhase;
@@ -379,6 +384,106 @@ static uint8 route_has_next_match(uint8 flag)
     return 0u;
 }
 
+static uint8 ra_fallback_direct_enabled(uint8 flag)
+{
+#if RA_FALLBACK_DIRECT_ENABLE
+    return (flag == 1u || flag == 2u) ? 1u : 0u;
+#else
+    (void)flag;
+    return 0u;
+#endif
+}
+
+static uint8 ra_accept_near_flag(uint8 flag)
+{
+    if (route_has_next_match(flag))
+        return 1u;
+
+    return ra_fallback_direct_enabled(flag);
+}
+
+static void lost_search_reset(void)
+{
+    s_lost_search_active = 0u;
+    s_lost_line_cnt = 0u;
+    s_lost_search_cnt = 0u;
+}
+
+static uint8 lost_search_pick_dir(int16 err)
+{
+    if (err > LOST_SEARCH_ERR_DEADZONE)
+        return 1u;
+    if (err < -LOST_SEARCH_ERR_DEADZONE)
+        return 2u;
+
+    return (s_lost_search_dir == 2u) ? 2u : 1u;
+}
+
+static uint8 lost_search_step(int16 pos_err)
+{
+    if (g_tf.line_lost == 0u &&
+        g_tf.valid_row_count >= LOST_SEARCH_EXIT_VALID_ROWS)
+    {
+        s_lost_last_err = pos_err;
+        lost_search_reset();
+        return 0u;
+    }
+
+    if (s_ra_state != RA_ST_NONE)
+    {
+        lost_search_reset();
+        return 0u;
+    }
+
+    if (g_ra_flag != 0u || g_ra_pre_flag != 0u)
+        return 0u;
+
+    if (g_tf.line_lost == 0u)
+    {
+        s_lost_line_cnt = 0u;
+        return 0u;
+    }
+
+    if (s_lost_line_cnt < 255u)
+        s_lost_line_cnt++;
+
+    if (s_lost_line_cnt < LOST_SEARCH_ENTER_FRAMES)
+        return 0u;
+
+    if (!s_lost_search_active)
+    {
+        s_lost_search_active = 1u;
+        s_lost_search_cnt = 0u;
+        s_lost_search_dir = lost_search_pick_dir(s_lost_last_err);
+    }
+
+    s_lost_search_cnt++;
+    if (s_lost_search_cnt >= LOST_SEARCH_SWITCH_FRAMES)
+    {
+        s_lost_search_cnt = 0u;
+        s_lost_search_dir = (s_lost_search_dir == 1u) ? 2u : 1u;
+    }
+
+    base_speed = 0;
+    s_speed_integral = 0.0f;
+    reset_speed_planner();
+    reset_speed_ff_state();
+    line_pid_reset_derivative();
+
+    if (s_lost_search_dir == 1u)
+    {
+        small_driver_set_duty(clamp_duty(-LOST_SEARCH_DUTY),
+                              clamp_duty(LOST_SEARCH_DUTY));
+    }
+    else
+    {
+        small_driver_set_duty(clamp_duty(LOST_SEARCH_DUTY),
+                              clamp_duty(-LOST_SEARCH_DUTY));
+    }
+
+    return 1u;
+}
+
 static void single_edge_reset(void)
 {
     s_edge_active = 0u;
@@ -443,7 +548,7 @@ static void turn_shield_update(void)
 
     if (g_ra_flag != 0u &&
         s_turn_shield_frames >= TURN_SHIELD_NEAR_ALLOW_FRAMES &&
-        route_has_next_match((uint8)g_ra_flag))
+        ra_accept_near_flag((uint8)g_ra_flag))
     {
         g_ra_pre_flag = 0u;
         turn_shield_reset();
@@ -539,6 +644,7 @@ static void ra_start(uint8 dir, uint8 orig_flag, uint8 straight,
     s_ra_phase_cnt = 0u;
     s_speed_integral = 0.0f;
     reset_speed_planner();
+    lost_search_reset();
 
     if (!straight)
         turn_right_led_on();
@@ -579,6 +685,9 @@ void line_pid_init(void)
     s_rules_done_timer = 0u;
     turn_shield_reset();
     single_edge_reset();
+    lost_search_reset();
+    s_lost_last_err = 0;
+    s_lost_search_dir = 1u;
     reset_speed_planner();
     reset_speed_ff_state();
     route_debug_reset();
@@ -911,7 +1020,16 @@ static RouteDecision select_intersection_decision(uint8 flag)
         }
     }
 
-    /* 未匹配路线表时不消耗计数，也不执行默认转向。 */
+    if (ra_fallback_direct_enabled(flag))
+    {
+        d.action = route_action_from_flag(flag);
+        d.post_edge_side = EDGE_BOTH;
+        d.post_edge_ms = 0u;
+        d.valid = 1u;
+        return d;
+    }
+
+    /* 未匹配路线表时：直角1/2保底自动转，普通路口不消耗计数。 */
     return d;
 }
 
@@ -1003,7 +1121,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs)
 
         if (g_ra_flag != 0u &&
             s_ra_recover_cnt >= RA_RECOVER_NEAR_DETECT_MIN_FRAMES &&
-            route_has_next_match((uint8)g_ra_flag))
+            ra_accept_near_flag((uint8)g_ra_flag))
         {
             uint8 next_flag = (uint8)g_ra_flag;
             ra_finish_ex(next_flag, 0u);
@@ -1224,6 +1342,7 @@ void line_pid_control(void)
         s_motor_run_counter = 0u;
         turn_shield_reset();
         single_edge_reset();
+        lost_search_reset();
         reset_speed_planner();
         reset_speed_ff_state();
         ra_reset();
@@ -1240,6 +1359,7 @@ void line_pid_control(void)
         s_motor_run_counter = 0u;
         turn_shield_reset();
         single_edge_reset();
+        lost_search_reset();
         reset_speed_planner();
         reset_speed_ff_state();
         ra_reset();
@@ -1260,6 +1380,7 @@ void line_pid_control(void)
             s_rules_done_timer = 0u;
             turn_shield_reset();
             single_edge_reset();
+            lost_search_reset();
             reset_speed_planner();
             reset_speed_ff_state();
             ra_reset();
@@ -1274,6 +1395,9 @@ void line_pid_control(void)
 
     RaResult ra = ra_state_machine_step(pos_err_abs);
     if (ra.should_return)
+        return;
+
+    if (lost_search_step(pos_err))
         return;
 
     int16 target_base_speed = (int16)((float)motor_speed * 8.0f * ra.speed_scale);
