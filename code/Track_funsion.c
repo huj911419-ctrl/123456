@@ -6,61 +6,15 @@
  * ======================================================================== */
 
 TrackFusion_t g_tf;
-uint8 g_ra_pre_flag = 0u;
-uint8 g_ra_flag = 0u;
-uint8 g_sym_component_flag = 0u;
-IntersectionResult_t g_inter_result;
-uint8 g_ip_max_row = 0u;
-uint16 Image_Threshold = (uint16)TF_OTSU_MIN_THRESHOLD;
-int16 threshold_bias = 0;
-
-#pragma section all "cpu1_dsram"
 uint8 Image_Binarize[TF_IMG_H][TF_IMG_W];
 uint8 image_0[COMP_H][COMP_W];
+uint16 Image_Threshold = (uint16)TF_OTSU_MIN_THRESHOLD;
+int16 threshold_bias = 0;
 static uint8 s_bin_tmp[TF_IMG_H][TF_IMG_W];
-static uint32 s_hist[256];
-#pragma section all restore
 
 /* Otsu internals */
 static uint8 s_otsu_cnt = 0;
-
-static TrackFusion_t * const s_tf_default = &g_tf;
-static uint8 * const s_ra_pre_default = &g_ra_pre_flag;
-static uint8 * const s_ra_flag_default = &g_ra_flag;
-static uint8 * const s_sym_default = &g_sym_component_flag;
-static IntersectionResult_t * const s_inter_default = &g_inter_result;
-static uint8 * const s_ip_row_default = &g_ip_max_row;
-static uint16 * const s_threshold_default = &Image_Threshold;
-
-static TrackFusion_t *s_tf_output = &g_tf;
-static uint8 *s_ra_pre_output = &g_ra_pre_flag;
-static uint8 *s_ra_flag_output = &g_ra_flag;
-static uint8 *s_sym_output = &g_sym_component_flag;
-static IntersectionResult_t *s_inter_output = &g_inter_result;
-static uint8 *s_ip_row_output = &g_ip_max_row;
-static uint16 *s_threshold_output = &Image_Threshold;
-
-#define g_tf                 (*s_tf_output)
-#define g_ra_pre_flag        (*s_ra_pre_output)
-#define g_ra_flag            (*s_ra_flag_output)
-#define g_sym_component_flag (*s_sym_output)
-#define g_inter_result       (*s_inter_output)
-#define g_ip_max_row         (*s_ip_row_output)
-#define Image_Threshold      (*s_threshold_output)
-
-#pragma section all "edmembss"
-static VisionSnapshot_t s_vision_snapshots[2];
-volatile uint32 g_vision_ready_index;
-volatile uint32 g_vision_ready;
-volatile uint16 g_vision_frame_id;
-#pragma section all restore
-
-extern volatile uint32 prof_tf_us;
-extern volatile uint32 prof_inter_us;
-
-static uint32 s_publish_index = 0u;
-static uint16 s_publish_frame_id = 0u;
-static uint16 s_applied_frame_id = 0u;
+static uint32 s_hist[256];
 
 /* First miss row and last valid center for inflection detection */
 static int16 s_first_miss_row = -1;
@@ -79,123 +33,6 @@ static uint8 side_probe_has_white(int16 row, int16 center_col);
 static uint8 symmetric_component_at_row(int16 row, int16 center_col);
 static int16 abs_i16(int16 v);
 static void clear_inter_result(void);
-
-#ifndef VISION_DSYNC
-#define VISION_DSYNC() __dsync()
-#endif
-
-void vision_share_init(void)
-{
-    memset((void *)s_vision_snapshots, 0, sizeof(s_vision_snapshots));
-    g_vision_ready_index = 0u;
-    g_vision_ready = 0u;
-    g_vision_frame_id = 0u;
-    s_publish_index = 0u;
-    s_publish_frame_id = 0u;
-    s_applied_frame_id = 0u;
-    VISION_DSYNC();
-}
-
-void vision_set_work_snapshot(VisionSnapshot_t *work)
-{
-    if (work == NULL)
-    {
-        s_tf_output = s_tf_default;
-        s_ra_pre_output = s_ra_pre_default;
-        s_ra_flag_output = s_ra_flag_default;
-        s_sym_output = s_sym_default;
-        s_inter_output = s_inter_default;
-        s_ip_row_output = s_ip_row_default;
-        s_threshold_output = s_threshold_default;
-        return;
-    }
-
-    memset(work, 0, sizeof(*work));
-    s_tf_output = &work->tf;
-    s_ra_pre_output = &work->ra_pre_flag;
-    s_ra_flag_output = &work->ra_flag;
-    s_sym_output = &work->sym_component_flag;
-    s_inter_output = &work->inter_result;
-    s_ip_row_output = &work->ip_max_row;
-    s_threshold_output = &work->image_threshold;
-}
-
-void vision_sync_cpu0_ack(void)
-{
-    if (s_ra_flag_default != s_ra_flag_output &&
-        *s_ra_flag_default == 0u)
-    {
-        *s_ra_flag_output = 0u;
-    }
-}
-
-void vision_publish_from_work(VisionSnapshot_t *work, uint32 tf_us, uint32 inter_us)
-{
-    uint32 idx;
-
-    if (work == NULL)
-        return;
-
-    work->error = work->tf.error;
-    work->lookahead_error = work->tf.lookahead_error;
-    work->error_trend = work->tf.error_trend;
-    work->valid_row_count = work->tf.valid_row_count;
-    work->line_lost = work->tf.line_lost;
-    work->ra_pre_flag = g_ra_pre_flag;
-    work->intersection_flag = g_ra_flag;
-    work->ra_flag = g_ra_flag;
-    work->left_jidian = work->tf.left_jidian;
-    work->right_jidian = work->tf.right_jidian;
-    work->sym_component_flag = g_sym_component_flag;
-    work->ip_max_row = g_ip_max_row;
-    work->image_threshold = Image_Threshold;
-    work->prof_tf_us = tf_us;
-    work->prof_inter_us = inter_us;
-    work->frame_id = ++s_publish_frame_id;
-
-    s_publish_index ^= 1u;
-    idx = s_publish_index & 1u;
-    s_vision_snapshots[idx] = *work;
-    VISION_DSYNC();
-    g_vision_ready_index = idx;
-    g_vision_frame_id = work->frame_id;
-    g_vision_ready = 1u;
-    VISION_DSYNC();
-}
-
-uint8 vision_apply_latest(void)
-{
-    uint32 idx;
-    uint16 frame;
-    VisionSnapshot_t snap;
-    uint32 irq_state;
-
-    if (g_vision_ready == 0u)
-        return 0u;
-
-    idx = g_vision_ready_index & 1u;
-    VISION_DSYNC();
-    snap = s_vision_snapshots[idx];
-    frame = snap.frame_id;
-
-    if (frame == 0u || frame == s_applied_frame_id)
-        return 0u;
-
-    irq_state = interrupt_global_disable();
-    *s_tf_default = snap.tf;
-    *s_ra_pre_default = snap.ra_pre_flag;
-    *s_ra_flag_default = snap.ra_flag;
-    *s_sym_default = snap.sym_component_flag;
-    *s_inter_default = snap.inter_result;
-    *s_ip_row_default = snap.ip_max_row;
-    *s_threshold_default = snap.image_threshold;
-    prof_tf_us = snap.prof_tf_us;
-    prof_inter_us = snap.prof_inter_us;
-    interrupt_global_enable(irq_state);
-
-    s_applied_frame_id = frame;
-    return 1u;
-}
 
 static uint16 clamp_threshold_i16(int16 value)
 {
@@ -760,6 +597,8 @@ void track_fusion_update(void)
 /* ========================================================================
  * Right angle pre-detection (far-field, for early speed reduction)
  * ======================================================================== */
+uint8 g_ra_pre_flag = 0u;
+
 void right_angle_pre_detect(void)
 {
     static uint8 s_on_cnt = 0;
@@ -825,6 +664,11 @@ void right_angle_pre_detect(void)
  * White at right edge → right turn, inflection at left side of track
  * White at both edges → cross,      inflection at center
  * ======================================================================== */
+
+uint8 g_ra_flag = 0u;
+uint8 g_sym_component_flag = 0u;
+IntersectionResult_t g_inter_result;
+uint8 g_ip_max_row = 0u;
 
 static uint8 s_inter_lock_cnt = 0u;
 static uint8 s_inter_cooldown_cnt = 0u;

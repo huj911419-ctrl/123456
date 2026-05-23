@@ -15,15 +15,15 @@
 #define DEBOUNCE_CNT 20
 #define RELEASE_CNT 10
 #define MAIN_DRAW_DIV_STOP 1u
-#define MAIN_DRAW_DIV_RUN  5u
-#define TFT_OFF_WHEN_RUNNING 1u
+#define MAIN_DRAW_DIV_RUN  1u
+#define TFT_OFF_WHEN_RUNNING 0u
 
 int16 motor_speed = 140;
 int16 motor_dir = 1;
 int16 motor_enable = 0;
 int16 motor_run_time = 60;
 
-int16 cam_exposure = 200;
+int16 cam_exposure = 600;
 
 int16 pid_kp = 7;
 int16 pid_ki = 2;
@@ -36,11 +36,11 @@ int16 sp_ratio_2 = 48;
 int16 steer_speed_k = 3;
 int16 steer_ff_k = 12;
 
-int16 ra_hard_inner = -150;
-int16 ra_hard_outer = 900;
+int16 ra_hard_inner = 0;
+int16 ra_hard_outer = 760;
 int16 ra_hard_yaw = 60;
 int16 ra_slow_row = 55;
-int16 ra_slow_pct = 40;
+int16 ra_slow_pct = 45;
 int16 ra_turn_row = 92;
 int16 ra_approach_frames = 10;
 
