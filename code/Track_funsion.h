@@ -66,36 +66,58 @@ extern TrackFusion_t g_tf;
 extern uint8 Image_Binarize[TF_IMG_H][TF_IMG_W];
 extern uint8 image_0[COMP_H][COMP_W];
 extern uint16 Image_Threshold;
+extern volatile uint8 g_tf_image_ready;
+extern volatile uint32 g_tf_frame_count;
+extern volatile uint16 g_tf_white_count;
 
 /* Intersection detection parameters. */
-#define INTER_COOLDOWN_FRAMES  12
+#define INTER_COOLDOWN_FRAMES  8
 #define INTER_MAX_LOCK_FRAMES  300
-#define INTER_BOX_START_ROW    30
-#define INTER_MIN_MISS_ROW     35
+#define INTER_BOX_START_ROW    38
+#define INTER_MIN_MISS_ROW     28
 #define INTER_MIN_VALID_ROWS   25
-#define BOX_HEIGHT             20
-#define BOX_WIDTH              40
-#define INTER_BOX_WIDTH_MIN    28
-#define INTER_BOX_WIDTH_MAX    44
-#define INTER_BOX_WIDTH_SCALE  3
-#define INTER_BOX_HEIGHT_MIN   16
-#define INTER_BOX_HEIGHT_MAX   24
-#define INTER_BOX_HEIGHT_SCALE 2
+#define BOX_HEIGHT             28
+#define BOX_WIDTH              56
+#define INTER_BOX_WIDTH_MIN    44
+#define INTER_BOX_WIDTH_MAX    64
+#define INTER_BOX_WIDTH_SCALE  4
+#define INTER_BOX_HEIGHT_MIN   24
+#define INTER_BOX_HEIGHT_MAX   34
+#define INTER_BOX_HEIGHT_SCALE 3
+#define INTER_BOX_FRONT_PCT    65
 #define INTER_BAND_THICKNESS   3
-#define INTER_TOP_MIN_WHITE    8
-#define INTER_SIDE_MIN_WHITE   6
-#define INTER_BAND_MIN_STREAK  4
-#define INTER_BRANCH_MIN_STREAK 12
+#define INTER_TOP_MIN_WHITE    12
+#define INTER_TOP_SCAN_ROWS    6
+#define INTER_SIDE_MIN_WHITE   8
+#define INTER_SIDE_SCAN_COLS   8
+#define INTER_SIDE_HIT_ROWS    2
+#define INTER_SIDE_HIT_WHITE   8
+#define INTER_BAND_MIN_STREAK  5
+#define INTER_BRANCH_MIN_STREAK 14
+#define INTER_BRANCH_AREA_HALF_ROWS 4
+#define INTER_BRANCH_AREA_MIN_ROWS 2
+#define INTER_BRANCH_AREA_MIN_WHITE 16
+#define INTER_BRANCH_PAIR_ROW_DELTA 6
+#define INTER_BRANCH_NEAR_GAP 6
+#define INTER_BRANCH_MIN_REACH 26
+#define INTER_BRANCH_REAL_ROWS 2
 #define INTER_BOX_STABLE_DELTA 3
-#define INTER_BOX_STABLE_FRAMES 2
-#define INTER_TYPE_VOTE_FRAMES 3
-#define INTER_TYPE_VOTE_MIN    2
+#define INTER_BOX_STABLE_FRAMES 1
+#define INTER_TYPE_VOTE_FRAMES 2
+#define INTER_TYPE_VOTE_MIN    1
 #define INTER_FAST_CONFIRM_ENABLE 1
 #define INTER_IP_SIDE_BIAS     6
 #define INTER_SYM_ROW_DELTA    3
 #define INTER_SYM_CENTER_DELTA 8
 #define INTER_SYM_BRANCH_STREAK 18
 #define INTER_SYM_PRE_ROWS     2
+#define INTER_INLINE_AHEAD_ROWS 18
+#define INTER_INLINE_CENTER_MIN_WHITE 4
+#define INTER_INLINE_CENTER_MIN_STREAK 2
+#define INTER_INLINE_CENTER_DELTA 16
+#define INTER_STRAIGHT_IGNORE_ROWS 42
+#define INTER_STRAIGHT_ERR_LIMIT 18
+#define INTER_STRAIGHT_LA_ERR_LIMIT 24
 
 typedef struct
 {
@@ -116,13 +138,14 @@ typedef struct
 } IntersectionResult_t;
 
 /* Right-angle pre-detection parameters. */
-#define RA_PRE_START_ROW    38
+#define RA_PRE_START_ROW    46
 #define RA_PRE_END_ROW      28
-#define RA_PRE_LOST_THRESH  3
-#define RA_PRE_EDGE_MARGIN  3
+#define RA_PRE_LOST_THRESH  2
+#define RA_PRE_EDGE_MARGIN  5
 
 extern uint8 g_ra_flag;
 extern uint8 g_ra_pre_flag;
+extern uint8 g_ra_pre_dir;
 extern uint8 g_sym_component_flag;
 extern IntersectionResult_t g_inter_result;
 extern uint8 g_ip_max_row;

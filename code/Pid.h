@@ -3,7 +3,24 @@
 
 #include "zf_common_headfile.h"
 
+/* PID control period. Keep time-based gains and ramps normalized to 11 ms tuning. */
+#define PID_PERIOD_MS      8u
+#define PID_PERIOD_REF_MS  11u
+#define PID_DT_SCALE       ((float)PID_PERIOD_MS / (float)PID_PERIOD_REF_MS)
+#define PID_D_SCALE        ((float)PID_PERIOD_REF_MS / (float)PID_PERIOD_MS)
+#define PID_MS_TO_TICKS(ms) \
+    ((uint16)((((uint32)(ms)) + (uint32)PID_PERIOD_MS - 1u) / (uint32)PID_PERIOD_MS))
+#define PID_SECONDS_TO_TICKS(sec) \
+    ((uint32)((((uint32)(sec) * 1000u) + (uint32)PID_PERIOD_MS - 1u) / (uint32)PID_PERIOD_MS))
+
 extern int16 base_speed;
+extern int16 speed_dbg_out;
+extern int16 steer_dbg_out;
+extern uint8 speed_dbg_vq_pct;
+extern uint8 speed_dbg_pre_lock;
+extern int16 speed_dbg_raw;
+extern int16 speed_dbg_plan;
+extern uint8 speed_dbg_reason;
 
 /* Runtime menu variables, defined in Menu.c. */
 extern int16 motor_speed;
@@ -11,6 +28,10 @@ extern int16 pid_kp;
 extern int16 pid_ki;
 extern int16 pid_kd;
 extern int16 yaw_kp;
+
+extern int16 cascade_en;
+extern int16 yaw_kd;
+extern int16 yaw_damp_gain;
 
 extern int16 ra_hard_inner;
 extern int16 ra_hard_outer;
@@ -40,6 +61,7 @@ extern uint8 route_dbg_total;
 extern uint8 route_dbg_flag;
 extern uint8 route_dbg_count;
 extern uint8 route_dbg_action;
+extern volatile uint8 vacuum_enable;
 
 /* Steering PD. */
 #define STEER_KP  ((float)pid_kp * 0.8f)
@@ -47,24 +69,24 @@ extern uint8 route_dbg_action;
 #define STEER_MAX 4000.0f
 #define STEER_DEADZONE 1
 #define STEER_SOFT_END 6
-#define STEER_SLEW_MAX 250.0f
+#define STEER_SLEW_MAX 320.0f
 #define STEER_GAIN_SPEED_START 180
 #define STEER_GAIN_SPEED_END 800
 #define STEER_GAIN_CURVE_T1 10
 #define STEER_GAIN_CURVE_T2 38
-#define STEER_FAST_KP_PCT 75
+#define STEER_FAST_KP_PCT 90
 #define STEER_FAST_KD_PCT 115
 #define STEER_CURVE_KP_PCT 125
 #define STEER_CURVE_KD_PCT 135
 #define STEER_FF_SPEED_START 180
 #define STEER_FF_SPEED_END 800
 #define STEER_FF_MAX 650.0f
-#define STEER_FF_FILTER_ALPHA 0.70f
+#define STEER_FF_FILTER_ALPHA 0.55f
 #define STEER_DIFF_MIN_LIMIT 250.0f
 #define STEER_DIFF_MAX_LIMIT 1800.0f
-#define STEER_DIFF_NORMAL_PCT 85
-#define STEER_DIFF_STRAIGHT_PCT 45
-#define STEER_DIFF_RECOVER_PCT 110
+#define STEER_DIFF_NORMAL_PCT 95
+#define STEER_DIFF_STRAIGHT_PCT 75
+#define STEER_DIFF_RECOVER_PCT 120
 
 /* Speed PI. */
 #define SPEED_KP 0.5f
@@ -75,68 +97,86 @@ extern uint8 route_dbg_action;
 #define SPEED_ACCEL_FF_GAIN 0.35f
 #define SPEED_ACCEL_FF_LIMIT 180.0f
 #define SPEED_FACTOR_MAX 5.0f
-#define SPEED_STRAIGHT_VALID_ROWS 42u
-#define SPEED_STRAIGHT_ERR_MAX 4
-#define SPEED_STRAIGHT_LOOKAHEAD_MAX 5
-#define SPEED_STRAIGHT_TREND_MAX 5
-#define SPEED_STRAIGHT_CONFIRM_FRAMES 6u
+#define SPEED_STRAIGHT_VALID_ROWS 35u
+#define SPEED_STRAIGHT_ERR_MAX 6
+#define SPEED_STRAIGHT_LOOKAHEAD_MAX 8
+#define SPEED_STRAIGHT_TREND_MAX 8
+#define SPEED_SYM_VALID_ROWS 30u
+#define SPEED_SYM_ERR_MAX 12
+#define SPEED_STRAIGHT_CONFIRM_FRAMES 4u
 #define SPEED_STRAIGHT_BOOST_PCT 105
-#define SPEED_STRAIGHT_STEER_PCT 85
+#define SPEED_STRAIGHT_STEER_PCT 100
 #define SPEED_LOOKAHEAD_SLOW_T1 8
 #define SPEED_LOOKAHEAD_SLOW_T2 28
 #define SPEED_LOOKAHEAD_MIN_PCT 55
 #define SPEED_TREND_SLOW_T1 6
 #define SPEED_TREND_SLOW_T2 24
 #define SPEED_TREND_MIN_PCT 60
-#define SPEED_VISION_BAD_VALID_ROWS 22u
-#define SPEED_VISION_BAD_PCT 35
+#define SPEED_VISION_BAD_VALID_ROWS 18u
+#define SPEED_VISION_BAD_PCT 40
+#define SPEED_QUALITY_GOOD_ROWS 35u
+#define SPEED_QUALITY_ROW_MIN_PCT 70
+#define SPEED_ERR_JUMP_T1 10
+#define SPEED_ERR_JUMP_T2 28
+#define SPEED_ERR_JUMP_MIN_PCT 60
 #define SPEED_LINE_LOST_PCT 25
-#define SPEED_RAMP_UP_STEP 25
+#define SPEED_RAMP_UP_STEP 320
+#define SPEED_RAMP_STRAIGHT_UP_STEP 900
 #define SPEED_RAMP_DOWN_STEP 180
 
 #define MAX_DUTY 5000.0f
-#define ERROR_FILTER_ALPHA 0.60f
+#define VAC_PWM_CH ATOM0_CH0_P21_2
+#define VAC_PWM_FREQ 10000u
+#define VAC_PWM_DUTY 3000u
+#define ERROR_FILTER_ALPHA 0.40f
 
 /* Keep normal-line yaw compensation disabled by default.
  * IMU is used below only as a hard-turn exit reference. */
 #define YAW_COMP_ENABLE 0
 #define YAW_DEADZONE 1.0f
 
-/* RA state timing, one frame is 11 ms. */
-#define RA_HARD_TIMEOUT          15u
+/* RA state timing, one frame is PID_PERIOD_MS. */
+#define RA_HARD_TIMEOUT          18u
 #define RA_FAST_SPEED_START      520
-#define RA_FAST_HARD_TIMEOUT     26u
-#define RA_CROSS_HARD_TIMEOUT    32u
+#define RA_FAST_HARD_TIMEOUT     24u
+#define RA_CROSS_HARD_TIMEOUT    20u
 #define RA_TIMEOUT_FRAMES        150u
-#define RA_WAIT_TIMEOUT          12u
-#define RA_SLOW_TIMEOUT          24u
+#define RA_WAIT_TIMEOUT          5u
+#define RA_SLOW_TIMEOUT          45u
 #define RA_HARD_MIN_FRAMES       10u
-#define RA_CROSS_HARD_MIN_FRAMES 24u
+#define RA_HARD_RAMP_FRAMES      1u
+#define RA_CROSS_HARD_MIN_FRAMES 10u
 #define RA_EXIT_VALID_ROWS       12u
 #define RA_EXIT_ERROR_MAX        18
 #define RA_EXIT_CONFIRM_FRAMES   3u
-#define RA_RECOVER_MIN_FRAMES    12u
-#define RA_RECOVER_MAX_FRAMES    42u
-#define RA_RECOVER_SPEED_PCT     60
-#define RA_RECOVER_STEER_PCT     105
+#define RA_RECOVER_MIN_FRAMES    1u
+#define RA_RECOVER_MAX_FRAMES    2u
+#define RA_RECOVER_SPEED_PCT     100
+#define RA_RECOVER_STEER_PCT     140
 #define RA_RECOVER_VALID_ROWS    25u
 #define RA_RECOVER_ERROR_MAX     12
 #define RA_RECOVER_LOOKAHEAD_MAX 14
 #define RA_RECOVER_TREND_MAX     16
-#define RA_RECOVER_CONFIRM_FRAMES 5u
-#define RA_RECOVER_NEAR_DETECT_MIN_FRAMES 4u
-#define RA_RECOVER_YAW_TARGET_DEG 90.0f
-#define RA_RECOVER_YAW_KP         3.0f
-#define RA_RECOVER_YAW_MAX        180.0f
-#define RA_RECOVER_YAW_DEADZONE   6.0f
+#define RA_RECOVER_CONFIRM_FRAMES 1u
+#define RA_RECOVER_NEAR_DETECT_MIN_FRAMES 1u
+#define RA_RECOVER_YAW_TARGET_DEG 84.0f
+#define RA_RECOVER_YAW_KP         0.0f
+#define RA_RECOVER_YAW_MAX        280.0f
+#define RA_RECOVER_YAW_DEADZONE   3.0f
+#define RA_RECOVER_SEED_STEER_PCT 35
 #define RA_FAST_DIRECT_YAW_DEG    82.0f
-#define RA_FAST_CAMERA_MIN_YAW    65.0f
-#define RA_CROSS_HARD_YAW_DEG     75.0f
+#define RA_DIRECT_CAMERA_MIN_YAW  30.0f
+#define RA_FAST_CAMERA_MIN_YAW    56.0f
+#define RA_CROSS_HARD_YAW_DEG     56.0f
+#define RA_CROSS_CAMERA_MIN_YAW   34.0f
+#define RA_DIRECT_TURN_ROW_OFFSET 8u
+#define RA_COMPLEX_TURN_ROW_OFFSET 0u
+#define RA_COMPLEX_DUTY_PCT       95
 #define RA_STRAIGHT_FRAMES       55u
-#define TURN_SHIELD_MIN_FRAMES   3u
-#define TURN_SHIELD_MAX_FRAMES   10u
-#define TURN_SHIELD_DIST_SUM     1500u
-#define TURN_SHIELD_NEAR_ALLOW_FRAMES 4u
+#define TURN_SHIELD_MIN_FRAMES   1u
+#define TURN_SHIELD_MAX_FRAMES   3u
+#define TURN_SHIELD_DIST_SUM     500u
+#define TURN_SHIELD_NEAR_ALLOW_FRAMES 1u
 #define RULES_DONE_DELAY         136u
 
 /* 直角和丢线保底。 */
@@ -155,6 +195,17 @@ extern uint8 route_dbg_action;
 #define SINGLE_EDGE_POST_TURN_MS 500u
 
 extern uint8 g_post_edge_side;
+
+/* Cascade PID: image outer + yaw_rate inner. */
+#define CAS_POS_KP          0.48f
+#define CAS_TREND_KD        0.72f
+#define CAS_LA_K            0.60f
+#define CAS_TARGET_MAX      120.0f
+#define CAS_TARGET_FILTER   0.55f
+#define CAS_YAW_KP_SCALE    0.10f
+#define CAS_YAW_KD_SCALE    0.10f
+#define CAS_DEADZONE_DPS    1.0f
+#define YAW_DAMP_SCALE      0.18f
 
 void line_pid_init(void);
 void line_pid_control(void);
