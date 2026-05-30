@@ -142,10 +142,23 @@ typedef struct
 #define RA_PRE_END_ROW      28
 #define RA_PRE_LOST_THRESH  2
 #define RA_PRE_EDGE_MARGIN  5
+#define RA_PRE_FAR_START_ROW 28
+#define RA_PRE_FAR_END_ROW   4
+#define RA_PRE_FAR_WIDTH_MIN 14
+#define RA_PRE_FAR_LEFT_COL  32
+#define RA_PRE_FAR_RIGHT_COL 68
+#define RA_PRE_FAR_OPEN_ROWS 2
+#define RA_PRE_VALID_ROWS_LOW 35
+#define RA_PRE_CENTER_SPAN_MIN 8
+#define RA_PRE_COMPONENT_OPEN_ROWS 5
+#define RA_PRE_COMPONENT_CENTER_SPAN 30
+#define RA_PRE_COMPONENT_VALID_ROWS 36
+#define RA_PRE_SLOW_OFF_FRAMES 4
 
 extern uint8 g_ra_flag;
 extern uint8 g_ra_pre_flag;
 extern uint8 g_ra_pre_dir;
+extern uint8 g_ra_pre_slow_flag;
 extern uint8 g_sym_component_flag;
 extern IntersectionResult_t g_inter_result;
 extern uint8 g_ip_max_row;

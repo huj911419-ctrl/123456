@@ -378,7 +378,7 @@ void draw_line(void)
      *   左列速度 = receive_left_speed_data（左侧电机实际速度反馈）
      *   右列速度 = receive_right_speed_data（右侧电机实际速度反馈）
      *   RA = g_ra_flag（路口/直角标志，0=无，1~5=不同类型）
-     *   PR = g_ra_pre_flag（预检测标志，提前减速用）
+     *   PR = 预减速标志（g_ra_pre_flag 或 g_ra_pre_slow_flag）
      *   ST = ra_dbg_state（RA 状态机当前状态，用于调试）
      *   BS = base_speed（基础速度，速度规划的输出）
      *   PH = ra_dbg_phase（RA 阶段：WAIT/SLOW/APPROACH/HARD/RECOVER）
@@ -398,7 +398,9 @@ void draw_line(void)
     tft180_show_string(112, 16, "RA");                                 /* 路口/直角标志 */
     tft180_show_int(124, 16, (int32)g_ra_flag, 2);
     tft180_show_string(112, 24, "PR");                                 /* 预检测标志 */
-    tft180_show_int(124, 24, (int32)g_ra_pre_flag, 2);
+    tft180_show_int(124, 24,
+                    (int32)((g_ra_pre_flag || g_ra_pre_slow_flag) ? 1u : 0u),
+                    2);
     tft180_show_string(112, 32, "ST");                                 /* RA状态 */
     tft180_show_int(124, 32, (int32)ra_dbg_state, 2);
     tft180_show_string(112, 40, "PH");                                 /* RA阶段 */

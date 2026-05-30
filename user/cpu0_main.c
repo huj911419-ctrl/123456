@@ -1,7 +1,6 @@
 #include "zf_common_headfile.h"
 #include "IMU.h"
 #include "Menu.h"
-#include "Pid.h"
 #include "ImageTransfer.h"
 
 extern int16 cam_exposure;
@@ -29,7 +28,7 @@ int core0_main(void)
     /* 初始化摄像头 */
     mt9v03x_init();
     mt9v03x_set_exposure_time((uint16)cam_exposure);
-    //gpio_init(P20_8, GPO, 0, GPO_PUSH_PULL);
+   // gpio_init(P20_8, GPO, 0, GPO_PUSH_PULL);
    // gpio_init(P20_9, GPO, 0, GPO_PUSH_PULL);
    // gpio_init(P23_1, GPO, 0, GPO_PUSH_PULL);
    //gpio_init(P22_0, GPO, 0, GPO_PUSH_PULL);
@@ -50,10 +49,11 @@ int core0_main(void)
     /* 初始化IMU角度测量单元 */
     imu_init();//////
 
-    pwm_init(VAC_PWM_CH, VAC_PWM_FREQ, 0u);
 
-    /* 初始化PID周期中断（PID在ISR中直接调用） */
-   pit_ms_init(CCU60_CH0, PID_PERIOD_MS);
+    
+
+    /* 初始化11ms周期中断（PID在ISR中直接调用） */
+   pit_ms_init(CCU60_CH0, 11);
 
     /* 初始化按键 */
     key_init_all();
@@ -64,9 +64,8 @@ int core0_main(void)
     while (TRUE)
     {
         /* 帧同步 */
-        if (mt9v03x_finish_flag)
-        {
-            mt9v03x_finish_flag = 0;
+        while (!mt9v03x_finish_flag);
+       mt9v03x_finish_flag = 0;
 
         /* 更新赛道融合检测结果 */
         system_start();
@@ -87,8 +86,6 @@ int core0_main(void)
 #endif
 
         /* 按键处理 */
-        }
-
         key_process();
 
         /* 显示菜单 */

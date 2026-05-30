@@ -892,6 +892,7 @@ static void turn_shield_start(void)         /* 启动转弯屏蔽 */
     g_ra_flag = 0u;                         /* 清除RA flag */
     g_ra_pre_flag = 0u;                     /* 清除RA预检测flag */
     g_ra_pre_dir = 0u;
+    g_ra_pre_slow_flag = 0u;
 }
 
 /* avg_wheel_speed_abs - 计算左右轮平均速度绝对值（用于转弯屏蔽距离累计）
@@ -923,6 +924,7 @@ static void turn_shield_update(void)        /* 转弯屏蔽帧更新 */
     {
         g_ra_pre_flag = 0u;                 /* 清除预检测flag */
         g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
         turn_shield_reset();                /* 复位转弯屏蔽 */
         return;                             /* 提前解除 */
     }
@@ -933,6 +935,7 @@ static void turn_shield_update(void)        /* 转弯屏蔽帧更新 */
         g_ra_flag = 0u;                     /* 清除RA flag */
         g_ra_pre_flag = 0u;                 /* 清除RA预检测flag */
         g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
     }
 
     /* 退出条件：帧数超限 或 帧数+距离都达标 */
@@ -1003,6 +1006,7 @@ static void ra_finish_ex(uint8 keep_flag, uint8 use_shield) /* RA结束扩展 */
     {
         g_ra_pre_flag = 0u;                /* 仅清除预检测flag */
         g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
     }
     ra_reset();                             /* 复位RA状态机 */
 }
@@ -1025,6 +1029,7 @@ static void ra_enter_recover(void)          /* 进入RECOVER阶段 */
     turn_right_led_off();                   /* 关闭右转指示LED */
     g_ra_flag = 0u;                         /* 清除RA flag */
     g_ra_pre_dir = 0u;
+    g_ra_pre_slow_flag = 0u;
     s_ra_phase = RA_PH_RECOVER;             /* 切换到RECOVER阶段 */
     s_ra_phase_cnt = 0u;                    /* 阶段计数清零 */
     s_ra_recover_cnt = 0u;                  /* RECOVER帧计数清零 */
@@ -1141,6 +1146,7 @@ void line_pid_init(void)                    /* PID控制器初始化 */
     vacuum_enable = 0u;                     /* 负压显示状态清零 */
     s_rules_done = 0u;                      /* 路线完成标志清零 */
     s_rules_done_timer = 0u;                /* 路线完成计时器清零 */
+    g_ra_pre_slow_flag = 0u;                /* 清除预减速专用标志 */
     turn_shield_reset();                    /* 复位转弯屏蔽 */
     single_edge_reset();                    /* 复位单边巡线 */
     lost_search_reset();                    /* 复位丢线搜索 */
@@ -2372,6 +2378,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
         lost_search_reset();                 /* 复位丢线搜索 */
         reset_speed_planner();               /* 复位速度规划器 */
         reset_speed_ff_state();              /* 复位速度前馈 */
+        g_ra_pre_slow_flag = 0u;             /* 清除预减速专用标志 */
         ra_reset();                          /* 复位RA状态机 */
         return;                              /* 返回 */
     }
@@ -2396,6 +2403,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
         lost_search_reset();                 /* 复位丢线搜索 */
         reset_speed_planner();               /* 复位速度规划器 */
         reset_speed_ff_state();              /* 复位速度前馈 */
+        g_ra_pre_slow_flag = 0u;             /* 清除预减速专用标志 */
         ra_reset();                          /* 复位RA状态机 */
         return;                              /* 返回 */
     }
@@ -2424,6 +2432,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
             lost_search_reset();             /* 复位丢线搜索 */
             reset_speed_planner();           /* 复位速度规划器 */
             reset_speed_ff_state();          /* 复位速度前馈 */
+            g_ra_pre_slow_flag = 0u;         /* 清除预减速专用标志 */
             ra_reset();                      /* 复位RA状态机 */
             return;                          /* 返回 */
         }
@@ -2471,8 +2480,8 @@ void line_pid_control(void)                  /* 主PID控制入口 */
             s_pre_timeout = 0u;              /* 超时清零 */
         }
 
-        /* 检测到pre_flag且无正式flag → 锁定预减速 */
-        if (g_ra_pre_flag && g_ra_flag == 0u) /* 有预检测flag无正式flag */
+        /* 检测到方向预判或远场预减速信号，且无正式flag → 锁定预减速 */
+        if ((g_ra_pre_flag || g_ra_pre_slow_flag) && g_ra_flag == 0u)
         {
             s_pre_lock = 1u;                 /* 锁定预减速 */
             s_pre_timeout = 0u;              /* 超时清零 */
@@ -2480,19 +2489,23 @@ void line_pid_control(void)                  /* 主PID控制入口 */
 
         /* 正式flag到来 → 解除预减速（让RA接管） */
         if (g_ra_flag != 0u)                 /* 有正式RA flag */
+        {
             s_pre_lock = 0u;                 /* 解除锁定 */
+            g_ra_pre_slow_flag = 0u;         /* 正式RA接管后清除预减速专用标志 */
+        }
 
         /* 对称组件（三极管干扰区） → 解除预减速 */
         if (g_sym_component_flag)            /* 检测到对称组件 */
         {
             s_pre_lock = 0u;                 /* 解除锁定 */
             s_pre_timeout = 0u;              /* 超时清零 */
+            g_ra_pre_slow_flag = 0u;         /* 防止元器件远场特征锁住预减速 */
         }
 
-        /* 锁定状态下，pre_flag消失后超时解除 */
+        /* 锁定状态下，预减速信号消失后超时解除 */
         if (s_pre_lock)                      /* 处于锁定状态 */
         {
-            if (!g_ra_pre_flag)              /* pre_flag已消失 */
+            if (!g_ra_pre_flag && !g_ra_pre_slow_flag)
             {
                 /* 恢复直道 → 解除 */
                 if (straight_speed_candidate(pos_err_abs)) /* 满足直道条件 */

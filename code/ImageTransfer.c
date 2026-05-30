@@ -23,7 +23,7 @@
  *   字节10-11: left_speed (int16, 左电机速度)
  *   字节12-13: right_speed (int16, 右电机速度)
  *   字节14:   ra_flag (uint8, RA标志)
- *   字节15:   ra_pre_flag (uint8, 预检测标志)
+ *   字节15:   ra_pre_flag (uint8, 预减速标志)
  *   字节16:   ra_state (uint8, RA状态)
  *   字节17-18: base_speed (int16, 基础速度)
  *   字节19:   ra_phase (uint8, RA阶段)
@@ -163,7 +163,7 @@ void send_image_uart0(void)
     /* ra_flag (uint8) */
     param_data[idx++] = g_ra_flag;
     /* ra_pre_flag (uint8) */
-    param_data[idx++] = g_ra_pre_flag;
+    param_data[idx++] = (uint8)((g_ra_pre_flag || g_ra_pre_slow_flag) ? 1u : 0u);
     /* ra_state (uint8) */
     param_data[idx++] = ra_dbg_state;
     /* base_speed (int16) */

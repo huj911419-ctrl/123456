@@ -1409,6 +1409,7 @@ void track_fusion_update(void)
 /* 直角/弯道预检测标志，1=检测到远场边缘丢失（提前减速信号） */
 uint8 g_ra_pre_flag = 0u;
 uint8 g_ra_pre_dir = 0u;
+uint8 g_ra_pre_slow_flag = 0u;
 
 /**
  * @brief 直角/弯道预检测函数（远场检测，用于提前减速）
@@ -1428,6 +1429,7 @@ void right_angle_pre_detect(void)
     static uint8 s_on_cnt = 0;
     /* 连续未检测到的帧计数（用于滞回清除判断） */
     static uint8 s_off_cnt = 0;
+    static uint8 s_slow_off_cnt = 0u;
 
     /* 右边缘接近图像右边界的行数计数 */
     uint8 right_lost = 0u;
@@ -1435,10 +1437,13 @@ void right_angle_pre_detect(void)
     uint8 left_lost = 0u;
     /* 存在对称分量的行数计数 */
     uint8 sym_component_rows = 0u;
+    uint8 far_open_rows = 0u;
+    int16 far_min_center = TF_IMG_W;
+    int16 far_max_center = -1;
 
-    /* 在预检测行范围(RA_PRE_START_ROW=46 到 RA_PRE_END_ROW=28)内逐行扫描 */
+    /* 近场保留原来的贴边判断；远场用边线打开/中线跳变提前降速。 */
     for (int16 i = (int16)RA_PRE_START_ROW;
-         i > (int16)RA_PRE_END_ROW; i--)
+         i >= (int16)RA_PRE_FAR_END_ROW; i--)
     {
         /* 跳过无效行（无有效边缘对的行） */
         if (!g_tf.row_valid[i])
@@ -1453,19 +1458,57 @@ void right_angle_pre_detect(void)
             g_sym_component_flag = 1u;
         }
 
-        /* 右边缘接近图像右边界（列号 >= TF_IMG_W-5）视为丢失 */
-        if (g_tf.right_edge[i] >= (int16)(TF_IMG_W - RA_PRE_EDGE_MARGIN))
-            right_lost++;
+        if (i > (int16)RA_PRE_END_ROW)
+        {
+            /* 右边缘接近图像右边界（列号 >= TF_IMG_W-5）视为丢失 */
+            if (g_tf.right_edge[i] >= (int16)(TF_IMG_W - RA_PRE_EDGE_MARGIN))
+                right_lost++;
 
-        /* 左边缘接近图像左边界（列号 <= 5）视为丢失 */
-        if (g_tf.left_edge[i] <= (int16)RA_PRE_EDGE_MARGIN)
-            left_lost++;
+            /* 左边缘接近图像左边界（列号 <= 5）视为丢失 */
+            if (g_tf.left_edge[i] <= (int16)RA_PRE_EDGE_MARGIN)
+                left_lost++;
+        }
+
+        if (i <= (int16)RA_PRE_FAR_START_ROW)
+        {
+            int16 width = (int16)(g_tf.right_edge[i] - g_tf.left_edge[i]);
+
+            if (g_tf.center_line[i] < far_min_center)
+                far_min_center = g_tf.center_line[i];
+            if (g_tf.center_line[i] > far_max_center)
+                far_max_center = g_tf.center_line[i];
+
+            if (width >= (int16)RA_PRE_FAR_WIDTH_MIN &&
+                (g_tf.left_edge[i] <= (int16)RA_PRE_FAR_LEFT_COL ||
+                 g_tf.right_edge[i] >= (int16)RA_PRE_FAR_RIGHT_COL))
+            {
+                far_open_rows++;
+            }
+        }
     }
 
     /* 判断是否检测到远场边缘丢失：至少一侧丢失行数达到阈值(2) */
     uint8 detected = (right_lost >= RA_PRE_LOST_THRESH ||
                       left_lost >= RA_PRE_LOST_THRESH) ? 1u : 0u;
     uint8 pre_dir = 0u;
+    int16 far_center_span =
+        (far_max_center >= far_min_center) ?
+        (int16)(far_max_center - far_min_center) : 0;
+    uint8 far_slow_detected =
+        (far_open_rows >= RA_PRE_FAR_OPEN_ROWS ||
+         (g_tf.valid_row_count <= RA_PRE_VALID_ROWS_LOW &&
+          (far_open_rows > 0u ||
+           far_center_span >= (int16)RA_PRE_CENTER_SPAN_MIN))) ? 1u : 0u;
+    uint8 far_component_like =
+        (far_open_rows >= RA_PRE_COMPONENT_OPEN_ROWS &&
+         far_center_span >= (int16)RA_PRE_COMPONENT_CENTER_SPAN &&
+         g_tf.valid_row_count >= RA_PRE_COMPONENT_VALID_ROWS) ? 1u : 0u;
+
+    if (far_component_like)
+    {
+        far_slow_detected = 0u;
+        g_sym_component_flag = 1u;
+    }
 
     if (right_lost >= RA_PRE_LOST_THRESH &&
         right_lost > left_lost)
@@ -1487,11 +1530,26 @@ void right_angle_pre_detect(void)
         s_on_cnt = 0u;
         /* 重置清除计数器 */
         s_off_cnt = 0u;
+        s_slow_off_cnt = 0u;
         /* 清除预检测标志 */
         g_ra_pre_flag = 0u;
         g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
         /* 干扰情况下直接返回 */
         return;
+    }
+
+    if (detected || far_slow_detected)
+    {
+        g_ra_pre_slow_flag = 1u;
+        s_slow_off_cnt = 0u;
+    }
+    else
+    {
+        if (s_slow_off_cnt < 255u)
+            s_slow_off_cnt++;
+        if (s_slow_off_cnt >= RA_PRE_SLOW_OFF_FRAMES)
+            g_ra_pre_slow_flag = 0u;
     }
 
     /* 滞回滤波：防止检测结果在边界处反复抖动 */
@@ -2940,8 +2998,10 @@ void detect_intersection(void)
         inter_side_window_has_road(b_top, b_bottom, b_left, b_right, 2u);
     uint8 right_box_has =
         inter_side_window_has_road(b_top, b_bottom, b_left, b_right, 1u);
-    uint8 left_dir_has = (left_has || left_box_has || left_branch_has) ? 1u : 0u;
-    uint8 right_dir_has = (right_has || right_box_has || right_branch_has) ? 1u : 0u;
+    uint8 left_frame_has = (left_has || left_box_has) ? 1u : 0u;
+    uint8 right_frame_has = (right_has || right_box_has) ? 1u : 0u;
+    uint8 left_dir_has = (left_frame_has || left_branch_has) ? 1u : 0u;
+    uint8 right_dir_has = (right_frame_has || right_branch_has) ? 1u : 0u;
 
     if (g_ra_pre_flag == 0u &&
         left_branch_has && right_branch_has &&
@@ -2957,12 +3017,12 @@ void detect_intersection(void)
     }
 
     /* ---- 路口类型分类逻辑 ---- */
-    /* 先按检测框里的方向组合判断：左右都有路就是 5，不再被 found_side 改成 3/4。 */
-    if (left_dir_has && right_dir_has)
+    /* 3/4/5 只按检测框内的方向组合判断，框外分支只用于 1/2 直角兜底。 */
+    if (left_frame_has && right_frame_has)
         detected = 5u;
-    else if (top_road_has && left_dir_has)
+    else if (top_road_has && left_frame_has)
         detected = 3u;
-    else if (top_road_has && right_dir_has)
+    else if (top_road_has && right_frame_has)
         detected = 4u;
     else if (!top_road_has && pure_ra_ok && ra_dir_hint == 1u &&
              (right_branch_has || found_side == 1u || right_dir_has))
