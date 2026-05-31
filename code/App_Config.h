@@ -6,8 +6,10 @@
 #define RACE_MODE 0
 #endif
 
-/* 1 = skip UART0 image packets while the motor is enabled. */
-#define UART0_IMAGE_OFF_WHEN_RUNNING 1u
+/* Runtime quiet mode default: 0 keeps TFT/UART/menu keys on while running. */
+#define RUN_QUIET_DEFAULT_ENABLE 0
+/* Safety key kept alive in quiet mode: 1=KEY1, 2=KEY2, 3=KEY3, 4=KEY4. */
+#define RUN_QUIET_STOP_KEY      1u
 
 /* 1 = turn on vacuum PWM whenever motor_enable is on. */
 #define VACUUM_RUN_ENABLE 1u

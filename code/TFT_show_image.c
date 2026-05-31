@@ -433,9 +433,15 @@ void draw_line(void)
     tft180_show_int(18, 100, (int32)speed_dbg_reason, 2);
     tft180_show_string(54,  100, "DT");                                /* 框分类 */
     tft180_show_int(72, 100, (int32)g_inter_result.detected_type, 2);
+    tft180_show_string(102, 100, (menu_cursor == 0u) ? ">" : " ");
     tft180_show_string(108, 100, "E");                                 /* 电机使能 */
     tft180_show_int(126, 100, (int32)motor_enable, 1);
 
     tft180_show_string(0,   108, "WC");                                /* 白点计数 */
     tft180_show_int(18, 108, (int32)g_tf_white_count, 4);
+    tft180_show_string(54, 108, "K");                                   /* 原始按键/拨码状态 */
+    tft180_show_int(66, 108, (int32)ui_raw_input_state(), 2);
+    tft180_show_string(102, 108, (menu_cursor == 1u) ? ">" : " ");
+    tft180_show_string(108, 108, "Q");                                  /* 运行静默 */
+    tft180_show_int(126, 108, (int32)run_quiet_enable, 1);
 }

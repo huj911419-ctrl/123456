@@ -66,7 +66,11 @@ int core0_main(void)
     while (TRUE)
     {
         /* 帧同步 */
-        while (!mt9v03x_finish_flag);
+        while (!mt9v03x_finish_flag)
+        {
+            ui_process_keys();
+            menu_show();
+        }
        mt9v03x_finish_flag = 0;
 
         /* 更新赛道融合检测结果 */
@@ -84,16 +88,14 @@ int core0_main(void)
 
 #if !RACE_MODE
         /* 通过UART0发送压缩二值化图像到电脑 */
-#if UART0_IMAGE_OFF_WHEN_RUNNING
-        if (motor_enable == 0)
-#endif
+        if (!run_quiet_active())
         {
             send_image_uart0();
         }
 #endif
 
         /* 按键处理 */
-        key_process();
+        ui_process_keys();
 
         /* 显示菜单 */
         menu_show();

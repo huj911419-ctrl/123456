@@ -15,19 +15,20 @@
                              /* 两个开关均未拨下=选择模式，任一拨下=调节模式 */
 
 /* ==================== 按键消抖与显示刷新参数 ==================== */
-#define DEBOUNCE_CNT 20      /* 按键消抖计数阈值，达到此值才确认按键按下（每次扫描+1） */
-#define RELEASE_CNT 10       /* 按键释放消抖计数阈值，确认按键已松开 */
+#define DEBOUNCE_CNT 3       /* 按键消抖计数阈值，达到此值才确认按键按下（每次扫描+1） */
+#define RELEASE_CNT 3        /* 按键释放消抖计数阈值，确认按键已松开 */
+#define KEY_REPEAT_START_CNT 20u /* 长按开始连调前的等待计数 */
+#define KEY_REPEAT_INTERVAL_CNT 4u /* 长按连调间隔计数 */
 #define MAIN_DRAW_DIV_STOP 1u  /* 停止状态下主页TFT刷新分频系数（1=每个新视觉帧都刷新） */
 #define MAIN_DRAW_DIV_RUN  1u  /* 运行状态下主页TFT刷新分频系数（1=每个新视觉帧都刷新） */
-#define TFT_OFF_WHEN_RUNNING 1u /* 电机和负压都开启后关闭TFT显示以节省CPU资源，0=不关闭 */
 
 /* ==================== 菜单可调参数变量 ==================== */
 /* 每个变量都绑定到菜单的某个条目，用户可通过按键实时修改 */
 
 int16 motor_speed = 200;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
-int16 motor_dir = 1;           /* 电机方向：0=正转，1=反转 */
 int16 motor_enable = 0;       /* 电机使能开关：0=禁用（停止），1=启用（允许运行） */
 int16 motor_run_time =12;     /* 电机最大运行时间（秒） */
+int16 run_quiet_enable = RUN_QUIET_DEFAULT_ENABLE; /* 运行静默模式：运行时关闭TFT/UART图传/普通按键 */
 
 int16 cam_exposure = 600;      /* 摄像头曝光时间（行周期数），值越大画面越亮 */
 
@@ -56,32 +57,20 @@ int16 yaw_kp = 8;             /* IMU级联控制的航向角比例系数Kp */
 /* ==================== 菜单条目定义表 ==================== */
 /* 每个MenuItem包含：显示标签、绑定变量指针、最小值、最大值、步进值 */
 
-/* 主页菜单条目：电机使能开关 */
+/* 主页菜单条目：电机使能和运行静默开关 */
 static MenuItem items_main[] = {
     {"Enable", &motor_enable, 0, 1, 1},       /* 使能开关：0=关，1=开，步进1 */
+    {"Quiet", &run_quiet_enable, 0, 1, 1},    /* 运行静默：1=运行时关闭TFT/UART/普通按键 */
 };
 
-/* 电机页菜单条目：电机速度与方向 */
-static MenuItem items_motor[] = {
+/* 综合调参页：电机、摄像头、PID和速度规划。 */
+static MenuItem items_tune[] = {
     {"Speed", &motor_speed, 0, 600, 20},      /* 速度设定：0~600，步进20 */
-    {"Dir", &motor_dir, 0, 1, 1},             /* 方向设定：0或1，步进1 */
-};
-
-/* 摄像头页菜单条目：二值化偏移量与曝光时间 */
-static MenuItem items_cam[] = {
     {"Bias", &threshold_bias, -50, 50, 5},    /* Otsu阈值偏移补偿：-50~50，步进5 */
     {"Expose", &cam_exposure, 100, 800, 10},  /* 曝光时间：100~800，步进10 */
-};
-
-/* PID页菜单条目：转向PD控制器三个参数 */
-static MenuItem items_pid[] = {
     {"Kp", &pid_kp, 0, 100, 1},              /* 比例系数：0~100，步进1 */
     {"Ki", &pid_ki, 0, 50, 1},               /* 积分系数：0~50，步进1 */
     {"Kd", &pid_kd, 0, 50, 1},               /* 微分系数：0~50，步进1 */
-};
-
-/* 速度规划页菜单条目：速度分段控制参数 */
-static MenuItem items_speed[] = {
     {"StrErr", &sp_err_t1, 1, 50, 1},        /* 直线误差阈值：用于判断是否在直线段 */
     {"CrvErr", &sp_err_t2, 10, 80, 1},       /* 弯道误差阈值：用于判断是否在急弯 */
     {"StrSpd%", &sp_ratio_1, 20, 100, 5},    /* 直线速度百分比：直道时的目标速度 */
@@ -113,20 +102,23 @@ static MenuItem items_imu[] = {
 };
 
 /* ==================== 页面定义表 ==================== */
-/* g_pages数组定义了7个菜单页面，每个页面包含标题、条目数组、条目数和自定义绘制函数 */
+/* g_pages数组定义了菜单页面，每个页面包含标题、条目数组、条目数和自定义绘制函数 */
 /* draw为NULL表示使用default_draw默认绘制函数 */
 static MenuPageDef g_pages[PAGE_MAX] = {
-    { .title = "MAIN",  .items = items_main,  .item_count = 1,  .draw = NULL },  /* 第0页：主页，显示使能开关和路线调试信息 */
-    { .title = "MOTOR", .items = items_motor, .item_count = 2,  .draw = NULL },  /* 第1页：电机页，设置速度和方向 */
-    { .title = "CAM",   .items = items_cam,   .item_count = 2,  .draw = NULL },  /* 第2页：摄像头页，调整二值化偏移和曝光 */
-    { .title = "PID",   .items = items_pid,   .item_count = 3,  .draw = NULL },  /* 第3页：PID页，调整转向PD三个参数 */
-    { .title = "SPEED", .items = items_speed, .item_count = 6,  .draw = NULL },  /* 第4页：速度规划页，调整分段速度和耦合参数 */
-    { .title = "RA",    .items = items_ra,    .item_count = 10, .draw = NULL },  /* 第5页：直角弯页，调整RA状态机各阶段参数 */
-    { .title = "IMU",   .items = items_imu,   .item_count = 4,  .draw = NULL },  /* 第6页：IMU页，调整航向角级联控制参数 */
+    { .title = "MAIN",  .items = items_main,  .item_count = 2,  .draw = NULL },  /* 第0页：主页，显示使能和静默开关 */
+    { .title = "TUNE",  .items = items_tune,  .item_count = 12, .draw = NULL },  /* 第1页：电机/摄像头/PID/速度规划 */
+    { .title = "RA",    .items = items_ra,    .item_count = 10, .draw = NULL },  /* 第2页：直角弯页，调整RA状态机各阶段参数 */
+    { .title = "IMU",   .items = items_imu,   .item_count = 4,  .draw = NULL },  /* 第3页：IMU页，调整航向角级联控制参数 */
 };
 
 MenuPage now_page = PAGE_MAIN;   /* 当前显示的页面编号，初始为主页 */
 uint8 menu_cursor = 0u;          /* 当前页面内的光标位置（指向第几个菜单条目），从0开始 */
+static uint8 s_page_cursor[PAGE_MAX] = {0u}; /* 每页记住自己的光标位置 */
+static uint8 s_repeat_key = 0u;              /* 当前长按连调按键 */
+static uint8 s_repeat_start_cnt = 0u;        /* 长按开始等待计数 */
+static uint8 s_repeat_interval_cnt = 0u;     /* 长按连调间隔计数 */
+
+static void cursor_clamp(void);
 
 /* ==================== 拨码开关模式检测 ==================== */
 /**
@@ -155,9 +147,77 @@ static uint8 dip_is_adjust_mode(void)
  */
 static void menu_apply_adjusted_value(void)
 {
-    /* 当前在摄像头页面且光标在Expose条目（索引1）上时，立即设置曝光时间 */
-    if (now_page == PAGE_CAM && menu_cursor == 1u)
+    cursor_clamp();
+
+    /* 当前调节曝光条目时，立即设置曝光时间 */
+    if (g_pages[now_page].items[menu_cursor].value == &cam_exposure)
         mt9v03x_set_exposure_time((uint16)cam_exposure);  /* 调用摄像头驱动设置新的曝光值 */
+}
+
+static uint8 key_raw_read(void)
+{
+    if (gpio_get_level(KEY1) == 0)       /* 检测KEY1是否按下（低电平有效） */
+        return 1u;                       /* KEY1按下，记录编号1 */
+    if (gpio_get_level(KEY2) == 0)       /* 检测KEY2是否按下 */
+        return 2u;                       /* KEY2按下，记录编号2 */
+    if (gpio_get_level(KEY3) == 0)       /* 检测KEY3是否按下 */
+        return 3u;                       /* KEY3按下，记录编号3 */
+    if (gpio_get_level(KEY4) == 0)       /* 检测KEY4是否按下 */
+        return 4u;                       /* KEY4按下，记录编号4 */
+
+    return 0u;
+}
+
+static void key_repeat_reset(void)
+{
+    s_repeat_key = 0u;
+    s_repeat_start_cnt = 0u;
+    s_repeat_interval_cnt = 0u;
+}
+
+static uint8 key_repeat_adjust_event(uint8 key_event, uint8 adjust_mode)
+{
+    uint8 raw_key = key_raw_read();
+
+    if (!adjust_mode || (raw_key != 3u && raw_key != 4u))
+    {
+        key_repeat_reset();
+        return key_event;
+    }
+
+    if (key_event == 3u || key_event == 4u)
+    {
+        s_repeat_key = key_event;
+        s_repeat_start_cnt = 0u;
+        s_repeat_interval_cnt = 0u;
+        return key_event;
+    }
+
+    if (key_event != 0u)
+        return key_event;
+
+    if (s_repeat_key != raw_key)
+    {
+        s_repeat_key = raw_key;
+        s_repeat_start_cnt = 0u;
+        s_repeat_interval_cnt = 0u;
+        return 0u;
+    }
+
+    if (s_repeat_start_cnt < KEY_REPEAT_START_CNT)
+    {
+        s_repeat_start_cnt++;
+        return 0u;
+    }
+
+    s_repeat_interval_cnt++;
+    if (s_repeat_interval_cnt >= KEY_REPEAT_INTERVAL_CNT)
+    {
+        s_repeat_interval_cnt = 0u;
+        return raw_key;
+    }
+
+    return 0u;
 }
 
 /* ==================== 四状态机按键扫描 ==================== */
@@ -189,18 +249,7 @@ static uint8 key_scan(void)
     static uint16 cnt = 0u;                  /* 消抖/释放计数器，用于计数连续检测次数 */
     static uint8 last_key = 0u;              /* 记录正在消抖的按键编号，用于对比一致性 */
 
-    uint8 cur_key = 0u;  /* 当前扫描到的按键编号，0表示无按键按下 */
-
-    /* 轮询四个按键GPIO引脚，低电平表示按下（按键接地，内部上拉） */
-    /* 优先级：KEY1 > KEY2 > KEY3 > KEY4（同时按下时取编号小的） */
-    if (gpio_get_level(KEY1) == 0)       /* 检测KEY1是否按下（低电平有效） */
-        cur_key = 1u;                     /* KEY1按下，记录编号1 */
-    else if (gpio_get_level(KEY2) == 0)  /* 检测KEY2是否按下 */
-        cur_key = 2u;                     /* KEY2按下，记录编号2 */
-    else if (gpio_get_level(KEY3) == 0)  /* 检测KEY3是否按下 */
-        cur_key = 3u;                     /* KEY3按下，记录编号3 */
-    else if (gpio_get_level(KEY4) == 0)  /* 检测KEY4是否按下 */
-        cur_key = 4u;                     /* KEY4按下，记录编号4 */
+    uint8 cur_key = key_raw_read();  /* 当前扫描到的按键编号，0表示无按键按下 */
 
     switch (state)  /* 根据当前状态机状态执行对应逻辑 */
     {
@@ -288,6 +337,25 @@ static void cursor_clamp(void)
         menu_cursor = max_items - 1u;  /* 钳位到最后一个条目 */
 }
 
+uint8 run_quiet_active(void)
+{
+    return (motor_enable != 0 && run_quiet_enable != 0u) ? 1u : 0u;
+}
+
+uint8 ui_raw_input_state(void)
+{
+    uint8 state = 0u;
+
+    if (gpio_get_level(KEY1) == 0) state |= 0x01u;
+    if (gpio_get_level(KEY2) == 0) state |= 0x02u;
+    if (gpio_get_level(KEY3) == 0) state |= 0x04u;
+    if (gpio_get_level(KEY4) == 0) state |= 0x08u;
+    if (gpio_get_level(SWITCH1) == 0) state |= 0x10u;
+    if (gpio_get_level(SWITCH2) == 0) state |= 0x20u;
+
+    return state;
+}
+
 /* ==================== GPIO初始化 ==================== */
 /**
  * key_init_all() - 初始化所有按键、拨码开关和LED的GPIO引脚
@@ -331,6 +399,12 @@ void key_init_all(void)
 void key_process(void)
 {
     uint8 key = key_scan();  /* 调用按键扫描状态机，获取确认的按键事件编号 */
+    uint8 adjust_mode = dip_is_adjust_mode();   /* 读取拨码开关，判断当前是选择模式还是调节模式 */
+
+    key = key_repeat_adjust_event(key, adjust_mode); /* 调节模式下支持KEY3/KEY4长按连调 */
+
+    if (run_quiet_active())
+        return;
 
     if (key == 0u)           /* 无按键事件 */
         return;              /* 直接返回，不执行任何操作 */
@@ -338,8 +412,11 @@ void key_process(void)
     /* KEY1：切换到下一页（循环翻页） */
     if (key == 1u)
     {
+        s_page_cursor[now_page] = menu_cursor;                /* 保存当前页面光标 */
         now_page = (MenuPage)((now_page + 1u) % PAGE_MAX);  /* 页码+1，到末尾循环回第0页 */
-        menu_cursor = 0u;                                    /* 翻页后光标重置到第一个条目 */
+        menu_cursor = s_page_cursor[now_page];                /* 恢复目标页面上次光标 */
+        cursor_clamp();                                      /* 防御页面条目数变化 */
+        s_page_cursor[now_page] = menu_cursor;                /* 保存钳位后的光标 */
 #if !RACE_MODE
         tft180_clear();  /* 非比赛模式下清屏，避免上一页的残留内容叠加显示 */
 #endif
@@ -349,8 +426,11 @@ void key_process(void)
     /* KEY2：切换到上一页（循环翻页） */
     if (key == 2u)
     {
+        s_page_cursor[now_page] = menu_cursor;                /* 保存当前页面光标 */
         now_page = (now_page == 0u) ? (MenuPage)(PAGE_MAX - 1u) : (MenuPage)(now_page - 1u);  /* 页码-1，第0页循环到末页 */
-        menu_cursor = 0u;                                    /* 翻页后光标重置到第一个条目 */
+        menu_cursor = s_page_cursor[now_page];                /* 恢复目标页面上次光标 */
+        cursor_clamp();                                      /* 防御页面条目数变化 */
+        s_page_cursor[now_page] = menu_cursor;                /* 保存钳位后的光标 */
 #if !RACE_MODE
         tft180_clear();  /* 非比赛模式下清屏 */
 #endif
@@ -358,7 +438,6 @@ void key_process(void)
     }
 
     /* 以下处理KEY3/KEY4，根据拨码开关状态决定是移动光标还是调节参数 */
-    uint8 adjust_mode = dip_is_adjust_mode();   /* 读取拨码开关，判断当前是选择模式还是调节模式 */
     MenuPageDef *page = &g_pages[now_page];     /* 获取当前页面的定义结构体指针 */
     uint8 item_cnt = page->item_count;          /* 当前页面的菜单条目总数 */
 
@@ -372,6 +451,8 @@ void key_process(void)
             menu_cursor = (menu_cursor == 0u) ? (item_cnt - 1u) : (menu_cursor - 1u);  /* KEY3光标上移，到顶循环到底部 */
         if (key == 4u)
             menu_cursor = (menu_cursor + 1u) % item_cnt;  /* KEY4光标下移，到底循环到顶部 */
+
+        s_page_cursor[now_page] = menu_cursor;  /* 记住当前页面光标 */
     }
     else                    /* 拨码开关拨下 = 调节模式 */
     {
@@ -398,6 +479,49 @@ void key_process(void)
         }
 
         menu_apply_adjusted_value();  /* 参数修改后立即应用到硬件（如曝光时间） */
+    }
+}
+
+uint8 quiet_stop_key_pressed(void)
+{
+    uint8 stop_pressed = 0u;
+
+    switch (RUN_QUIET_STOP_KEY)
+    {
+    case 1u:
+        stop_pressed = (gpio_get_level(KEY1) == 0) ? 1u : 0u;
+        break;
+    case 2u:
+        stop_pressed = (gpio_get_level(KEY2) == 0) ? 1u : 0u;
+        break;
+    case 3u:
+        stop_pressed = (gpio_get_level(KEY3) == 0) ? 1u : 0u;
+        break;
+    case 4u:
+        stop_pressed = (gpio_get_level(KEY4) == 0) ? 1u : 0u;
+        break;
+    default:
+        break;
+    }
+
+    return stop_pressed;
+}
+
+void key_process_quiet(void)
+{
+    if (quiet_stop_key_pressed())
+        motor_enable = 0;
+}
+
+void ui_process_keys(void)
+{
+    if (run_quiet_active())
+    {
+        key_process_quiet();
+    }
+    else
+    {
+        key_process();
     }
 }
 
@@ -535,9 +659,9 @@ static void default_draw(MenuPageDef *page)
 /**
  * menu_show() - 菜单页面显示主函数，由主循环周期性调用
  *
- * 根据RACE_MODE和TFT_OFF_WHEN_RUNNING配置决定是否执行绘制：
+ * 根据RACE_MODE和运行静默模式决定是否执行绘制：
  *   - RACE_MODE=1时直接返回，比赛模式下不更新TFT以节省时间
- *   - TFT_OFF_WHEN_RUNNING=1时，运行期间完全关闭TFT显示
+ *   - run_quiet_active()=1时，运行期间完全关闭TFT显示
  *
  * 对于MAIN页面，使用draw_line()在TFT上显示二值化图像和叠加信息，
  * 并通过分频计数器控制刷新频率（运行和停止状态可设不同频率）。
@@ -557,9 +681,8 @@ void menu_show(void)
     static uint32 s_last_main_frame = 0xFFFFFFFFu; /* 上次主页TFT已显示的视觉帧号 */
     uint8 need_default_draw = 1u;             /* 是否需要绘制菜单文字 */
 
-#if TFT_OFF_WHEN_RUNNING
     /* Running display-off mode: motor enabled means the car is running. */
-    if (motor_enable != 0)
+    if (run_quiet_active())
     {
         if (s_tft_run_off == 0u)  /* 刚进入运行状态（之前TFT是开着的） */
         {
@@ -577,7 +700,6 @@ void menu_show(void)
         s_main_draw_cnt = 0u;    /* 重置分频计数器 */
         s_tft_run_off = 0u;      /* 标记TFT已恢复显示 */
     }
-#endif
 
     if (now_page == PAGE_MAIN)  /* 当前为主页 */
     {

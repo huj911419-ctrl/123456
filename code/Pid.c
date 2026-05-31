@@ -2392,6 +2392,9 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
  *   9. 正常PID控制 */
 void line_pid_control(void)                  /* 主PID控制入口 */
 {
+    if (run_quiet_active() && quiet_stop_key_pressed())
+        motor_enable = 0;
+
     /* ===== 电机未使能：全部复位 ===== */
     if (motor_enable == 0)                   /* 电机未使能 */
     {
