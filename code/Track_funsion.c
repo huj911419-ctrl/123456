@@ -27,7 +27,7 @@ volatile uint8 g_tf_image_ready = 0u;
 volatile uint32 g_tf_frame_count = 0u;
 volatile uint16 g_tf_white_count = 0u;
 
-/* 降噪用的临时缓冲区，双缓冲模式：先写入此数组，完成后拷贝回 Image_Binarize */
+/* 未降噪二值图临时缓冲区，降噪后直接写入 Image_Binarize */
 static uint8 s_bin_tmp[TF_IMG_H][TF_IMG_W];
 
 /* ---- Otsu 内部变量 ---- */
@@ -36,7 +36,7 @@ static uint8 s_bin_tmp[TF_IMG_H][TF_IMG_W];
 static uint8 s_otsu_cnt = 0;
 
 /* Otsu 灰度直方图，统计 0~255 各灰度级的像素数量 */
-static uint32 s_hist[256];
+static uint16 s_hist[256];
 
 /* ---- 丢线检测与拐点相关变量 ---- */
 
@@ -82,11 +82,19 @@ static uint8 inter_side_branch_has_road(int16 row,
                                         int16 center_col,
                                         uint8 side);
 
+static uint8 inter_side_branch_strong_has_road(int16 row,
+                                               int16 center_col,
+                                               uint8 side);
+
 static uint8 inter_vertical_band_has_road(int16 center_col,
                                           int16 row_start,
                                           int16 row_end,
                                           uint8 min_white,
                                           uint8 min_streak);
+
+static uint8 inline_fast_pass_view(void);
+
+static uint8 valid_rows_in_range(int16 row_start, int16 row_end);
 
 static void update_image_diagnostics(void);
 
@@ -248,7 +256,7 @@ static uint16 calc_otsu(void)
  * @brief 图像二值化：将压缩后的灰度图像转为黑白二值图像
  *
  * 遍历 image_0 中每个像素，灰度值大于阈值设为白色 (255)，否则设为黑色 (0)。
- * 结果存入 Image_Binarize，供后续降噪和边缘扫描使用。
+ * 结果先存入 s_bin_tmp，降噪后再写入 Image_Binarize，供后续边缘扫描使用。
  * 二值化是将连续灰度信息简化为0/1的关键步骤，大幅简化后续边缘检测逻辑。
  */
 static void binarize_image(void)
@@ -257,7 +265,7 @@ static void binarize_image(void)
     for (uint16 i = 0; i < COMP_H; i++)
     {
         const uint8 *src = image_0[i];
-        uint8 *dst = Image_Binarize[i];
+        uint8 *dst = s_bin_tmp[i];
         /* 内层循环：遍历压缩图像的每一列 */
         for (uint16 j = 0; j < COMP_W; j++)
             /* 灰度值大于阈值设为白色(255)，否则设为黑色(0)，完成二值化 */
@@ -277,8 +285,8 @@ static void binarize_image(void)
  *   - 若当前像素为黑色：邻域白色数 >= TF_DENOISE_BLACK_FILL(7) 则变白（填补黑噪点），否则保留
  *   - 图像边界像素不做处理，直接保留原值
  *
- * 使用双缓冲：先写入 s_bin_tmp，处理完所有像素后再拷贝回 Image_Binarize，
- * 避免在计算过程中读写同一数组导致结果不一致。
+ * 使用双缓冲：从 s_bin_tmp 读取未降噪二值图，直接写入 Image_Binarize，
+ * 避免在计算过程中读写同一数组导致结果不一致，同时省掉整幅图拷贝。
  */
 static void denoise_binary_image(void)
 {
@@ -287,8 +295,8 @@ static void denoise_binary_image(void)
     /* 外层循环：遍历二值化图像的每一行 */
     for (uint8 i = 0u; i < COMP_H; i++)
     {
-        const uint8 *src = Image_Binarize[i];
-        uint8 *dst = s_bin_tmp[i];
+        const uint8 *src = s_bin_tmp[i];
+        uint8 *dst = Image_Binarize[i];
 
         if (i == 0u || i >= (uint8)(COMP_H - 1u))
         {
@@ -301,8 +309,8 @@ static void denoise_binary_image(void)
             continue;
         }
 
-        const uint8 *prev = Image_Binarize[(uint8)(i - 1u)];
-        const uint8 *next = Image_Binarize[(uint8)(i + 1u)];
+        const uint8 *prev = s_bin_tmp[(uint8)(i - 1u)];
+        const uint8 *next = s_bin_tmp[(uint8)(i + 1u)];
 
         dst[0] = src[0];
         if (dst[0] == Image_WHITE)
@@ -342,11 +350,6 @@ static void denoise_binary_image(void)
         if (dst[COMP_W - 1u] == Image_WHITE)
             white_count++;
     }
-
-    /* 将临时缓冲区的降噪结果拷贝回二值化图像数组 */
-    for (uint8 i = 0u; i < COMP_H; i++)
-        for (uint8 j = 0u; j < COMP_W; j++)
-            Image_Binarize[i][j] = s_bin_tmp[i][j];
 
     g_tf_white_count = white_count;
 }
@@ -1273,12 +1276,13 @@ void track_fusion_update(void)
             int16 raw_center = calc_center_from_edges(lb, rb);
             /* 检查当前行是否存在对称分量（三极管干扰等） */
             uint8 sym_row = symmetric_component_at_row(row, raw_center);
-            uint8 left_branch_near = inter_side_branch_has_road(row, raw_center, 2u);
-            uint8 right_branch_near = inter_side_branch_has_road(row, raw_center, 1u);
-            uint8 left_probe_near = side_probe_has_white(row, ip_left_col);
-            uint8 right_probe_near = side_probe_has_white(row, ip_right_col);
-            uint8 y_branch_row = (left_branch_near && right_branch_near) ? 1u : 0u;
-            uint8 side_pair_near = ((left_probe_near && right_probe_near) || y_branch_row) ? 1u : 0u;
+            uint8 left_branch_near = 0u;
+            uint8 right_branch_near = 0u;
+            uint8 left_probe_near = 0u;
+            uint8 right_probe_near = 0u;
+            uint8 y_branch_row = 0u;
+            uint8 side_pair_near = 0u;
+            uint8 probe_noise_row = 0u;
             uint8 inline_component_row = 0u;
             /* 是否为分支（路口）行标志 */
             uint8 branch_row = 0u;
@@ -1287,33 +1291,57 @@ void track_fusion_update(void)
             if (sym_row)
                 g_sym_component_flag = 1u;
 
-            if (side_pair_near &&
-                g_ra_pre_flag == 0u &&
-                abs_i16((int16)(raw_center - s_last_valid_center)) <= INTER_INLINE_CENTER_DELTA &&
-                inter_vertical_band_has_road(raw_center,
-                    (int16)(row - INTER_INLINE_AHEAD_ROWS),
-                    (int16)(row - 2),
-                    INTER_INLINE_CENTER_MIN_WHITE,
-                    INTER_INLINE_CENTER_MIN_STREAK))
-            {
-                inline_component_row = 1u;
-                g_sym_component_flag = 1u;
-            }
-
             /* 分支检测：检查图像左右边缘附近是否有白色延伸（路口分支） */
             /* 条件：行号 >= INTER_MIN_MISS_ROW(28) 且 左或右探针有白色 且 不是对称分量 */
-            if (row >= (int16)INTER_MIN_MISS_ROW &&
-                !inline_component_row &&
-                (left_probe_near ||
-                 right_probe_near ||
-                 y_branch_row) &&
-                (!sym_row || y_branch_row))
+            if (row >= (int16)INTER_MIN_MISS_ROW)
             {
-                /* 标记当前行为分支行 */
-                branch_row = 1u;
-                /* 若是首次检测到分支行，记录其行号 */
-                if (s_first_miss_row < 0)
-                    s_first_miss_row = row;
+                left_branch_near = inter_side_branch_has_road(row, raw_center, 2u);
+                right_branch_near = inter_side_branch_has_road(row, raw_center, 1u);
+                left_probe_near = side_probe_has_white(row, ip_left_col);
+                right_probe_near = side_probe_has_white(row, ip_right_col);
+                y_branch_row = (left_branch_near && right_branch_near) ? 1u : 0u;
+                side_pair_near = ((left_probe_near && right_probe_near) || y_branch_row) ? 1u : 0u;
+
+                if (side_pair_near &&
+                    g_ra_pre_flag == 0u &&
+                    abs_i16((int16)(raw_center - s_last_valid_center)) <= INTER_INLINE_CENTER_DELTA &&
+                    inter_vertical_band_has_road(raw_center,
+                        (int16)(row - INTER_INLINE_AHEAD_ROWS),
+                        (int16)(row - 2),
+                        INTER_INLINE_CENTER_MIN_WHITE,
+                        INTER_INLINE_CENTER_MIN_STREAK))
+                {
+                    inline_component_row = 1u;
+                    g_sym_component_flag = 1u;
+                }
+
+                if ((left_probe_near || right_probe_near) &&
+                    !left_branch_near && !right_branch_near &&
+                    g_ra_pre_flag == 0u &&
+                    abs_i16((int16)(raw_center - s_last_valid_center)) <= INTER_INLINE_CENTER_DELTA &&
+                    inter_vertical_band_has_road(raw_center,
+                        (int16)(row - INTER_INLINE_AHEAD_ROWS),
+                        (int16)(row - 2),
+                        INTER_INLINE_CENTER_MIN_WHITE,
+                        INTER_INLINE_CENTER_MIN_STREAK))
+                {
+                    probe_noise_row = 1u;
+                    g_sym_component_flag = 1u;
+                }
+
+                if (!inline_component_row &&
+                    !probe_noise_row &&
+                    (left_probe_near ||
+                     right_probe_near ||
+                     y_branch_row) &&
+                    (!sym_row || y_branch_row))
+                {
+                    /* 标记当前行为分支行 */
+                    branch_row = 1u;
+                    /* 若是首次检测到分支行，记录其行号 */
+                    if (s_first_miss_row < 0)
+                        s_first_miss_row = row;
+                }
             }
 
             /* 根据是否为分支行，采用不同的数据更新策略 */
@@ -1508,6 +1536,18 @@ void right_angle_pre_detect(void)
     {
         far_slow_detected = 0u;
         g_sym_component_flag = 1u;
+    }
+
+    if ((detected || far_slow_detected) && inline_fast_pass_view())
+    {
+        s_on_cnt = 0u;
+        s_off_cnt = 0u;
+        s_slow_off_cnt = 0u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        g_sym_component_flag = 1u;
+        return;
     }
 
     if (right_lost >= RA_PRE_LOST_THRESH &&
@@ -2223,7 +2263,7 @@ static uint8 inter_vertical_band_has_road(int16 center_col,
  * @brief 检查指定侧是否有足够长的白色分支道路（用于纯侧路检测）
  *
  * 在 row 行为中心、厚度为 INTER_BAND_THICKNESS(3) 行的带内，
- * 检查 center_col 以外（左侧或右侧）是否有长度 >= INTER_BRANCH_MIN_STREAK(12) 的连续白色段。
+ * 检查 center_col 以外（左侧或右侧）是否有长度 >= INTER_BRANCH_MIN_STREAK 的连续白色段。
  * 用于检测纯侧路（flag 1/2）场景。
  *
  * @param row        中心行号
@@ -2291,7 +2331,7 @@ static uint8 inter_side_branch_has_road(int16 row,
         }
     }
 
-    /* 连续白色段长度达到阈值(12)才返回有分支道路 */
+    /* 连续白色段长度达到分支阈值才返回有分支道路 */
     if (max_streak >= INTER_BRANCH_MIN_STREAK)
         return 1u;
 
@@ -2304,18 +2344,67 @@ static uint8 inter_side_branch_has_road(int16 row,
     return 0u;
 }
 
-/**
- * @brief 从中点缓冲区中选取拐点列号，并根据检测侧进行偏移调整
- *
- * 使用环形缓冲区 s_center_buf 中倒数第 ip_col_offset 个有效中点作为拐点列号，
- * 比使用最新帧的中点更稳定（避免单帧噪声）。
- * 然后根据 found_side 向对应方向偏移 INTER_IP_SIDE_BIAS(6) 像素：
- *   - found_side=1（右侧有路）：向右偏移（拐点偏向右侧）
- *   - found_side=2（左侧有路）：向左偏移（拐点偏向左侧）
- *
- * @param ip         拐点信息（输入/输出，会修改 col 字段）
- * @param found_side 检测到的有路侧（1=右，2=左，3=双侧）
- */
+/* Strong side-branch evidence tuned from saved frames; components are shorter. */
+static uint8 inter_side_branch_strong_has_road(int16 row,
+                                               int16 center_col,
+                                               uint8 side)
+{
+    int16 row_start = row - (int16)INTER_BRANCH_AREA_HALF_ROWS;
+    int16 row_end = row + (int16)INTER_BRANCH_AREA_HALF_ROWS;
+    int16 col_start;
+    int16 col_end;
+    uint8 max_streak = 0u;
+    uint16 streak_sum = 0u;
+    uint8 hit_rows = 0u;
+    int16 branch_gap = active_track_half_width() + 2;
+
+    if (row_start < 0) row_start = 0;
+    if (row_end >= TF_IMG_H) row_end = TF_IMG_H - 1;
+
+    if (branch_gap < (int16)(TF_MIN_TRACK_WIDTH + 2))
+        branch_gap = (int16)(TF_MIN_TRACK_WIDTH + 2);
+
+    if (side == 1u)
+    {
+        col_start = center_col + branch_gap;
+        col_end = TF_IMG_W - 1;
+    }
+    else
+    {
+        col_start = 0;
+        col_end = center_col - branch_gap;
+    }
+
+    if (col_start < 0) col_start = 0;
+    if (col_end >= TF_IMG_W) col_end = TF_IMG_W - 1;
+    if (col_start > col_end) return 0u;
+
+    for (int16 r = row_start; r <= row_end; r++)
+    {
+        uint8 streak = max_white_streak_on_row(r, col_start, col_end);
+        if (streak > max_streak)
+            max_streak = streak;
+
+        if (streak >= INTER_BAND_MIN_STREAK)
+        {
+            streak_sum = (uint16)(streak_sum + streak);
+            hit_rows++;
+        }
+    }
+
+    if (max_streak >= INTER_BRANCH_STRONG_MIN_STREAK)
+        return 1u;
+
+    if (hit_rows >= INTER_BRANCH_STRONG_AREA_MIN_ROWS &&
+        streak_sum >= INTER_BRANCH_STRONG_AREA_MIN_WHITE)
+    {
+        return 1u;
+    }
+
+    return 0u;
+}
+
+/* Pick a stable inflection-point column from the recent center buffer. */
 static void apply_ip_col_from_buffer(InflectionPoint_t *ip, uint8 found_side)
 {
     /* 仅在拐点有效且缓冲区有数据时才从中点缓冲区选取 */
@@ -2416,6 +2505,58 @@ static void clear_inter_result(void)
     g_inter_result.detected_type = 0u;
     /* 拐点最大行号清零 */
     g_ip_max_row = 0u;
+}
+
+static uint8 valid_rows_in_range(int16 row_start, int16 row_end)
+{
+    uint8 count = 0u;
+
+    if (row_start < 0) row_start = 0;
+    if (row_end >= TF_IMG_H) row_end = TF_IMG_H - 1;
+    if (row_start > row_end) return 0u;
+
+    for (int16 row = row_start; row <= row_end; row++)
+    {
+        if (g_tf.row_valid[row])
+            count++;
+    }
+
+    return count;
+}
+
+static uint8 inline_fast_pass_view(void)
+{
+    if (g_tf.line_lost != 0u)
+        return 0u;
+    if (g_tf.valid_row_count < INTER_FAST_PASS_VALID_ROWS)
+        return 0u;
+    if (abs_i16(g_tf.error) > INTER_FAST_PASS_ERR_LIMIT)
+        return 0u;
+    if (abs_i16(g_tf.lookahead_error) > INTER_FAST_PASS_LA_ERR_LIMIT)
+        return 0u;
+    if (abs_i16(g_tf.error_trend) > INTER_FAST_PASS_TREND_LIMIT)
+        return 0u;
+
+    if (valid_rows_in_range((int16)INTER_FAST_PASS_TOP_START_ROW,
+                            (int16)INTER_FAST_PASS_TOP_END_ROW) <
+        INTER_FAST_PASS_TOP_MIN_VALID)
+        return 0u;
+
+    for (int16 row = (int16)(RA_PRE_END_ROW + 1);
+         row <= (int16)RA_PRE_START_ROW; row++)
+    {
+        if (row < 0 || row >= (int16)TF_IMG_H || !g_tf.row_valid[row])
+            continue;
+        if (g_tf.left_edge[row] <= (int16)INTER_FAST_PASS_EDGE_MARGIN)
+            return 0u;
+        if (g_tf.right_edge[row] >= (int16)(TF_IMG_W - INTER_FAST_PASS_EDGE_MARGIN))
+            return 0u;
+        if (inter_side_branch_has_road(row, g_tf.center_line[row], 1u) ||
+            inter_side_branch_has_road(row, g_tf.center_line[row], 2u))
+            return 0u;
+    }
+
+    return 1u;
 }
 
 static uint8 straight_inline_view(void)
@@ -2571,7 +2712,7 @@ static void build_inter_box(int16 cx, int16 cy,
 /**
  * @brief 更新检测框锁定状态
  *
- * 使用帧间稳定性判断：候选框位置连续 INTER_BOX_STABLE_FRAMES(1) 帧
+ * 使用帧间稳定性判断：候选框位置连续 INTER_BOX_STABLE_FRAMES 帧
  * 在 INTER_BOX_STABLE_DELTA(3) 像素范围内不变，则锁定。
  * 锁定后使用稳定位置进行路口分类，避免框随噪声跳动导致误分类。
  *
@@ -2650,7 +2791,7 @@ static uint8 update_box_lock(int16 cx, int16 cy)
  * @brief 路口类型投票机制
  *
  * 在环形缓冲区中存储最近 INTER_TYPE_VOTE_FRAMES(2) 帧的检测结果，
- * 当缓冲区满后，统计各类型出现次数，超过 INTER_TYPE_VOTE_MIN(1) 次的类型通过投票。
+ * 当缓冲区满后，统计各类型出现次数，达到 INTER_TYPE_VOTE_MIN 次的类型通过投票。
  *
  * 投票机制可过滤单帧误检，提高检测可靠性。
  * 当检测到类型0（无路口）时清空投票缓冲区，重新开始计数。
@@ -2711,9 +2852,8 @@ static uint8 vote_inter_type(uint8 detected)
 /**
  * @brief 路口类型快速确认（跳过投票，立即确认）
  *
- * 当 INTER_FAST_CONFIRM_ENABLE=1 时，对以下类型直接确认，无需等待投票：
- *   - 类型 3/4/5（T 型和十字路口）：检测置信度较高，可加速响应
- *   - 类型 1/2（纯侧路）：也直接确认
+ * 当 INTER_FAST_CONFIRM_ENABLE=1 时，强证据路口直接确认；
+ * 元件误触发由直行元件保护和强侧向分支阈值提前过滤。
  *
  * 快速确认可减少1帧延迟，在高速行驶时尤为重要。
  *
@@ -2723,7 +2863,6 @@ static uint8 vote_inter_type(uint8 detected)
 static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok)
 {
 #if INTER_FAST_CONFIRM_ENABLE
-    /* 类型 3/4/5（T 型路口和十字路口）直接确认 */
     if (detected >= 3u && detected <= 5u)
         return detected;
 
@@ -2735,6 +2874,9 @@ static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok)
         return detected;
     }
 
+#else
+    (void)detected;
+    (void)pure_ra_ok;
 #endif
 
     /* 快速确认未启用或类型不在快速确认范围内，返回0走投票流程 */
@@ -2862,6 +3004,16 @@ void detect_intersection(void)
     uint8 probe_side = 0u;
     uint8 probe_trigger = find_probe_trigger_ip(&probe_ip, &probe_side);
 
+    if (probe_trigger &&
+        s_first_miss_row < (int16)INTER_MIN_MISS_ROW &&
+        inline_fast_pass_view())
+    {
+        g_sym_component_flag = 1u;
+        reset_box_lock();
+        clear_inter_result();
+        return;
+    }
+
     /* 去掉straight_inline_view()拦截。
      * 原因：直道上也可能遇到路口，此检查会导致路口漏检。
      * 误报由分类阈值和对称分量过滤控制。 */
@@ -2971,6 +3123,8 @@ void detect_intersection(void)
     uint8 left_branch_has = inter_side_branch_has_road(ip.row, ip.col, 2u);
     /* 检查右侧是否有足够长的分支道路（纯侧路检测） */
     uint8 right_branch_has = inter_side_branch_has_road(ip.row, ip.col, 1u);
+    uint8 left_branch_strong = inter_side_branch_strong_has_road(ip.row, ip.col, 2u);
+    uint8 right_branch_strong = inter_side_branch_strong_has_road(ip.row, ip.col, 1u);
     uint8 center_forward_has = inter_vertical_band_has_road(
         ip.col,
         b_top,
@@ -3000,8 +3154,39 @@ void detect_intersection(void)
         inter_side_window_has_road(b_top, b_bottom, b_left, b_right, 1u);
     uint8 left_frame_has = (left_has || left_box_has) ? 1u : 0u;
     uint8 right_frame_has = (right_has || right_box_has) ? 1u : 0u;
-    uint8 left_dir_has = (left_frame_has || left_branch_has) ? 1u : 0u;
-    uint8 right_dir_has = (right_frame_has || right_branch_has) ? 1u : 0u;
+    uint8 left_dir_has =
+        (left_branch_has || (left_frame_has && left_branch_strong)) ? 1u : 0u;
+    uint8 right_dir_has =
+        (right_branch_has || (right_frame_has && right_branch_strong)) ? 1u : 0u;
+    uint8 left_strong_dir_has = left_branch_strong;
+    uint8 right_strong_dir_has = right_branch_strong;
+    uint8 top_valid_rows = valid_rows_in_range(
+        (int16)INTER_FAST_PASS_TOP_START_ROW,
+        (int16)INTER_FAST_PASS_TOP_END_ROW);
+    uint8 inline_component_candidate =
+        (g_tf.line_lost == 0u &&
+         g_tf.valid_row_count >= INTER_INLINE_COMPONENT_VALID_ROWS_MIN &&
+         top_valid_rows >= INTER_INLINE_COMPONENT_TOP_VALID_MIN &&
+         center_forward_has &&
+         !left_branch_strong &&
+         !right_branch_strong) ? 1u : 0u;
+    uint8 tri_cross_candidate =
+        (g_sym_component_flag != 0u &&
+         left_dir_has && right_dir_has &&
+         !straight_inline_view() &&
+         (g_tf.valid_row_count <= INTER_TRI_CROSS_VALID_ROWS_MAX ||
+          top_valid_rows <= INTER_TRI_CROSS_TOP_VALID_MAX)) ? 1u : 0u;
+
+    if (inline_component_candidate)
+    {
+        g_sym_component_flag = 1u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        reset_box_lock();
+        clear_inter_result();
+        return;
+    }
 
     if (g_ra_pre_flag == 0u &&
         left_branch_has && right_branch_has &&
@@ -3017,22 +3202,22 @@ void detect_intersection(void)
     }
 
     /* ---- 路口类型分类逻辑 ---- */
-    /* 3/4/5 只按检测框内的方向组合判断，框外分支只用于 1/2 直角兜底。 */
-    if (left_frame_has && right_frame_has)
+    /* 3/4/5 use box direction plus continuous side-branch evidence. */
+    if ((left_dir_has && right_dir_has) || tri_cross_candidate)
         detected = 5u;
-    else if (top_road_has && left_frame_has)
+    else if (top_road_has && left_strong_dir_has)
         detected = 3u;
-    else if (top_road_has && right_frame_has)
+    else if (top_road_has && right_strong_dir_has)
         detected = 4u;
     else if (!top_road_has && pure_ra_ok && ra_dir_hint == 1u &&
-             (right_branch_has || found_side == 1u || right_dir_has))
+             right_strong_dir_has)
         detected = 1u;
     else if (!top_road_has && pure_ra_ok && ra_dir_hint == 2u &&
-             (left_branch_has || found_side == 2u || left_dir_has))
+             left_strong_dir_has)
         detected = 2u;
-    else if (!top_road_has && pure_ra_ok && found_side == 1u && right_branch_has)
+    else if (!top_road_has && pure_ra_ok && found_side == 1u && right_branch_strong)
         detected = 1u;
-    else if (!top_road_has && pure_ra_ok && found_side == 2u && left_branch_has)
+    else if (!top_road_has && pure_ra_ok && found_side == 2u && left_branch_strong)
         detected = 2u;
 
     /* 记录原始检测类型到结果结构体 */

@@ -558,8 +558,8 @@ void menu_show(void)
     uint8 need_default_draw = 1u;             /* 是否需要绘制菜单文字 */
 
 #if TFT_OFF_WHEN_RUNNING
-    /* 运行时关闭TFT模式：电机和负压都开启后关闭TFT显示以节省CPU资源 */
-    if ((motor_enable != 0) && (vacuum_enable != 0u))  /* 电机和负压均已使能，进入运行状态 */
+    /* Running display-off mode: motor enabled means the car is running. */
+    if (motor_enable != 0)
     {
         if (s_tft_run_off == 0u)  /* 刚进入运行状态（之前TFT是开着的） */
         {

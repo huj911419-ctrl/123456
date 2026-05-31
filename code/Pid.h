@@ -2,6 +2,7 @@
 #define CODE_PID_H_
 
 #include "zf_common_headfile.h"
+#include "App_Config.h"
 
 /* PID control period. Keep time-based gains and ramps normalized to 11 ms tuning. */
 #define PID_PERIOD_MS      8u
@@ -116,6 +117,10 @@ extern volatile uint8 vacuum_enable;
 #define SPEED_VISION_BAD_PCT 40
 #define SPEED_QUALITY_GOOD_ROWS 35u
 #define SPEED_QUALITY_ROW_MIN_PCT 70
+#define SPEED_COMPONENT_VALID_ROWS 45u
+#define SPEED_COMPONENT_ERR_MAX 32
+#define SPEED_COMPONENT_LA_MAX 36
+#define SPEED_COMPONENT_TREND_MAX 36
 #define SPEED_ERR_JUMP_T1 10
 #define SPEED_ERR_JUMP_T2 28
 #define SPEED_ERR_JUMP_MIN_PCT 60

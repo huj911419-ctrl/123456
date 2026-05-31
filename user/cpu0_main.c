@@ -2,6 +2,7 @@
 #include "IMU.h"
 #include "Menu.h"
 #include "ImageTransfer.h"
+#include "Pid.h"
 
 extern int16 cam_exposure;
 
@@ -45,6 +46,7 @@ int core0_main(void)
 
     /* 初始化增量式PID参数 */
     line_pid_init();
+    pwm_init(VAC_PWM_CH, VAC_PWM_FREQ, 0u);
 
     /* 初始化IMU角度测量单元 */
     imu_init();//////
@@ -52,8 +54,8 @@ int core0_main(void)
 
     
 
-    /* 初始化11ms周期中断（PID在ISR中直接调用） */
-   pit_ms_init(CCU60_CH0, 11);
+    /* 初始化PID周期中断（PID在ISR中直接调用） */
+   pit_ms_init(CCU60_CH0, PID_PERIOD_MS);
 
     /* 初始化按键 */
     key_init_all();
@@ -82,7 +84,12 @@ int core0_main(void)
 
 #if !RACE_MODE
         /* 通过UART0发送压缩二值化图像到电脑 */
-        send_image_uart0();
+#if UART0_IMAGE_OFF_WHEN_RUNNING
+        if (motor_enable == 0)
+#endif
+        {
+            send_image_uart0();
+        }
 #endif
 
         /* 按键处理 */
