@@ -1542,7 +1542,7 @@ static int16 speed_ramp_apply(int16 target) /* 速度斜坡处理 */
  * 返回: 斜坡处理后的速度 */
 static int16 speed_ramp_apply_reason(int16 target, uint8 reason) /* 带原因的斜坡 */
 {
-    int16 up_step = SPEED_RAMP_UP_STEP;     /* 上升步长，默认180 */
+    int16 up_step = SPEED_RAMP_UP_STEP;     /* 上升步长 */
     int16 down_step = SPEED_RAMP_DOWN_STEP;
 
     speed_dbg_plan = target;                /* 记录规划速度 */
@@ -1553,7 +1553,7 @@ static int16 speed_ramp_apply_reason(int16 target, uint8 reason) /* 带原因的
 
     /* 直道/单边加速原因(4/6/9)使用更快的上升步长 */
     if (reason == 4u || reason == 6u || reason == 9u)
-        up_step = SPEED_RAMP_STRAIGHT_UP_STEP; /* 使用更大的上升步长(520) */
+        up_step = SPEED_RAMP_STRAIGHT_UP_STEP; /* 使用更大的上升步长 */
 
     up_step = (int16)((float)up_step * PID_DT_SCALE + 0.5f);
     down_step = (int16)((float)down_step * PID_DT_SCALE + 0.5f);
@@ -1772,12 +1772,12 @@ static float recover_yaw_correction(void)   /* RECOVER yaw修正 */
  *   1. RA活跃或预减速 → 直接用目标速度
  *   2. 丢线 → 25%速度
  *   3. 有效行极少 → 40%速度
- *   4. 单边稳定通过 → 115%加速（用于最后T右直行）
- *   5. 元器件直线 → 115%加速（跳过质量/前瞻降速）
+ *   4. 单边稳定通过 → 120%加速（用于最后T右直行）
+ *   5. 元器件直线 → 120%加速（跳过质量/前瞻降速）
  *   6. 视觉质量降速（有效行/误差跳变）
- *   7. 对称组件直道 → 115%加速（立即）
+ *   7. 对称组件直道 → 120%加速（立即）
  *   8. 前瞻/趋势降速
- *   9. 直道确认 → 115%加速（需连续N帧确认） */
+ *   9. 直道确认 → 120%加速（需连续N帧确认） */
 static int16 plan_base_speed(int16 target, int16 pos_err_abs, uint8 pre_slow_active) /* 速度规划 */
 {
     s_straight_active = 0u;                 /* 直道激活标志清零 */
@@ -2411,15 +2411,15 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
     /* 加速度前馈：目标速度变化量 * 增益 */
     float accel_ff = 0.0f;                  /* 加速度前馈，初始为0 */
     if (s_speed_ff_ready)                   /* 前馈就绪（非首周期） */
-        accel_ff = (target_speed - s_prev_target_speed) * PID_D_SCALE * SPEED_ACCEL_FF_GAIN; /* 变化量×0.35 */
+        accel_ff = (target_speed - s_prev_target_speed) * PID_D_SCALE * SPEED_ACCEL_FF_GAIN; /* 目标变化量前馈 */
     else                                    /* 首周期 */
         s_speed_ff_ready = 1u;              /* 标记前馈就绪 */
 
-    accel_ff = clamp_f(accel_ff, -SPEED_ACCEL_FF_LIMIT, SPEED_ACCEL_FF_LIMIT); /* 限幅到±180 */
+    accel_ff = clamp_f(accel_ff, -SPEED_ACCEL_FF_LIMIT, SPEED_ACCEL_FF_LIMIT); /* 限幅加速度前馈 */
     s_prev_target_speed = target_speed;     /* 保存当前目标速度 */
 
     /* 速度输出 = 前馈 + PI */
-    float speed_ff = target_speed * SPEED_FF_RATIO + accel_ff; /* 速度前馈(40%) + 加速度前馈 */
+    float speed_ff = target_speed * SPEED_FF_RATIO + accel_ff; /* 速度前馈 + 加速度前馈 */
     float speed_out = speed_ff + speed_pi_calc(target_speed,   /* 前馈 + 速度PI */
                                                avg_actual,     /* 实际速度 */
                                                &s_speed_integral, /* 积分指针 */

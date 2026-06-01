@@ -2977,7 +2977,8 @@ static uint8 vote_inter_type(uint8 detected)
  * @return 确认的路口类型，0=未确认（需走投票流程）
  */
 static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok,
-                                     uint8 type5_fast_ok)
+                                     uint8 type5_fast_ok,
+                                     uint8 type4_fast_ok)
 {
 #if INTER_FAST_CONFIRM_ENABLE
     /* 类型 1/2：纯直角证据成立且不是稳定直线时快速确认 */
@@ -2993,10 +2994,16 @@ static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok,
         return 5u;
     }
 
+    if (detected == 4u && type4_fast_ok)
+    {
+        return 4u;
+    }
+
 #else
     (void)detected;
     (void)pure_ra_ok;
     (void)type5_fast_ok;
+    (void)type4_fast_ok;
 #endif
 
     /* 快速确认未启用或类型不在快速确认范围内，返回0走投票流程 */
@@ -3357,8 +3364,15 @@ void detect_intersection(void)
          side_cross_ok &&
          !inline_component_candidate &&
          !straight_inline_view()) ? 1u : 0u;
+    uint8 type4_fast_ok =
+        (detected == 4u &&
+         top_road_has &&
+         right_strong_dir_has &&
+         !inline_component_candidate &&
+         !straight_inline_view()) ? 1u : 0u;
     uint8 voted_type = fast_confirm_inter_type(detected, pure_ra_ok,
-                                               type5_fast_ok);
+                                               type5_fast_ok,
+                                               type4_fast_ok);
     /* 快速确认未通过，走投票确认流程 */
     if (voted_type == 0u)
         voted_type = vote_inter_type(detected);

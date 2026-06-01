@@ -25,9 +25,9 @@
 /* ==================== 菜单可调参数变量 ==================== */
 /* 每个变量都绑定到菜单的某个条目，用户可通过按键实时修改 */
 
-int16 motor_speed = 170;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
+int16 motor_speed = 180;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
 int16 motor_enable = 0;       /* 电机使能开关：0=禁用（停止），1=启用（允许运行） */
-int16 motor_run_time =28;     /* 电机最大运行时间（秒） */
+int16 motor_run_time =20;     /* 电机最大运行时间（秒） */
 int16 run_quiet_enable =RUN_QUIET_STOP_KEY ; /* 运行静默模式：运行时关闭TFT/UART图传/普通按键 *///RUN_QUIET_STOP_KEY   RUN_QUIET_DEFAULT_ENABLE
 
 int16 cam_exposure = 600;      /* 摄像头曝光时间（行周期数），值越大画面越亮 */
@@ -49,7 +49,7 @@ int16 ra_hard_outer = 1800;    /* 直角弯HARD阶段外侧电机占空比，外
 int16 ra_hard_yaw = 56;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退出 */
 int16 ra_slow_row = 38;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减速 */
 int16 ra_slow_pct = 45;        /* 直角弯SLOW阶段速度百分比（45%=大幅降速） */
-int16 ra_turn_row = 105;       /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
+int16 ra_turn_row = 95;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
 int16 ra_approach_frames = 1;  /* 直角弯APPROACH阶段等待帧数，等待完毕后进入HARD急转 */
 
 int16 yaw_kp = 8;             /* IMU级联控制的航向角比例系数Kp */
@@ -57,10 +57,11 @@ int16 yaw_kp = 8;             /* IMU级联控制的航向角比例系数Kp */
 /* ==================== 菜单条目定义表 ==================== */
 /* 每个MenuItem包含：显示标签、绑定变量指针、最小值、最大值、步进值 */
 
-/* 主页菜单条目：电机使能和运行静默开关 */
+/* 主页菜单条目：常用运行开关和速度档位 */
 static MenuItem items_main[] = {
     {"Enable", &motor_enable, 0, 1, 1},       /* 使能开关：0=关，1=开，步进1 */
     {"Quiet", &run_quiet_enable, 0, 1, 1},    /* 运行静默：1=运行时关闭TFT/UART/普通按键 */
+    {"Speed", &motor_speed, 0, 600, 20},      /* 速度设定：0~600，步进20 */
 };
 
 /* 综合调参页：电机、摄像头、PID和速度规划。 */
@@ -105,7 +106,7 @@ static MenuItem items_imu[] = {
 /* g_pages数组定义了菜单页面，每个页面包含标题、条目数组、条目数和自定义绘制函数 */
 /* draw为NULL表示使用default_draw默认绘制函数 */
 static MenuPageDef g_pages[PAGE_MAX] = {
-    { .title = "MAIN",  .items = items_main,  .item_count = 2,  .draw = NULL },  /* 第0页：主页，显示使能和静默开关 */
+    { .title = "MAIN",  .items = items_main,  .item_count = 3,  .draw = NULL },  /* 第0页：主页，显示使能、静默和速度 */
     { .title = "TUNE",  .items = items_tune,  .item_count = 12, .draw = NULL },  /* 第1页：电机/摄像头/PID/速度规划 */
     { .title = "RA",    .items = items_ra,    .item_count = 10, .draw = NULL },  /* 第2页：直角弯页，调整RA状态机各阶段参数 */
     { .title = "IMU",   .items = items_imu,   .item_count = 4,  .draw = NULL },  /* 第3页：IMU页，调整航向角级联控制参数 */
