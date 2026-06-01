@@ -73,18 +73,18 @@ extern volatile uint16 g_tf_white_count;
 /* Intersection detection parameters. */
 #define INTER_COOLDOWN_FRAMES  8
 #define INTER_MAX_LOCK_FRAMES  300
-#define INTER_BOX_START_ROW    34
-#define INTER_MIN_MISS_ROW     28
+#define INTER_BOX_START_ROW    30
+#define INTER_MIN_MISS_ROW     24
 #define INTER_MIN_VALID_ROWS   25
 #define BOX_HEIGHT             28
 #define BOX_WIDTH              56
-#define INTER_BOX_WIDTH_MIN    52
-#define INTER_BOX_WIDTH_MAX    72
+#define INTER_BOX_WIDTH_MIN    56
+#define INTER_BOX_WIDTH_MAX    78
 #define INTER_BOX_WIDTH_SCALE  4
-#define INTER_BOX_HEIGHT_MIN   30
-#define INTER_BOX_HEIGHT_MAX   42
+#define INTER_BOX_HEIGHT_MIN   32
+#define INTER_BOX_HEIGHT_MAX   46
 #define INTER_BOX_HEIGHT_SCALE 3
-#define INTER_BOX_FRONT_PCT    72
+#define INTER_BOX_FRONT_PCT    80
 #define INTER_BAND_THICKNESS   3
 #define INTER_TOP_MIN_WHITE    12
 #define INTER_TOP_SCAN_ROWS    6
@@ -113,7 +113,8 @@ extern volatile uint16 g_tf_white_count;
 #define INTER_TYPE_VOTE_FRAMES 2
 #define INTER_TYPE_VOTE_MIN    2
 #define INTER_FAST_CONFIRM_ENABLE 1
-#define INTER_IP_SIDE_BIAS     6
+#define INTER_IP_SIDE_BIAS     8
+#define INTER_IP_ROW_BIAS      2
 #define INTER_SYM_ROW_DELTA    3
 #define INTER_SYM_CENTER_DELTA 8
 #define INTER_SYM_BRANCH_STREAK 18
@@ -137,6 +138,11 @@ extern volatile uint16 g_tf_white_count;
 #define INTER_TRI_CROSS_TOP_VALID_MAX 3u
 #define INTER_INLINE_COMPONENT_VALID_ROWS_MIN 44u
 #define INTER_INLINE_COMPONENT_TOP_VALID_MIN 8u
+#define INTER_INLINE_COMPONENT_BOTTOM_ROW_MIN 51
+#define INTER_INLINE_COMPONENT_BOTTOM_ROW_MAX 53
+#define INTER_INLINE_COMPONENT_BOTTOM_VALID_MIN 47u
+#define INTER_INLINE_COMPONENT_BOTTOM_TOP_MIN 10u
+#define INTER_INLINE_COMPONENT_WHITE_MIN 280u
 
 typedef struct
 {
@@ -172,6 +178,7 @@ typedef struct
 #define RA_PRE_COMPONENT_OPEN_ROWS 5
 #define RA_PRE_COMPONENT_CENTER_SPAN 30
 #define RA_PRE_COMPONENT_VALID_ROWS 36
+#define RA_PRE_CONFIRM_FRAMES 2
 #define RA_PRE_SLOW_OFF_FRAMES 4
 
 extern uint8 g_ra_flag;

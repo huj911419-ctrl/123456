@@ -688,6 +688,11 @@ static uint8 route_next_rule_is(uint8 flag)
     return (user_rules[route_dbg_step].flag == flag) ? 1u : 0u;
 }
 
+uint8 route_next_flag_is(uint8 flag)
+{
+    return route_next_rule_is(flag);
+}
+
 /* ra_fallback_direct_enabled - 检查RA保底直接转弯是否启用
  * @flag: 路口类型flag
  * 返回: 1=允许保底转弯，0=不允许
@@ -1069,7 +1074,7 @@ static void ra_enter_recover(void)          /* 进入RECOVER阶段 */
     s_cas_last_yaw_err = 0.0f;             /* 串级内环误差清零 */
     /* 从HARD种子值按比例过渡 */
     s_prev_steer_output = s_ra_hard_steer_seed * /* HARD阶段转向种子 */
-                          ((float)RA_RECOVER_SEED_STEER_PCT * 0.01f); /* 35%过渡 */
+                          ((float)RA_RECOVER_SEED_STEER_PCT * 0.01f); /* RECOVER比例过渡 */
     {
         int16 recover_seed = (int16)((float)motor_speed * 8.0f *
                             ((float)RA_RECOVER_SPEED_PCT * 0.01f));
@@ -2121,7 +2126,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
         {
             uint8 next_flag = (uint8)g_ra_flag; /* 保存下一个flag */
             ra_finish_ex(next_flag, 0u);     /* 结束RA，保留flag，无转弯屏蔽 */
-            r.speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f; /* 速度缩放到100% */
+            r.speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f; /* 速度缩放到RECOVER比例 */
             r.need_pid = 1u;                 /* 需要PID */
             ra_debug_update();               /* 更新调试 */
             return r;                        /* 返回 */
@@ -2132,16 +2137,16 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
         else s_ra_recover_good_cnt = 0u;    /* 不满足，计数清零 */
 
         /* 退出条件：满足最小帧数且连续确认帧达标，或超时 */
-        if ((s_ra_recover_cnt >= RA_RECOVER_MIN_FRAMES && /* 满足最小帧数(4) */
+        if ((s_ra_recover_cnt >= RA_RECOVER_MIN_FRAMES && /* 满足最小恢复帧数 */
              s_ra_recover_good_cnt >= RA_RECOVER_CONFIRM_FRAMES) || /* 连续确认帧达标(2) */
-            s_ra_recover_cnt >= RA_RECOVER_MAX_FRAMES) /* 超时(14帧) */
+            s_ra_recover_cnt >= RA_RECOVER_MAX_FRAMES) /* 恢复超时 */
         {
             ra_finish();                     /* 结束RA */
             return r;                        /* 返回 */
         }
 
         /* RECOVER期间降速+PID巡线 */
-        r.speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f; /* 速度缩放到100% */
+        r.speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f; /* 速度缩放到RECOVER比例 */
         r.need_pid = 1u;                     /* 需要PID */
         ra_debug_update();                   /* 更新调试 */
         return r;                            /* 返回 */
@@ -2150,8 +2155,10 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
     /* ===== WAIT阶段 ===== */
     if (s_ra_phase == RA_PH_WAIT)             /* WAIT阶段 */
     {
-        uint8 wait_timeout = (s_ra_orig_flag < 3u &&
-                              s_ra_phase_cnt >= RA_WAIT_TIMEOUT) ? 1u : 0u;
+        uint16 wait_limit = (s_ra_orig_flag >= 3u) ?
+                            RA_CROSS_WAIT_TIMEOUT :
+                            RA_WAIT_TIMEOUT;
+        uint8 wait_timeout = (s_ra_phase_cnt >= wait_limit) ? 1u : 0u;
 
         /* 拐点行达到减速阈值或超时 → 进入SLOW */
         if (s_ra_ip_row >= (uint8)ra_slow_row || wait_timeout) /* 条件满足 */
@@ -2165,8 +2172,15 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
     else if (s_ra_phase == RA_PH_SLOW)        /* SLOW阶段 */
     {
         uint8 turn_row = (uint8)ra_turn_row;
-        uint8 slow_timeout = (s_ra_orig_flag < 3u &&
-                              s_ra_phase_cnt >= RA_SLOW_TIMEOUT) ? 1u : 0u;
+        uint16 slow_limit = RA_SLOW_TIMEOUT;
+        uint8 slow_timeout;
+
+        if (s_ra_orig_flag >= 3u)
+            slow_limit = RA_CROSS_SLOW_TIMEOUT;
+        else if (base_speed >= RA_FAST_SPEED_START)
+            slow_limit = RA_FAST_SLOW_TIMEOUT;
+
+        slow_timeout = (s_ra_phase_cnt >= slow_limit) ? 1u : 0u;
 
         if (s_ra_orig_flag >= 3u &&
             turn_row <= (uint8)(255u - RA_COMPLEX_TURN_ROW_OFFSET))
@@ -2205,7 +2219,8 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
                              base_speed >= RA_FAST_SPEED_START) ? 1u : 0u; /* 速度≥520 */
         /* 最小HARD帧数：路口需要更少帧 */
         uint8 min_hard = (s_ra_orig_flag >= 3u) ? /* 普通路口(3/4/5) */
-                         RA_CROSS_HARD_MIN_FRAMES : RA_HARD_MIN_FRAMES; /* 路口10帧，直角12帧 */
+                         RA_CROSS_HARD_MIN_FRAMES : /* 路口最小HARD帧 */
+                         (direct_fast ? RA_FAST_HARD_MIN_FRAMES : RA_HARD_MIN_FRAMES); /* 直角最小HARD帧 */
         /* HARD超时帧数 */
         uint8 hard_limit = (s_ra_orig_flag >= 3u) ? /* 普通路口 */
                            RA_CROSS_HARD_TIMEOUT :  /* 路口超时18帧 */
@@ -2225,23 +2240,24 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
         /* 根据模式选择yaw目标角度 */
         float hard_yaw_target = (s_ra_orig_flag >= 3u) ? /* 普通路口 */
                                 RA_CROSS_HARD_YAW_DEG :  /* 路口yaw目标58度 */
-                                (direct_fast ? RA_FAST_DIRECT_YAW_DEG : (float)ra_hard_yaw); /* 快速82度或菜单值 */
+                                (direct_fast ? RA_FAST_DIRECT_YAW_DEG : (float)ra_hard_yaw); /* 快速模式或菜单值 */
         float yaw_progress = ra_yaw_progress(); /* 当前yaw进度 */
         /* 摄像头恢复退出条件 */
         uint8 camera_done = (s_ra_hard_cnt >= min_hard && /* 满足最小HARD帧数 */
                              s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES) ? 1u : 0u; /* 连续确认帧(3) */
 
-        /* 直角模式：yaw未达到最低角度时不允许摄像头提前退出 */
-        if (s_ra_orig_flag < 3u && imu_ready && !imu_error &&
-            yaw_progress < (direct_fast ? RA_FAST_CAMERA_MIN_YAW : RA_DIRECT_CAMERA_MIN_YAW))
+        if (imu_ready && !imu_error && hard_yaw_target > 0.0f)
         {
-            camera_done = 0u;                /* 禁止摄像头退出 */
-        }
+            float camera_min_yaw = hard_yaw_target * RA_CAMERA_EXIT_TARGET_RATIO;
+            float mode_min_yaw = (s_ra_orig_flag >= 3u) ?
+                                 RA_CROSS_CAMERA_MIN_YAW :
+                                 (direct_fast ? RA_FAST_CAMERA_MIN_YAW : RA_DIRECT_CAMERA_MIN_YAW);
 
-        if (s_ra_orig_flag >= 3u && imu_ready && !imu_error &&
-            yaw_progress < RA_CROSS_CAMERA_MIN_YAW)
-        {
-            camera_done = 0u;
+            if (camera_min_yaw < mode_min_yaw)
+                camera_min_yaw = mode_min_yaw;
+
+            if (yaw_progress < camera_min_yaw)
+                camera_done = 0u;            /* 禁止摄像头过早退出 */
         }
 
         /* yaw角度退出条件 */
@@ -2266,7 +2282,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
 
         /* 计算内外轮duty */
         float outer = (float)ra_hard_outer;  /* 外侧轮duty（菜单可调） */
-        float inner = (float)ra_hard_inner;  /* 内侧轮duty（菜单可调） */
+        float inner = 0.0f;                  /* HARD turn keeps the inner wheel stopped. */
         float out_l;                         /* 左轮输出 */
         float out_r;                         /* 右轮输出 */
 
@@ -2274,6 +2290,26 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
         {
             outer = outer * (float)RA_COMPLEX_DUTY_PCT * 0.01f;
             inner = inner * (float)RA_COMPLEX_DUTY_PCT * 0.01f;
+        }
+
+        if (imu_ready && !imu_error && hard_yaw_target > 1.0f)
+        {
+            float yaw_ratio = yaw_progress / hard_yaw_target;
+            if (yaw_ratio > RA_HARD_TAPER_START_RATIO)
+            {
+                float span = RA_HARD_TAPER_END_RATIO - RA_HARD_TAPER_START_RATIO;
+                float t = (yaw_ratio - RA_HARD_TAPER_START_RATIO) / span;
+                float min_scale = (float)RA_HARD_TAPER_MIN_PCT * 0.01f;
+                float taper;
+
+                if (t > 1.0f)
+                    t = 1.0f;
+                if (t < 0.0f)
+                    t = 0.0f;
+
+                taper = 1.0f - t * (1.0f - min_scale);
+                outer *= taper;
+            }
         }
 
         /* 右转：左轮=内侧（慢），右轮=外侧（快） */
@@ -2289,7 +2325,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
         }
 
         /* HARD初期斜坡启动（前几帧逐渐增大，防止打滑） */
-        if (s_ra_hard_cnt <= RA_HARD_RAMP_FRAMES) /* 前5帧 */
+        if (s_ra_hard_cnt <= RA_HARD_RAMP_FRAMES) /* HARD初期斜坡帧 */
         {
             float ramp = (float)s_ra_hard_cnt / (float)RA_HARD_RAMP_FRAMES; /* 斜坡比例 */
             if (ramp < 0.20f)               /* 最小20% */
@@ -2449,7 +2485,7 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
     /* RECOVER阶段：转向缩放 + yaw修正 */
     if (s_ra_state == RA_ST_ACTIVE && s_ra_phase == RA_PH_RECOVER) /* RECOVER阶段 */
     {
-        steer *= (float)RA_RECOVER_STEER_PCT * 0.01f; /* 转向缩放到140% */
+        steer *= (float)RA_RECOVER_STEER_PCT * 0.01f; /* 转向缩放到RECOVER比例 */
         steer += recover_yaw_correction();   /* 添加yaw修正 */
     }
 

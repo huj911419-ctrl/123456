@@ -137,7 +137,7 @@ extern volatile uint8 vacuum_enable;
 #define MAX_DUTY 5000.0f
 #define VAC_PWM_CH ATOM0_CH0_P21_2
 #define VAC_PWM_FREQ 10000u
-#define VAC_PWM_DUTY 3500u
+#define VAC_PWM_DUTY 3200u
 #define ERROR_FILTER_ALPHA 0.55f
 
 /* Keep normal-line yaw compensation disabled by default.
@@ -153,35 +153,43 @@ extern volatile uint8 vacuum_enable;
 #define RA_TIMEOUT_FRAMES        150u
 #define RA_WAIT_TIMEOUT          5u
 #define RA_SLOW_TIMEOUT          45u
-#define RA_HARD_MIN_FRAMES       10u
+#define RA_FAST_SLOW_TIMEOUT     8u
+#define RA_CROSS_WAIT_TIMEOUT    2u
+#define RA_CROSS_SLOW_TIMEOUT    6u
+#define RA_HARD_MIN_FRAMES       8u
+#define RA_FAST_HARD_MIN_FRAMES  10u
 #define RA_HARD_RAMP_FRAMES      1u
-#define RA_CROSS_HARD_MIN_FRAMES 10u
+#define RA_CROSS_HARD_MIN_FRAMES 12u
 #define RA_EXIT_VALID_ROWS       12u
 #define RA_EXIT_ERROR_MAX        18
 #define RA_EXIT_CONFIRM_FRAMES   3u
 #define RA_RECOVER_MIN_FRAMES    1u
-#define RA_RECOVER_MAX_FRAMES    2u
+#define RA_RECOVER_MAX_FRAMES    3u
 #define RA_RECOVER_SPEED_PCT     100
-#define RA_RECOVER_STEER_PCT     140
-#define RA_RECOVER_VALID_ROWS    25u
-#define RA_RECOVER_ERROR_MAX     12
-#define RA_RECOVER_LOOKAHEAD_MAX 14
-#define RA_RECOVER_TREND_MAX     16
+#define RA_RECOVER_STEER_PCT     120
+#define RA_RECOVER_VALID_ROWS    20u
+#define RA_RECOVER_ERROR_MAX     18
+#define RA_RECOVER_LOOKAHEAD_MAX 22
+#define RA_RECOVER_TREND_MAX     24
 #define RA_RECOVER_CONFIRM_FRAMES 1u
 #define RA_RECOVER_NEAR_DETECT_MIN_FRAMES 1u
 #define RA_RECOVER_YAW_TARGET_DEG 84.0f
 #define RA_RECOVER_YAW_KP         0.0f
 #define RA_RECOVER_YAW_MAX        280.0f
 #define RA_RECOVER_YAW_DEADZONE   3.0f
-#define RA_RECOVER_SEED_STEER_PCT 35
+#define RA_RECOVER_SEED_STEER_PCT 20
 #define RA_FAST_DIRECT_YAW_DEG    82.0f
 #define RA_DIRECT_CAMERA_MIN_YAW  30.0f
-#define RA_FAST_CAMERA_MIN_YAW    56.0f
+#define RA_FAST_CAMERA_MIN_YAW    64.0f
 #define RA_CROSS_HARD_YAW_DEG     60.0f
 #define RA_CROSS_CAMERA_MIN_YAW   40.0f
-#define RA_DIRECT_TURN_ROW_OFFSET 8u
-#define RA_COMPLEX_TURN_ROW_OFFSET 6u
-#define RA_COMPLEX_DUTY_PCT       95
+#define RA_CAMERA_EXIT_TARGET_RATIO 0.90f
+#define RA_HARD_TAPER_START_RATIO 0.75f
+#define RA_HARD_TAPER_END_RATIO   0.95f
+#define RA_HARD_TAPER_MIN_PCT     85
+#define RA_DIRECT_TURN_ROW_OFFSET 2u
+#define RA_COMPLEX_TURN_ROW_OFFSET 2u
+#define RA_COMPLEX_DUTY_PCT       105
 #define RA_STRAIGHT_FRAMES       55u
 #define TURN_SHIELD_MIN_FRAMES   1u
 #define TURN_SHIELD_MAX_FRAMES   3u
@@ -222,5 +230,6 @@ void line_pid_init(void);
 void line_pid_control(void);
 void line_pid_reset_derivative(void);
 void start_single_edge(uint8 side, uint16 duration_ms);
+uint8 route_next_flag_is(uint8 flag);
 
 #endif /* CODE_PID_H_ */
