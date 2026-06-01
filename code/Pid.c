@@ -1259,9 +1259,9 @@ static float steer_pd_calc(int16 pos_err,           /* 位置误差 */
                            float feedforward,        /* 前馈信号 */
                            float slew_max)           /* 变化率限制 */
 {
-    /* 一阶IIR低通滤波：alpha=0.4，新值权重0.6 */
-    s_filtered_err = s_filtered_err * ERROR_FILTER_ALPHA + /* 上一帧滤波值×0.4 */
-                     (float)pos_err * (1.0f - ERROR_FILTER_ALPHA); /* 新误差×0.6 */
+    /* 一阶IIR低通滤波：alpha=0.55，新值权重0.45 */
+    s_filtered_err = s_filtered_err * ERROR_FILTER_ALPHA + /* 上一帧滤波值×0.55 */
+                     (float)pos_err * (1.0f - ERROR_FILTER_ALPHA); /* 新误差×0.45 */
 
     float err = s_filtered_err;             /* 滤波后的误差 */
     float err_abs = abs_f(err);             /* 滤波误差绝对值 */
@@ -1295,7 +1295,7 @@ static float steer_pd_calc(int16 pos_err,           /* 位置误差 */
 
     /* D项：若未被重置则正常计算，否则跳过一帧 */
     if (s_steer_d_reset_flag == 0u)         /* 微分未被重置 */
-        d_out = STEER_KD * kd_scale * (raw_err - s_steer_last_raw_err) * PID_D_SCALE; /* 微分输出 */
+        d_out = STEER_KD * kd_scale * (err - s_steer_last_pos_err) * PID_D_SCALE; /* 微分输出 */
     else                                    /* 微分被重置 */
         s_steer_d_reset_flag = 0u;          /* 清除重置标志，下帧恢复D项 */
 
@@ -1658,7 +1658,7 @@ static int16 plan_quality_speed(int16 target) /* 视觉质量降速 */
  * 返回: 限幅后的转向值 */
 static float limit_normal_steer(float steer, float speed_out) /* 转向差速限制 */
 {
-    int16 pct = STEER_DIFF_NORMAL_PCT;      /* 默认百分比95% */
+    int16 pct = STEER_DIFF_NORMAL_PCT;      /* 默认百分比 */
 
     if (s_straight_active)                  /* 直道模式 */
         pct = STEER_DIFF_STRAIGHT_PCT;      /* 直道百分比75% */
@@ -2255,7 +2255,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
  *   2. 计算前馈信号（基于前瞻误差）
  *   3. 选择cascade或普通PD计算转向
  *   4. 计算自适应速度 + 速度PI + 速度前馈
- *   5. 速度因子缩放转向（高速时转向更灵敏）
+ *   5. 速度因子缩放转向（高速时温和补偿）
  *   6. 直道/RECOVER模式转向缩放
  *   7. 差速限幅
  *   8. 输出：左轮=速度+转向，右轮=速度-转向 */
@@ -2268,7 +2268,7 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
     float ff_raw = STEER_KP * sch.ff_scale * (float)g_tf.lookahead_error; /* 原始前馈 */
     float steer_ff = 0.0f;                  /* 有效前馈值，初始为0 */
 
-    ff_raw = clamp_f(ff_raw, -STEER_FF_MAX, STEER_FF_MAX); /* 前馈限幅到±650 */
+    ff_raw = clamp_f(ff_raw, -STEER_FF_MAX, STEER_FF_MAX); /* 前馈限幅 */
     /* 前馈低通滤波 */
     s_steer_ff_filtered = s_steer_ff_filtered * STEER_FF_FILTER_ALPHA + /* 上一帧×0.55 */
                           ff_raw * (1.0f - STEER_FF_FILTER_ALPHA);      /* 新值×0.45 */
@@ -2349,9 +2349,19 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
                                                &s_speed_integral, /* 积分指针 */
                                                pos_err_abs);  /* 位置误差（积分分离用） */
 
-    /* 速度因子：高速时转向增益增大（speed_factor > 1） */
-    float speed_factor = 1.0f + (float)base_speed * (float)steer_speed_k * 0.001f; /* 速度因子 */
-    if (speed_factor > SPEED_FACTOR_MAX)    /* 超过上限(5.0) */
+    /* 速度因子：高速时温和增加转向补偿 */
+    int16 turn_signal = pos_err_abs;
+    int16 la_abs_for_turn = abs_i16(g_tf.lookahead_error);
+    if (la_abs_for_turn > turn_signal) turn_signal = la_abs_for_turn;
+    if (trend_abs > turn_signal) turn_signal = trend_abs;
+
+    float curve_boost = range_ratio_i16(turn_signal,
+                                        STEER_GAIN_CURVE_T1,
+                                        STEER_GAIN_CURVE_T2) * 0.35f;
+    float speed_factor = 1.0f +
+                         (float)base_speed * (float)steer_speed_k * 0.00025f +
+                         curve_boost;       /* 速度因子 */
+    if (speed_factor > SPEED_FACTOR_MAX)    /* 超过上限 */
         speed_factor = SPEED_FACTOR_MAX;    /* 限幅 */
 
     steer *= speed_factor;                  /* 转向乘以速度因子 */

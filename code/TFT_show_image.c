@@ -219,17 +219,26 @@ static void tft_draw_line(uint8 x0, uint8 y0, uint8 x1, uint8 y1, uint16 color)
 static void draw_inflection_overlay(void)
 {
     uint8 has_box = 0u;  /* 标记是否需要绘制路口检测框，1=需要绘制 */
+    uint8 has_ip = (g_inter_result.left_ip.valid || g_inter_result.right_ip.valid) ? 1u : 0u;
+    uint8 same_ip = 0u;
 
     /* 左拐点标记：RA 标志有效（非0）且左拐点有效时，在图像上画黄色 X 形标记 */
-    if (g_ra_flag != 0u && g_inter_result.left_ip.valid)  /* 路口已检测到且左拐点有效 */
+    if (g_inter_result.left_ip.valid)  /* 路口已检测到且左拐点有效 */
     {
         tft_draw_x_mark(tft_map_col(g_inter_result.left_ip.col),   /* 将拐点列坐标映射到TFT屏幕x */
                         tft_map_row(g_inter_result.left_ip.row),   /* 将拐点行坐标映射到TFT屏幕y */
                         IP_MARK_SIZE, RGB565_YELLOW);              /* 半尺寸3，颜色为黄色 */
     }
 
+    if (g_inter_result.left_ip.valid && g_inter_result.right_ip.valid &&
+        g_inter_result.left_ip.row == g_inter_result.right_ip.row &&
+        g_inter_result.left_ip.col == g_inter_result.right_ip.col)
+    {
+        same_ip = 1u;
+    }
+
     /* 右拐点标记：RA 标志有效且右拐点有效时，在图像上画洋红色 X 形标记 */
-    if (g_ra_flag != 0u && g_inter_result.right_ip.valid)  /* 路口已检测到且右拐点有效 */
+    if (g_inter_result.right_ip.valid && same_ip == 0u)  /* 路口已检测到且右拐点有效 */
     {
         tft_draw_x_mark(tft_map_col(g_inter_result.right_ip.col),  /* 将拐点列坐标映射到TFT屏幕x */
                         tft_map_row(g_inter_result.right_ip.row),  /* 将拐点行坐标映射到TFT屏幕y */
@@ -240,8 +249,7 @@ static void draw_inflection_overlay(void)
      * 条件1：RA 标志有效（g_ra_flag != 0）
      * 条件2：至少一个拐点有效（左或右）
      * 条件3：检测框的 bottom > top 且 right > left（框尺寸合法） */
-    if (g_ra_flag != 0u &&  /* 条件1：路口标志有效 */
-        (g_inter_result.left_ip.valid || g_inter_result.right_ip.valid))  /* 条件2：至少一个拐点有效 */
+    if (has_ip != 0u)  /* 条件2：至少一个拐点有效 */
     {
         if (g_inter_result.box_bottom > g_inter_result.box_top &&      /* 条件3a：框高度>0 */
             g_inter_result.box_right > g_inter_result.box_left)         /* 条件3b：框宽度>0 */

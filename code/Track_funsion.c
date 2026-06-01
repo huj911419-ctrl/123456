@@ -2018,13 +2018,21 @@ static uint8 find_probe_trigger_ip(InflectionPoint_t *ip, uint8 *found_side)
 
     if (left_row >= 0 && right_row >= 0)
     {
-        ip->row = (left_row > right_row) ? left_row : right_row;
         if (abs_i16(left_row - right_row) <= INTER_BRANCH_PAIR_ROW_DELTA)
+        {
+            ip->row = (int16)((left_row + right_row) / 2);
             *found_side = 3u;
+        }
         else if (left_row > right_row)
+        {
+            ip->row = left_row;
             *found_side = 2u;
+        }
         else
+        {
+            ip->row = right_row;
             *found_side = 1u;
+        }
     }
     else if (right_row >= 0)
     {
@@ -2863,9 +2871,6 @@ static uint8 vote_inter_type(uint8 detected)
 static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok)
 {
 #if INTER_FAST_CONFIRM_ENABLE
-    if (detected >= 3u && detected <= 5u)
-        return detected;
-
     /* 类型 1/2：纯直角证据成立且不是稳定直线时快速确认 */
     if ((detected == 1u || detected == 2u) &&
         pure_ra_ok &&
@@ -3154,12 +3159,10 @@ void detect_intersection(void)
         inter_side_window_has_road(b_top, b_bottom, b_left, b_right, 1u);
     uint8 left_frame_has = (left_has || left_box_has) ? 1u : 0u;
     uint8 right_frame_has = (right_has || right_box_has) ? 1u : 0u;
-    uint8 left_dir_has =
-        (left_branch_has || (left_frame_has && left_branch_strong)) ? 1u : 0u;
-    uint8 right_dir_has =
-        (right_branch_has || (right_frame_has && right_branch_strong)) ? 1u : 0u;
-    uint8 left_strong_dir_has = left_branch_strong;
-    uint8 right_strong_dir_has = right_branch_strong;
+    uint8 left_dir_has = (left_branch_has || left_frame_has) ? 1u : 0u;
+    uint8 right_dir_has = (right_branch_has || right_frame_has) ? 1u : 0u;
+    uint8 left_strong_dir_has = (left_branch_strong || left_frame_has) ? 1u : 0u;
+    uint8 right_strong_dir_has = (right_branch_strong || right_frame_has) ? 1u : 0u;
     uint8 top_valid_rows = valid_rows_in_range(
         (int16)INTER_FAST_PASS_TOP_START_ROW,
         (int16)INTER_FAST_PASS_TOP_END_ROW);

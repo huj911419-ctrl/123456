@@ -68,24 +68,24 @@ extern volatile uint8 vacuum_enable;
 #define STEER_KP  ((float)pid_kp * 0.8f)
 #define STEER_KD  ((float)pid_kd * 0.6f)
 #define STEER_MAX 4000.0f
-#define STEER_DEADZONE 1
-#define STEER_SOFT_END 6
-#define STEER_SLEW_MAX 320.0f
+#define STEER_DEADZONE 2
+#define STEER_SOFT_END 8
+#define STEER_SLEW_MAX 420.0f
 #define STEER_GAIN_SPEED_START 180
 #define STEER_GAIN_SPEED_END 800
 #define STEER_GAIN_CURVE_T1 10
 #define STEER_GAIN_CURVE_T2 38
-#define STEER_FAST_KP_PCT 90
-#define STEER_FAST_KD_PCT 115
-#define STEER_CURVE_KP_PCT 125
-#define STEER_CURVE_KD_PCT 135
+#define STEER_FAST_KP_PCT 80
+#define STEER_FAST_KD_PCT 105
+#define STEER_CURVE_KP_PCT 155
+#define STEER_CURVE_KD_PCT 145
 #define STEER_FF_SPEED_START 180
 #define STEER_FF_SPEED_END 800
-#define STEER_FF_MAX 650.0f
+#define STEER_FF_MAX 600.0f
 #define STEER_FF_FILTER_ALPHA 0.55f
 #define STEER_DIFF_MIN_LIMIT 250.0f
-#define STEER_DIFF_MAX_LIMIT 1800.0f
-#define STEER_DIFF_NORMAL_PCT 95
+#define STEER_DIFF_MAX_LIMIT 2200.0f
+#define STEER_DIFF_NORMAL_PCT 110
 #define STEER_DIFF_STRAIGHT_PCT 75
 #define STEER_DIFF_RECOVER_PCT 120
 
@@ -97,7 +97,7 @@ extern volatile uint8 vacuum_enable;
 #define SPEED_FF_RATIO 0.4f
 #define SPEED_ACCEL_FF_GAIN 0.35f
 #define SPEED_ACCEL_FF_LIMIT 180.0f
-#define SPEED_FACTOR_MAX 5.0f
+#define SPEED_FACTOR_MAX 2.2f
 #define SPEED_STRAIGHT_VALID_ROWS 35u
 #define SPEED_STRAIGHT_ERR_MAX 6
 #define SPEED_STRAIGHT_LOOKAHEAD_MAX 8
@@ -133,7 +133,7 @@ extern volatile uint8 vacuum_enable;
 #define VAC_PWM_CH ATOM0_CH0_P21_2
 #define VAC_PWM_FREQ 10000u
 #define VAC_PWM_DUTY 3000u
-#define ERROR_FILTER_ALPHA 0.40f
+#define ERROR_FILTER_ALPHA 0.55f
 
 /* Keep normal-line yaw compensation disabled by default.
  * IMU is used below only as a hard-turn exit reference. */
@@ -172,10 +172,10 @@ extern volatile uint8 vacuum_enable;
 #define RA_FAST_DIRECT_YAW_DEG    82.0f
 #define RA_DIRECT_CAMERA_MIN_YAW  30.0f
 #define RA_FAST_CAMERA_MIN_YAW    56.0f
-#define RA_CROSS_HARD_YAW_DEG     56.0f
-#define RA_CROSS_CAMERA_MIN_YAW   34.0f
+#define RA_CROSS_HARD_YAW_DEG     60.0f
+#define RA_CROSS_CAMERA_MIN_YAW   40.0f
 #define RA_DIRECT_TURN_ROW_OFFSET 8u
-#define RA_COMPLEX_TURN_ROW_OFFSET 0u
+#define RA_COMPLEX_TURN_ROW_OFFSET 6u
 #define RA_COMPLEX_DUTY_PCT       95
 #define RA_STRAIGHT_FRAMES       55u
 #define TURN_SHIELD_MIN_FRAMES   1u

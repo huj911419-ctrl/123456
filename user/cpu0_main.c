@@ -90,7 +90,7 @@ int core0_main(void)
         /* 通过UART0发送压缩二值化图像到电脑 */
         if (!run_quiet_active())
         {
-            send_image_uart0();
+           send_image_uart0();
         }
 #endif
 

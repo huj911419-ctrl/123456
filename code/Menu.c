@@ -25,28 +25,28 @@
 /* ==================== 菜单可调参数变量 ==================== */
 /* 每个变量都绑定到菜单的某个条目，用户可通过按键实时修改 */
 
-int16 motor_speed = 200;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
+int16 motor_speed = 150;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
 int16 motor_enable = 0;       /* 电机使能开关：0=禁用（停止），1=启用（允许运行） */
-int16 motor_run_time =12;     /* 电机最大运行时间（秒） */
-int16 run_quiet_enable = RUN_QUIET_DEFAULT_ENABLE; /* 运行静默模式：运行时关闭TFT/UART图传/普通按键 */
+int16 motor_run_time =28;     /* 电机最大运行时间（秒） */
+int16 run_quiet_enable =RUN_QUIET_STOP_KEY ; /* 运行静默模式：运行时关闭TFT/UART图传/普通按键 *///RUN_QUIET_STOP_KEY   RUN_QUIET_DEFAULT_ENABLE
 
 int16 cam_exposure = 600;      /* 摄像头曝光时间（行周期数），值越大画面越亮 */
 
 int16 pid_kp = 7;              /* 转向PD控制器的比例系数Kp */
 int16 pid_ki = 2;              /* 速度PI控制器的积分系数Ki */
-int16 pid_kd = 20;             /* 转向PD控制器的微分系数Kd */
+int16 pid_kd = 14;             /* 转向PD控制器的微分系数Kd */
 
 int16 sp_err_t1 = 4;          /* 速度规划：直线判定误差阈值，|error|<=此值视为直线 */
 int16 sp_err_t2 = 20;         /* 速度规划：弯道判定误差阈值，|error|>=此值视为急弯 */
 int16 sp_ratio_1 = 100;       /* 速度规划：直道目标速度百分比（100%=满速） */
 int16 sp_ratio_2 = 48;        /* 速度规划：弯道目标速度百分比（48%=降速过弯） */
-int16 steer_speed_k = 3;      /* 转向速度耦合系数：速度越快，转向增益自动降低 */
-int16 steer_ff_k = 12;        /* 前瞻前馈系数：根据前瞻误差提前施加转向补偿 */
+int16 steer_speed_k = 1;      /* 转向速度耦合系数：速度越快，转向补偿温和增加 */
+int16 steer_ff_k = 10;        /* 前瞻前馈系数：根据前瞻误差提前施加转向补偿 */
 
 /* ==================== 直角弯RA状态机参数 ==================== */
 int16 ra_hard_inner = 0;       /* 直角弯HARD阶段内侧电机占空比，0=内侧轮停住 */
-int16 ra_hard_outer = 1500;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转向 */
-int16 ra_hard_yaw = 52;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退出 */
+int16 ra_hard_outer = 1800;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转向 */
+int16 ra_hard_yaw = 56;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退出 */
 int16 ra_slow_row = 38;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减速 */
 int16 ra_slow_pct = 45;        /* 直角弯SLOW阶段速度百分比（45%=大幅降速） */
 int16 ra_turn_row = 96;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
@@ -75,7 +75,7 @@ static MenuItem items_tune[] = {
     {"CrvErr", &sp_err_t2, 10, 80, 1},       /* 弯道误差阈值：用于判断是否在急弯 */
     {"StrSpd%", &sp_ratio_1, 20, 100, 5},    /* 直线速度百分比：直道时的目标速度 */
     {"CrvSpd%", &sp_ratio_2, 20, 100, 5},    /* 弯道速度百分比：弯道时的目标速度 */
-    {"SpdCpl", &steer_speed_k, 0, 50, 1},    /* 速度耦合系数：速度越快转向增益越小 */
+    {"SpdCpl", &steer_speed_k, 0, 50, 1},    /* 速度耦合系数：速度越快转向补偿越多 */
     {"LaFF", &steer_ff_k, 0, 50, 1},         /* 前瞻前馈系数：根据前瞻误差的前馈补偿 */
 };
 
