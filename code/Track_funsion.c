@@ -1918,23 +1918,36 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
         if (g_ra_pre_flag != 0u && (g_ra_pre_dir == 1u || g_ra_pre_dir == 2u))
         {
             *found_side = g_ra_pre_dir;
-            ip_row = (g_ra_pre_dir == 1u) ? right_white_row : left_white_row;
+            if (abs_i16(left_white_row - right_white_row) <= INTER_BRANCH_PAIR_ROW_DELTA)
+                ip_row = (int16)((left_white_row + right_white_row) / 2);
+            else
+                ip_row = (g_ra_pre_dir == 1u) ? right_white_row : left_white_row;
         }
         else
         {
-            /* 取行号更大的（离相机更近的）作为拐点行 */
-            ip_row = (left_white_row > right_white_row) ? left_white_row : right_white_row;
             if (abs_i16(left_white_row - right_white_row) <= INTER_BRANCH_PAIR_ROW_DELTA)
+            {
+                ip_row = (int16)((left_white_row + right_white_row) / 2);
                 *found_side = 3u;
+            }
             /* 左侧行号更大 = 左侧道路更近 = 左转场景 */
             else if (left_white_row > right_white_row)
+            {
+                ip_row = left_white_row;
                 *found_side = 2u;
+            }
             /* 右侧行号更大 = 右侧道路更近 = 右转场景 */
             else if (right_white_row > left_white_row)
+            {
+                ip_row = right_white_row;
                 *found_side = 1u;
+            }
             /* 同行 = 两侧距离相同 = 十字路口场景 */
             else
+            {
+                ip_row = (int16)((left_white_row + right_white_row) / 2);
                 *found_side = 3u;
+            }
         }
     }
     /* 仅右侧检测到白色延伸 */
@@ -2193,6 +2206,101 @@ static uint8 inter_side_window_has_road(int16 top,
         white_sum >= INTER_SIDE_HIT_WHITE)
     {
         return 1u;
+    }
+
+    return 0u;
+}
+
+static uint8 inter_side_crossing_has_road(int16 top,
+                                          int16 bottom,
+                                          int16 left,
+                                          int16 right,
+                                          uint8 side)
+{
+    int16 height;
+    int16 row_start;
+    int16 row_end;
+    int16 center;
+    uint8 hit_rows = 0u;
+
+    if (top < 0) top = 0;
+    if (bottom >= TF_IMG_H) bottom = TF_IMG_H - 1;
+    if (left < 0) left = 0;
+    if (right >= TF_IMG_W) right = TF_IMG_W - 1;
+    if (top > bottom || left > right) return 0u;
+
+    height = (int16)(bottom - top);
+    row_start = (int16)(top + (height * INTER_SIDE_CROSS_TOP_PCT) / 100);
+    row_end = (int16)(top + (height * INTER_SIDE_CROSS_BOTTOM_PCT) / 100);
+    center = (int16)((left + right) / 2);
+
+    if (row_start < top) row_start = top;
+    if (row_end > bottom) row_end = bottom;
+    if (row_start > row_end) return 0u;
+
+    for (int16 row = row_start; row <= row_end; row++)
+    {
+        uint8 streak = 0u;
+
+        if (side == 1u)
+        {
+            int16 edge_start = (int16)(right - INTER_SIDE_SCAN_COLS);
+            int16 seed_col = -1;
+
+            if (edge_start < center) edge_start = center;
+
+            for (int16 col = right; col >= edge_start; col--)
+            {
+                if (is_white(row, col))
+                {
+                    seed_col = col;
+                    break;
+                }
+            }
+
+            if (seed_col >= 0)
+            {
+                for (int16 col = seed_col; col >= center; col--)
+                {
+                    if (!is_white(row, col))
+                        break;
+                    streak++;
+                }
+            }
+        }
+        else
+        {
+            int16 edge_end = (int16)(left + INTER_SIDE_SCAN_COLS);
+            int16 seed_col = -1;
+
+            if (edge_end > center) edge_end = center;
+
+            for (int16 col = left; col <= edge_end; col++)
+            {
+                if (is_white(row, col))
+                {
+                    seed_col = col;
+                    break;
+                }
+            }
+
+            if (seed_col >= 0)
+            {
+                for (int16 col = seed_col; col <= center; col++)
+                {
+                    if (!is_white(row, col))
+                        break;
+                    streak++;
+                }
+            }
+        }
+
+        if (streak >= INTER_SIDE_CROSS_MIN_STREAK)
+        {
+            hit_rows++;
+            if (hit_rows >= INTER_SIDE_CROSS_HIT_ROWS)
+                return 1u;
+        }
     }
 
     return 0u;
@@ -2868,7 +2976,8 @@ static uint8 vote_inter_type(uint8 detected)
  * @param detected 当前帧检测到的路口类型
  * @return 确认的路口类型，0=未确认（需走投票流程）
  */
-static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok)
+static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok,
+                                     uint8 type5_fast_ok)
 {
 #if INTER_FAST_CONFIRM_ENABLE
     /* 类型 1/2：纯直角证据成立且不是稳定直线时快速确认 */
@@ -2879,9 +2988,15 @@ static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok)
         return detected;
     }
 
+    if (detected == 5u && type5_fast_ok)
+    {
+        return 5u;
+    }
+
 #else
     (void)detected;
     (void)pure_ra_ok;
+    (void)type5_fast_ok;
 #endif
 
     /* 快速确认未启用或类型不在快速确认范围内，返回0走投票流程 */
@@ -3159,6 +3274,11 @@ void detect_intersection(void)
         inter_side_window_has_road(b_top, b_bottom, b_left, b_right, 1u);
     uint8 left_frame_has = (left_has || left_box_has) ? 1u : 0u;
     uint8 right_frame_has = (right_has || right_box_has) ? 1u : 0u;
+    uint8 left_cross_has =
+        inter_side_crossing_has_road(b_top, b_bottom, b_left, b_right, 2u);
+    uint8 right_cross_has =
+        inter_side_crossing_has_road(b_top, b_bottom, b_left, b_right, 1u);
+    uint8 side_cross_ok = (left_cross_has && right_cross_has) ? 1u : 0u;
     uint8 left_dir_has = (left_branch_has || left_frame_has) ? 1u : 0u;
     uint8 right_dir_has = (right_branch_has || right_frame_has) ? 1u : 0u;
     uint8 left_strong_dir_has = (left_branch_strong || left_frame_has) ? 1u : 0u;
@@ -3176,9 +3296,12 @@ void detect_intersection(void)
     uint8 tri_cross_candidate =
         (g_sym_component_flag != 0u &&
          left_dir_has && right_dir_has &&
+         side_cross_ok &&
          !straight_inline_view() &&
          (g_tf.valid_row_count <= INTER_TRI_CROSS_VALID_ROWS_MAX ||
           top_valid_rows <= INTER_TRI_CROSS_TOP_VALID_MAX)) ? 1u : 0u;
+    uint8 type5_side_ok =
+        (left_dir_has && right_dir_has && side_cross_ok) ? 1u : 0u;
 
     if (inline_component_candidate)
     {
@@ -3206,7 +3329,7 @@ void detect_intersection(void)
 
     /* ---- 路口类型分类逻辑 ---- */
     /* 3/4/5 use box direction plus continuous side-branch evidence. */
-    if ((left_dir_has && right_dir_has) || tri_cross_candidate)
+    if (type5_side_ok || tri_cross_candidate)
         detected = 5u;
     else if (top_road_has && left_strong_dir_has)
         detected = 3u;
@@ -3228,7 +3351,14 @@ void detect_intersection(void)
 
     /* ---- 确认路口类型：快速确认 -> 投票确认 ---- */
     /* 首先尝试快速确认（跳过投票，对高置信度类型直接确认） */
-    uint8 voted_type = fast_confirm_inter_type(detected, pure_ra_ok);
+    uint8 type5_fast_ok =
+        (detected == 5u &&
+         left_frame_has && right_frame_has &&
+         side_cross_ok &&
+         !inline_component_candidate &&
+         !straight_inline_view()) ? 1u : 0u;
+    uint8 voted_type = fast_confirm_inter_type(detected, pure_ra_ok,
+                                               type5_fast_ok);
     /* 快速确认未通过，走投票确认流程 */
     if (voted_type == 0u)
         voted_type = vote_inter_type(detected);

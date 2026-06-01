@@ -25,7 +25,7 @@
 /* ==================== 菜单可调参数变量 ==================== */
 /* 每个变量都绑定到菜单的某个条目，用户可通过按键实时修改 */
 
-int16 motor_speed = 150;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
+int16 motor_speed = 170;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
 int16 motor_enable = 0;       /* 电机使能开关：0=禁用（停止），1=启用（允许运行） */
 int16 motor_run_time =28;     /* 电机最大运行时间（秒） */
 int16 run_quiet_enable =RUN_QUIET_STOP_KEY ; /* 运行静默模式：运行时关闭TFT/UART图传/普通按键 *///RUN_QUIET_STOP_KEY   RUN_QUIET_DEFAULT_ENABLE
