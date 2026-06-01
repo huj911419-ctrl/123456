@@ -49,7 +49,7 @@ int16 ra_hard_outer = 1800;    /* 直角弯HARD阶段外侧电机占空比，外
 int16 ra_hard_yaw = 56;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退出 */
 int16 ra_slow_row = 38;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减速 */
 int16 ra_slow_pct = 45;        /* 直角弯SLOW阶段速度百分比（45%=大幅降速） */
-int16 ra_turn_row = 96;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
+int16 ra_turn_row = 105;       /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
 int16 ra_approach_frames = 1;  /* 直角弯APPROACH阶段等待帧数，等待完毕后进入HARD急转 */
 
 int16 yaw_kp = 8;             /* IMU级联控制的航向角比例系数Kp */

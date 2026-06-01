@@ -121,6 +121,11 @@ extern volatile uint8 vacuum_enable;
 #define SPEED_COMPONENT_ERR_MAX 32
 #define SPEED_COMPONENT_LA_MAX 36
 #define SPEED_COMPONENT_TREND_MAX 36
+#define SPEED_SINGLE_EDGE_VALID_ROWS 28u
+#define SPEED_SINGLE_EDGE_ERR_MAX 16
+#define SPEED_SINGLE_EDGE_LOOKAHEAD_MAX 22
+#define SPEED_SINGLE_EDGE_TREND_MAX 22
+#define SPEED_SINGLE_EDGE_BOOST_PCT 115
 #define SPEED_ERR_JUMP_T1 10
 #define SPEED_ERR_JUMP_T2 28
 #define SPEED_ERR_JUMP_MIN_PCT 60
@@ -198,6 +203,7 @@ extern volatile uint8 vacuum_enable;
 #define EDGE_RIGHT 2u
 #define EDGE_AUTO  3u
 #define SINGLE_EDGE_POST_TURN_MS 500u
+#define SINGLE_EDGE_UNTIL_NEXT_TURN 0xFFFFu
 
 extern uint8 g_post_edge_side;
 
