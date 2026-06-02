@@ -45,6 +45,7 @@
 #include "Track_funsion.h"
 #include "Pid.h"
 #include "IMU.h"
+#include "App_Config.h"
 
 /* 外部变量声明 */
 extern volatile uint32 prof_tf_us;
@@ -56,6 +57,7 @@ extern volatile uint32 prof_inter_us;
 #define FRAME_TYPE_IMAGE  0x00
 #define FRAME_TYPE_EDGES  0x01
 #define FRAME_TYPE_PARAMS 0x02
+#define FRAME_TYPE_TELEMETRY 0x03
 
 /* ==================== 图像尺寸定义 ==================== */
 #define IMG_W   94
@@ -65,6 +67,7 @@ extern volatile uint32 prof_inter_us;
 #define PACKED_SIZE    ((IMG_W * IMG_H + 7) / 8)
 #define EDGE_DATA_SIZE (IMG_H * 6)
 #define PARAM_DATA_SIZE 41
+#define TELEMETRY_DATA_SIZE 56
 
 /* ==================== 无效边线标记 ==================== */
 #define EDGE_INVALID   0xFFFF
@@ -84,19 +87,55 @@ static void send_uart_packet(uint8 type, const uint8 *data, uint16 len)
     uart_write_buffer(UART_0, data, len);
 }
 
+static uint8 uart0_div_hit(uint16 frame_count, uint16 div)
+{
+    if (div == 0u)
+        return 0u;
+    if (div <= 1u)
+        return 1u;
+    if (frame_count == 0u)
+        return 1u;
+    return ((frame_count % div) == 0u) ? 1u : 0u;
+}
+
+static void put_i16_be(uint8 *data, uint16 *idx, int16 value)
+{
+    data[(*idx)++] = (uint8)((value >> 8) & 0xFF);
+    data[(*idx)++] = (uint8)(value & 0xFF);
+}
+
+static void put_u16_be(uint8 *data, uint16 *idx, uint16 value)
+{
+    data[(*idx)++] = (uint8)((value >> 8) & 0xFF);
+    data[(*idx)++] = (uint8)(value & 0xFF);
+}
+
 /**
  * send_image_uart0 - 发送压缩图像 + 边线坐标 + TFT参数到电脑
  */
 void send_image_uart0(void)
 {
-    uint8 packed[PACKED_SIZE];
-    uint8 edge_data[EDGE_DATA_SIZE];
     uint8 param_data[PARAM_DATA_SIZE];
+    uint8 telemetry_data[TELEMETRY_DATA_SIZE];
     uint16 idx = 0;
     uint8 bit_cnt = 0;
     uint8 byte_val = 0;
+    static uint16 s_uart0_frame_count = 0u;
+    uint16 frame_count = s_uart0_frame_count++;
+    uint8 send_image = uart0_div_hit(frame_count, (uint16)UART0_IMAGE_DIV);
+    uint8 send_edges = uart0_div_hit(frame_count, (uint16)UART0_EDGES_DIV);
+    uint8 send_params = uart0_div_hit(frame_count, (uint16)UART0_PARAMS_DIV);
+    uint8 send_telemetry = uart0_div_hit(frame_count, (uint16)UART0_TELEMETRY_DIV);
+
+#if !UART0_DEBUG_ENABLE
+    return;
+#endif
 
     /* ===== 包1：压缩图像 ===== */
+    if (send_image)
+    {
+        uint8 packed[PACKED_SIZE];
+
     for (uint8 row = 0; row < IMG_H; row++)
     {
         for (uint8 col = 0; col < IMG_W; col++)
@@ -116,8 +155,13 @@ void send_image_uart0(void)
         packed[idx++] = byte_val;
 
     send_uart_packet(FRAME_TYPE_IMAGE, packed, PACKED_SIZE);
+    }
 
     /* ===== 包2：边线坐标 ===== */
+    if (send_edges)
+    {
+        uint8 edge_data[EDGE_DATA_SIZE];
+
     idx = 0;
     for (uint8 row = 0; row < IMG_H; row++)
     {
@@ -134,6 +178,10 @@ void send_image_uart0(void)
     }
 
     send_uart_packet(FRAME_TYPE_EDGES, edge_data, EDGE_DATA_SIZE);
+    }
+
+    if (send_params)
+    {
 
     /* ===== 包3：TFT参数 ===== */
     idx = 0;
@@ -207,4 +255,52 @@ void send_image_uart0(void)
     param_data[idx++] = route_dbg_step;
 
     send_uart_packet(FRAME_TYPE_PARAMS, param_data, PARAM_DATA_SIZE);
+    }
+
+    /* ===== Packet 4: telemetry for tuning ===== */
+    if (send_telemetry)
+    {
+    idx = 0;
+    put_i16_be(telemetry_data, &idx, g_tf.lookahead_error);
+    put_i16_be(telemetry_data, &idx, g_tf.error_trend);
+    put_i16_be(telemetry_data, &idx, steer_dbg_out);
+    put_i16_be(telemetry_data, &idx, duty_dbg_left);
+    put_i16_be(telemetry_data, &idx, duty_dbg_right);
+    telemetry_data[idx++] = speed_dbg_vq_pct;
+    telemetry_data[idx++] = speed_dbg_pre_lock;
+    telemetry_data[idx++] = ra_dbg_dir;
+    telemetry_data[idx++] = ra_dbg_ip_row;
+    put_u16_be(telemetry_data, &idx, ra_dbg_timer);
+    put_u16_be(telemetry_data, &idx, ra_dbg_hard_cnt);
+    telemetry_data[idx++] = ra_dbg_exit_good_cnt;
+    telemetry_data[idx++] = route_dbg_total;
+    telemetry_data[idx++] = route_dbg_flag;
+    telemetry_data[idx++] = route_dbg_count;
+    telemetry_data[idx++] = route_dbg_action;
+    telemetry_data[idx++] = g_inter_result.box_top;
+    telemetry_data[idx++] = g_inter_result.box_bottom;
+    telemetry_data[idx++] = g_inter_result.box_left;
+    telemetry_data[idx++] = g_inter_result.box_right;
+    telemetry_data[idx++] = g_ra_pre_dir;
+    telemetry_data[idx++] = g_ra_pre_slow_flag;
+    telemetry_data[idx++] = g_sym_component_flag;
+    telemetry_data[idx++] = g_tf.line_lost;
+    telemetry_data[idx++] = g_post_edge_side;
+    telemetry_data[idx++] = g_tf.left_jidian;
+    telemetry_data[idx++] = g_tf.right_jidian;
+    put_i16_be(telemetry_data, &idx, motor_speed);
+    put_i16_be(telemetry_data, &idx, pid_kp);
+    put_i16_be(telemetry_data, &idx, pid_ki);
+    put_i16_be(telemetry_data, &idx, pid_kd);
+    put_i16_be(telemetry_data, &idx, ra_turn_row);
+    put_i16_be(telemetry_data, &idx, ra_slow_pct);
+    put_i16_be(telemetry_data, &idx, ra_hard_yaw);
+    put_i16_be(telemetry_data, &idx, ra_hard_outer);
+    put_i16_be(telemetry_data, &idx, ra_hard_inner);
+    put_i16_be(telemetry_data, &idx, ra_slow_row);
+    telemetry_data[idx++] = imu_ready;
+    telemetry_data[idx++] = imu_error;
+
+    send_uart_packet(FRAME_TYPE_TELEMETRY, telemetry_data, TELEMETRY_DATA_SIZE);
+    }
 }

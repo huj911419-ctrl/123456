@@ -20,7 +20,7 @@
 #define KEY_REPEAT_START_CNT 20u /* 长按开始连调前的等待计数 */
 #define KEY_REPEAT_INTERVAL_CNT 4u /* 长按连调间隔计数 */
 #define MAIN_DRAW_DIV_STOP 1u  /* 停止状态下主页TFT刷新分频系数（1=每个新视觉帧都刷新） */
-#define MAIN_DRAW_DIV_RUN  1u  /* 运行状态下主页TFT刷新分频系数（1=每个新视觉帧都刷新） */
+#define MAIN_DRAW_DIV_RUN  4u  /* 运行状态下主页TFT刷新分频系数（1=每个新视觉帧都刷新） */
 
 /* ==================== 菜单可调参数变量 ==================== */
 /* 每个变量都绑定到菜单的某个条目，用户可通过按键实时修改 */
@@ -28,7 +28,7 @@
 int16 motor_speed = 170;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
 int16 motor_enable = 0;       /* 电机使能开关：0=禁用（停止），1=启用（允许运行） */
 int16 motor_run_time =20;     /* 电机最大运行时间（秒） */
-int16 run_quiet_enable =RUN_QUIET_STOP_KEY ; /* 运行静默模式：运行时关闭TFT/UART图传/普通按键 *///RUN_QUIET_STOP_KEY   RUN_QUIET_DEFAULT_ENABLE
+int16 run_quiet_enable =RUN_QUIET_STOP_KEY; /* 运行静默模式：运行时关闭TFT/UART图传/普通按键 *///RUN_QUIET_STOP_KEY   RUN_QUIET_DEFAULT_ENABLE
 
 int16 cam_exposure = 600;      /* 摄像头曝光时间（行周期数），值越大画面越亮 */
 
@@ -66,7 +66,6 @@ static MenuItem items_main[] = {
 
 /* 综合调参页：电机、摄像头、PID和速度规划。 */
 static MenuItem items_tune[] = {
-    {"Speed", &motor_speed, 0, 600, 20},      /* 速度设定：0~600，步进20 */
     {"Bias", &threshold_bias, -50, 50, 5},    /* Otsu阈值偏移补偿：-50~50，步进5 */
     {"Expose", &cam_exposure, 100, 800, 10},  /* 曝光时间：100~800，步进10 */
     {"Kp", &pid_kp, 0, 100, 1},              /* 比例系数：0~100，步进1 */

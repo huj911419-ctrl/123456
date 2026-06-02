@@ -17,6 +17,8 @@
 extern int16 base_speed;
 extern int16 speed_dbg_out;
 extern int16 steer_dbg_out;
+extern int16 duty_dbg_left;
+extern int16 duty_dbg_right;
 extern uint8 speed_dbg_vq_pct;
 extern uint8 speed_dbg_pre_lock;
 extern int16 speed_dbg_raw;
@@ -117,7 +119,7 @@ extern volatile uint8 vacuum_enable;
 #define SPEED_VISION_BAD_PCT 40
 #define SPEED_QUALITY_GOOD_ROWS 35u
 #define SPEED_QUALITY_ROW_MIN_PCT 70
-#define SPEED_COMPONENT_VALID_ROWS 45u
+#define SPEED_COMPONENT_VALID_ROWS 40u
 #define SPEED_COMPONENT_ERR_MAX 32
 #define SPEED_COMPONENT_LA_MAX 36
 #define SPEED_COMPONENT_TREND_MAX 36
@@ -146,10 +148,11 @@ extern volatile uint8 vacuum_enable;
 #define YAW_DEADZONE 1.0f
 
 /* RA state timing, one frame is PID_PERIOD_MS. */
-#define RA_HARD_TIMEOUT          18u
+#define RA_HARD_TIMEOUT          22u
 #define RA_FAST_SPEED_START      520
-#define RA_FAST_HARD_TIMEOUT     24u
-#define RA_CROSS_HARD_TIMEOUT    20u
+#define RA_FAST_HARD_TIMEOUT     30u
+#define RA_CROSS_HARD_TIMEOUT    32u
+#define RA_HARD_FORCE_TIMEOUT_EXTRA 18u
 #define RA_TIMEOUT_FRAMES        150u
 #define RA_WAIT_TIMEOUT          5u
 #define RA_SLOW_TIMEOUT          45u

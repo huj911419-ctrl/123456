@@ -11,6 +11,8 @@ int16 base_speed = 0;           /* 基础速度值，PID控制的核心速度输
 int16 speed_dbg_out = 0;        /* 速度调试输出，供TFT显示用 */
 /* 转向调试输出值（纯转向分量） */
 int16 steer_dbg_out = 0;        /* 转向调试输出，供TFT显示用 */
+int16 duty_dbg_left = 0;        /* Last left duty sent to motor driver */
+int16 duty_dbg_right = 0;       /* Last right duty sent to motor driver */
 /* 视觉质量降速百分比（100=无降速），用于TFT调试显示 */
 uint8 speed_dbg_vq_pct = 100u;  /* 视觉质量降速百分比，100表示无降速 */
 /* 预检测锁定标志，用于TFT调试显示（1=正在预减速） */
@@ -465,7 +467,7 @@ static float ra_yaw_progress(void)          /* 计算RA偏航进度 */
     float delta = normalize_angle(yaw_angle); /* 获取归一化后的yaw角 */
 
     /* 左转方向：yaw_angle为负值，取反得到正进度 */
-    if (s_ra_dir == 2u)                     /* 左转方向 */
+    if (s_ra_dir == 1u)                     /* 左转方向 */
         delta = -delta;                     /* 取反得到正进度 */
 
     return (delta > 0.0f) ? delta : 0.0f;  /* 返回正值，负值视为0 */
@@ -509,6 +511,13 @@ static int16 clamp_duty(float val)          /* 电机duty限幅函数 */
     if (val > MAX_DUTY) val = MAX_DUTY;     /* 超过正最大值，限幅 */
     else if (val < -MAX_DUTY) val = -MAX_DUTY; /* 超过负最大值，限幅 */
     return (int16)val;                      /* 浮点转int16返回 */
+}
+
+static void pid_set_duty(int16 left, int16 right)
+{
+    duty_dbg_left = left;
+    duty_dbg_right = right;
+    small_driver_set_duty(left, right);
 }
 
 /* ======================== RA状态机复位 ======================== */
@@ -823,13 +832,13 @@ static uint8 lost_search_step(int16 pos_err) /* 丢线搜索主逻辑 */
     if (s_lost_search_dir == 1u)            /* 向右搜索 */
     {
         /* 向右搜索：左轮负、右轮正 */
-        small_driver_set_duty(clamp_duty(-LOST_SEARCH_DUTY), /* 左轮反转 */
+        pid_set_duty(clamp_duty(-LOST_SEARCH_DUTY), /* 左轮反转 */
                               clamp_duty(LOST_SEARCH_DUTY)); /* 右轮正转 */
     }
     else                                    /* 向左搜索 */
     {
         /* 向左搜索：左轮正、右轮负 */
-        small_driver_set_duty(clamp_duty(LOST_SEARCH_DUTY),  /* 左轮正转 */
+        pid_set_duty(clamp_duty(LOST_SEARCH_DUTY),  /* 左轮正转 */
                               clamp_duty(-LOST_SEARCH_DUTY)); /* 右轮反转 */
     }
 
@@ -1752,8 +1761,8 @@ static float recover_yaw_correction(void)   /* RECOVER yaw修正 */
 
     /* 目标yaw角：右转目标正角，左转目标负角 */
     target = (s_ra_dir == 1u) ?             /* 右转 */
-             RA_RECOVER_YAW_TARGET_DEG :    /* 目标+84度 */
-             -RA_RECOVER_YAW_TARGET_DEG;    /* 左转目标-84度 */
+             -RA_RECOVER_YAW_TARGET_DEG :    /* 目标+84度 */
+             RA_RECOVER_YAW_TARGET_DEG;     /* 左转目标-84度 */
     yaw_err = normalize_angle(target - yaw_angle); /* yaw角误差（归一化） */
 
     /* 死区内不修正 */
@@ -2242,20 +2251,20 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
                                 RA_CROSS_HARD_YAW_DEG :  /* 路口yaw目标58度 */
                                 (direct_fast ? RA_FAST_DIRECT_YAW_DEG : (float)ra_hard_yaw); /* 快速模式或菜单值 */
         float yaw_progress = ra_yaw_progress(); /* 当前yaw进度 */
+        float mode_min_yaw = (s_ra_orig_flag >= 3u) ?
+                             RA_CROSS_CAMERA_MIN_YAW :
+                             (direct_fast ? RA_FAST_CAMERA_MIN_YAW : RA_DIRECT_CAMERA_MIN_YAW);
+        float camera_min_yaw = hard_yaw_target * RA_CAMERA_EXIT_TARGET_RATIO;
+
+        if (camera_min_yaw < mode_min_yaw)
+            camera_min_yaw = mode_min_yaw;
+
         /* 摄像头恢复退出条件 */
         uint8 camera_done = (s_ra_hard_cnt >= min_hard && /* 满足最小HARD帧数 */
                              s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES) ? 1u : 0u; /* 连续确认帧(3) */
 
         if (imu_ready && !imu_error && hard_yaw_target > 0.0f)
         {
-            float camera_min_yaw = hard_yaw_target * RA_CAMERA_EXIT_TARGET_RATIO;
-            float mode_min_yaw = (s_ra_orig_flag >= 3u) ?
-                                 RA_CROSS_CAMERA_MIN_YAW :
-                                 (direct_fast ? RA_FAST_CAMERA_MIN_YAW : RA_DIRECT_CAMERA_MIN_YAW);
-
-            if (camera_min_yaw < mode_min_yaw)
-                camera_min_yaw = mode_min_yaw;
-
             if (yaw_progress < camera_min_yaw)
                 camera_done = 0u;            /* 禁止摄像头过早退出 */
         }
@@ -2272,6 +2281,15 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
             hard_limit = min_hard;           /* 修正为最小帧数 */
 
         uint8 hard_timeout = (s_ra_hard_cnt > hard_limit) ? 1u : 0u; /* 是否超时 */
+
+        if (hard_timeout && imu_ready && !imu_error && hard_yaw_target > 0.0f)
+        {
+            uint8 hard_force_timeout =
+                (s_ra_hard_cnt > (uint16)((uint16)hard_limit + (uint16)RA_HARD_FORCE_TIMEOUT_EXTRA)) ? 1u : 0u;
+
+            if (hard_force_timeout == 0u && yaw_progress < camera_min_yaw)
+                hard_timeout = 0u;
+        }
 
         /* 任一退出条件满足 → 进入RECOVER */
         if (camera_done || yaw_done || hard_timeout) /* 摄像头恢复/yaw达标/超时 */
@@ -2341,7 +2359,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
         steer_dbg_out = (int16)s_ra_hard_steer_seed;   /* 记录转向调试值 */
 
         /* 直接输出电机duty */
-        small_driver_set_duty(clamp_duty(out_l), clamp_duty(out_r)); /* 输出限幅后的duty */
+        pid_set_duty(clamp_duty(out_l), clamp_duty(out_r)); /* 输出限幅后的duty */
         r.should_return = 1u;                /* 标记已直接输出，跳过PID */
         ra_debug_update();                   /* 更新调试 */
         return r;                            /* 返回 */
@@ -2495,7 +2513,7 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
     steer_dbg_out = (int16)steer;           /* 记录转向调试值 */
 
     /* 最终输出：左轮=速度+转向，右轮=速度-转向 */
-    small_driver_set_duty(clamp_duty(speed_out + steer), /* 左轮 = 速度+转向 */
+    pid_set_duty(clamp_duty(speed_out + steer), /* 左轮 = 速度+转向 */
                           clamp_duty(speed_out - steer)); /* 右轮 = 速度-转向 */
 }
 
@@ -2520,7 +2538,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
     /* ===== 电机未使能：全部复位 ===== */
     if (motor_enable == 0)                   /* 电机未使能 */
     {
-        small_driver_set_duty(0, 0);         /* 电机输出清零 */
+        pid_set_duty(0, 0);                  /* 电机输出清零 */
         vacuum_set(0u);                      /* 关闭负压 */
         base_speed = 0;                      /* 基础速度清零 */
         speed_dbg_out = 0;                   /* 速度调试清零 */
@@ -2545,7 +2563,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
     if (s_motor_run_counter >= PID_SECONDS_TO_TICKS((uint32)motor_run_time)) /* 超过运行时间 */
     {
         motor_enable = 0;                    /* 关闭电机使能 */
-        small_driver_set_duty(0, 0);         /* 电机输出清零 */
+        pid_set_duty(0, 0);                  /* 电机输出清零 */
         vacuum_set(0u);                      /* 关闭负压 */
         base_speed = 0;                      /* 基础速度清零 */
         speed_dbg_out = 0;                   /* 速度调试清零 */
@@ -2572,7 +2590,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
         if (s_rules_done_timer >= RULES_DONE_DELAY) /* 达到延迟帧数(136=1.5秒) */
         {
             motor_enable = 0;                /* 关闭电机使能 */
-            small_driver_set_duty(0, 0);     /* 电机输出清零 */
+            pid_set_duty(0, 0);              /* 电机输出清零 */
             vacuum_set(0u);                  /* 关闭负压 */
             base_speed = 0;                  /* 基础速度清零 */
             speed_dbg_out = 0;               /* 速度调试清零 */

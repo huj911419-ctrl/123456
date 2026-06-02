@@ -452,4 +452,8 @@ void draw_line(void)
     tft180_show_string(102, 108, (menu_cursor == 1u) ? ">" : " ");
     tft180_show_string(108, 108, "Q");                                  /* 运行静默 */
     tft180_show_int(126, 108, (int32)run_quiet_enable, 1);
+
+    tft180_show_string(102, 116, (menu_cursor == 2u) ? ">" : " ");
+    tft180_show_string(108, 116, "S");                                  /* 目标速度 */
+    tft180_show_int(126, 116, (int32)motor_speed, 3);
 }
