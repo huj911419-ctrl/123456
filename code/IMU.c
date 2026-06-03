@@ -5,14 +5,14 @@
  *
  * 传感器：IMU660RC，通过SPI0总线通信，使用原始陀螺仪数据
  * 输出约定：
- *   yaw_angle > 0：右转（顺时针偏航角增大）
- *   yaw_angle < 0：左转（逆时针偏航角减小）
+ *   yaw_angle > 0：左转（逆时针偏航角增大）
+ *   yaw_angle < 0：右转（顺时针偏航角减小）
  *
  * 本模块仅负责测量偏航角，不直接驱动电机。
  * 偏航角通过陀螺仪Z轴角速度积分得到，用于直角弯HARD阶段的角度退出判断。
  */
 
-volatile float yaw_angle = 0.0f;          /* 当前偏航角（度），正值=右转，负值=左转，范围[-180, 180] */
+volatile float yaw_angle = 0.0f;          /* 当前偏航角（度），正值=左转，负值=右转，范围[-180, 180] */
 volatile float yaw_rate  = 0.0f;          /* 当前滤波后的偏航角速度（度/秒），用于调试和显示 */
 volatile uint8 imu_ready = 0u;            /* IMU就绪标志：0=未初始化完成，1=初始化成功可使用 */
 volatile uint8 imu_error = 1u;            /* IMU错误标志：0=校准正常，1=校准失败（方差过大） */

@@ -72,12 +72,15 @@ extern volatile uint16 g_tf_white_count;
 
 /* Intersection detection parameters. */
 #define INTER_COOLDOWN_FRAMES  8
+#define INTER_POST_TURN_SUPPRESS_FRAMES 10u
+#define INTER_POST_TURN_BLOCK_FRAMES 3u
+#define INTER_POST_TURN_FAR_BLOCK_FRAMES 3u
 #define INTER_MAX_LOCK_FRAMES  300
 #define INTER_BOX_START_ROW    30
 #define INTER_MIN_MISS_ROW     24
 #define INTER_MIN_VALID_ROWS   25
-#define BOX_HEIGHT             28
-#define BOX_WIDTH              56
+#define BOX_HEIGHT             36
+#define BOX_WIDTH              60
 #define INTER_BOX_WIDTH_MIN    56
 #define INTER_BOX_WIDTH_MAX    78
 #define INTER_BOX_WIDTH_SCALE  4
@@ -143,6 +146,13 @@ extern volatile uint16 g_tf_white_count;
 #define INTER_INLINE_COMPONENT_BOTTOM_VALID_MIN 47u
 #define INTER_INLINE_COMPONENT_BOTTOM_TOP_MIN 10u
 #define INTER_INLINE_COMPONENT_WHITE_MIN 280u
+#define INTER_INLINE_STRAIGHT_VALID_ROWS 40u
+#define INTER_INLINE_STRAIGHT_TOP_VALID_MIN 4u
+#define INTER_INLINE_STRAIGHT_LOWER_VALID_MIN 20u
+#define INTER_INLINE_STRAIGHT_IP_ROW_MAX 32
+#define INTER_INLINE_STRAIGHT_ERR_LIMIT 12
+#define INTER_INLINE_STRAIGHT_LA_LIMIT 12
+#define INTER_INLINE_STRAIGHT_TREND_LIMIT 12
 
 typedef struct
 {
@@ -163,10 +173,10 @@ typedef struct
 } IntersectionResult_t;
 
 /* Right-angle pre-detection parameters. */
-#define RA_PRE_START_ROW    46
+#define RA_PRE_START_ROW    55
 #define RA_PRE_END_ROW      28
 #define RA_PRE_LOST_THRESH  2
-#define RA_PRE_EDGE_MARGIN  5
+#define RA_PRE_EDGE_MARGIN  6
 #define RA_PRE_FAR_START_ROW 28
 #define RA_PRE_FAR_END_ROW   4
 #define RA_PRE_FAR_WIDTH_MIN 14
@@ -194,6 +204,7 @@ extern int16 ip_right_col;
 
 void track_fusion_init(void);
 void track_fusion_update(void);
+void track_intersection_suppress_after_turn(void);
 void right_angle_pre_detect(void);
 void detect_intersection(void);
 

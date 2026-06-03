@@ -115,6 +115,7 @@ static uint8 s_prev_quality_err_valid = 0u;  /* 上一帧误差有效标志 */
 static uint8 s_turn_shield_frames = 0u;      /* 转弯屏蔽剩余帧数 */
 /* 转弯屏蔽累计轮速距离，与帧数共同决定屏蔽结束 */
 static uint32 s_turn_shield_dist = 0u;       /* 转弯屏蔽累计距离 */
+static uint8 s_ra_post_turn_gap_cnt = 0u;    /* 出弯后下一次RA启动间隔 */
 
 /* ======================== 单边巡线静态变量 ======================== */
 
@@ -466,8 +467,8 @@ static float ra_yaw_progress(void)          /* 计算RA偏航进度 */
 {
     float delta = normalize_angle(yaw_angle); /* 获取归一化后的yaw角 */
 
-    /* 左转方向：yaw_angle为负值，取反得到正进度 */
-    if (s_ra_dir == 1u)                     /* 左转方向 */
+    /* 右转方向：yaw_angle为负值，取反得到正进度 */
+    if (s_ra_dir == 1u)                     /* 右转方向 */
         delta = -delta;                     /* 取反得到正进度 */
 
     return (delta > 0.0f) ? delta : 0.0f;  /* 返回正值，负值视为0 */
@@ -928,6 +929,7 @@ static void turn_shield_start(void)         /* 启动转弯屏蔽 */
     g_ra_pre_flag = 0u;                     /* 清除RA预检测flag */
     g_ra_pre_dir = 0u;
     g_ra_pre_slow_flag = 0u;
+    track_intersection_suppress_after_turn();
 }
 
 /* avg_wheel_speed_abs - 计算左右轮平均速度绝对值（用于转弯屏蔽距离累计）
@@ -1036,6 +1038,15 @@ static void ra_finish_ex(uint8 keep_flag, uint8 use_shield) /* RA结束扩展 */
     /* 启动单边巡线 */
     if (edge_side != EDGE_BOTH && s_ra_post_edge_ms > 0u) /* 需要单边且时间>0 */
         start_single_edge(edge_side, s_ra_post_edge_ms); /* 启动单边巡线 */
+
+    if (keep_flag == 0u && s_ra_straight == 0u && s_ra_dir != 0u)
+    {
+        int16 gap = ra_post_turn_gap_frames;
+        if (gap < 0) gap = 0;
+        if (gap > (int16)RA_POST_TURN_GAP_MAX_FRAMES)
+            gap = (int16)RA_POST_TURN_GAP_MAX_FRAMES;
+        s_ra_post_turn_gap_cnt = (uint8)gap;
+    }
 
     /* 启动转弯屏蔽或清除pre_flag */
     if (use_shield)                         /* 需要转弯屏蔽 */
@@ -1188,6 +1199,7 @@ void line_pid_init(void)                    /* PID控制器初始化 */
     s_rules_done = 0u;                      /* 路线完成标志清零 */
     s_rules_done_timer = 0u;                /* 路线完成计时器清零 */
     g_ra_pre_slow_flag = 0u;                /* 清除预减速专用标志 */
+    s_ra_post_turn_gap_cnt = 0u;             /* 清除出弯间隔 */
     turn_shield_reset();                    /* 复位转弯屏蔽 */
     single_edge_reset();                    /* 复位单边巡线 */
     lost_search_reset();                    /* 复位丢线搜索 */
@@ -1759,10 +1771,10 @@ static float recover_yaw_correction(void)   /* RECOVER yaw修正 */
     if (s_ra_dir == 0u || !imu_ready || imu_error) /* 无方向或IMU异常 */
         return 0.0f;                        /* 不修正 */
 
-    /* 目标yaw角：右转目标正角，左转目标负角 */
+    /* 目标yaw角：右转目标负角，左转目标正角 */
     target = (s_ra_dir == 1u) ?             /* 右转 */
-             -RA_RECOVER_YAW_TARGET_DEG :    /* 目标+84度 */
-             RA_RECOVER_YAW_TARGET_DEG;     /* 左转目标-84度 */
+             -RA_RECOVER_YAW_TARGET_DEG :    /* 目标-84度 */
+             RA_RECOVER_YAW_TARGET_DEG;     /* 左转目标+84度 */
     yaw_err = normalize_angle(target - yaw_angle); /* yaw角误差（归一化） */
 
     /* 死区内不修正 */
@@ -2003,31 +2015,11 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
 {
     RaResult r = { 0u, 0u, 1.0f };          /* 初始化：需要PID，不跳过，速度缩放100% */
 
-    if (s_ra_state == RA_ST_NONE &&
-        g_ra_flag == 0u &&
-        g_ra_pre_flag != 0u &&
-        (g_ra_pre_dir == 1u || g_ra_pre_dir == 2u) &&
-        route_next_rule_is(g_ra_pre_dir) &&
-        base_speed >= RA_FAST_SPEED_START)
+    if (s_ra_state == RA_ST_NONE && s_ra_post_turn_gap_cnt > 0u)
     {
-        uint8 pre_flag = g_ra_pre_dir;
-        RouteDecision d = select_intersection_decision(pre_flag);
-        uint8 action = (d.action == ACT_RIGHT || d.action == ACT_LEFT) ?
-                       d.action :
-                       route_action_from_flag(pre_flag);
-
-        if (d.valid)
-        {
-            g_ra_flag = pre_flag;
-            ra_start((action == ACT_RIGHT) ? 1u : 2u,
-                     pre_flag,
-                     0u,
-                     d.post_edge_side,
-                     d.post_edge_ms);
-            s_ra_phase = RA_PH_SLOW;
-            s_ra_phase_cnt = 0u;
-            s_ra_approach_cnt = 0u;
-        }
+        s_ra_post_turn_gap_cnt--;
+        ra_debug_update();
+        return r;
     }
 
     /* 检测到直角flag(1/2)且RA空闲 → 启动RA */
@@ -2214,10 +2206,19 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
     /* ===== APPROACH阶段 ===== */
     else if (s_ra_phase == RA_PH_APPROACH)    /* APPROACH阶段 */
     {
-        /* 等待指定帧数后进入HARD */
-        s_ra_approach_cnt++;                 /* 接近帧计数加1 */
-        if (s_ra_approach_cnt >= (uint16)ra_approach_frames) /* 达到接近帧数 */
-            ra_enter_hard();                 /* 进入HARD阶段 */
+        uint16 approach_frames = (ra_approach_frames < 1) ? 1u : (uint16)ra_approach_frames;
+
+        if (s_ra_approach_cnt < approach_frames)
+        {
+            s_ra_approach_cnt++;
+            /* 速度PI闭环刹车：目标速度=0，PI自动控制刹车力度 */
+            r.speed_scale = 0.0f;              /* 目标速度=0 */
+            r.need_pid = 1u;                   /* 走正常PID路径 */
+            ra_debug_update();
+            return r;
+        }
+
+        ra_enter_hard();                     /* 刹车完成，进入HARD阶段 */
     }
 
     /* ===== HARD阶段 ===== */
@@ -2246,10 +2247,13 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
         else s_ra_exit_good_cnt = 0u;        /* 不满足，计数清零 */
 
         uint8 yaw_done = 0u;                /* yaw退出标志 */
+        uint8 camera_done = 0u;
+        uint8 safety_timeout = 0u;
         /* 根据模式选择yaw目标角度 */
         float hard_yaw_target = (s_ra_orig_flag >= 3u) ? /* 普通路口 */
-                                RA_CROSS_HARD_YAW_DEG :  /* 路口yaw目标58度 */
-                                (direct_fast ? RA_FAST_DIRECT_YAW_DEG : (float)ra_hard_yaw); /* 快速模式或菜单值 */
+                                RA_CROSS_HARD_YAW_DEG :  /* 路口yaw目标 */
+                                ((float)ra_hard_yaw +
+                                 (direct_fast ? RA_FAST_DIRECT_YAW_OFFSET : 0.0f)); /* 高速直角跟随菜单Yaw */
         float yaw_progress = ra_yaw_progress(); /* 当前yaw进度 */
         float mode_min_yaw = (s_ra_orig_flag >= 3u) ?
                              RA_CROSS_CAMERA_MIN_YAW :
@@ -2259,17 +2263,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
         if (camera_min_yaw < mode_min_yaw)
             camera_min_yaw = mode_min_yaw;
 
-        /* 摄像头恢复退出条件 */
-        uint8 camera_done = (s_ra_hard_cnt >= min_hard && /* 满足最小HARD帧数 */
-                             s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES) ? 1u : 0u; /* 连续确认帧(3) */
-
-        if (imu_ready && !imu_error && hard_yaw_target > 0.0f)
-        {
-            if (yaw_progress < camera_min_yaw)
-                camera_done = 0u;            /* 禁止摄像头过早退出 */
-        }
-
-        /* yaw角度退出条件 */
+        /* yaw角度退出条件（唯一退出条件） */
         if (imu_ready && !imu_error && hard_yaw_target > 0.0f && /* IMU正常且目标有效 */
             s_ra_hard_cnt >= min_hard &&     /* 满足最小HARD帧数 */
             yaw_progress >= hard_yaw_target) /* yaw进度达到目标 */
@@ -2277,22 +2271,22 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
             yaw_done = 1u;                   /* 设置yaw退出标志 */
         }
 
-        if (hard_limit < min_hard)           /* 超时帧数不应小于最小帧数 */
-            hard_limit = min_hard;           /* 修正为最小帧数 */
-
-        uint8 hard_timeout = (s_ra_hard_cnt > hard_limit) ? 1u : 0u; /* 是否超时 */
-
-        if (hard_timeout && imu_ready && !imu_error && hard_yaw_target > 0.0f)
+        if (imu_ready && !imu_error && hard_yaw_target > 0.0f &&
+            s_ra_hard_cnt >= min_hard &&
+            s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES &&
+            yaw_progress >= camera_min_yaw)
         {
-            uint8 hard_force_timeout =
-                (s_ra_hard_cnt > (uint16)((uint16)hard_limit + (uint16)RA_HARD_FORCE_TIMEOUT_EXTRA)) ? 1u : 0u;
-
-            if (hard_force_timeout == 0u && yaw_progress < camera_min_yaw)
-                hard_timeout = 0u;
+            camera_done = 1u;
         }
 
-        /* 任一退出条件满足 → 进入RECOVER */
-        if (camera_done || yaw_done || hard_timeout) /* 摄像头恢复/yaw达标/超时 */
+        if (s_ra_hard_cnt >=
+            (uint16)((uint16)hard_limit + (uint16)RA_HARD_FORCE_TIMEOUT_EXTRA))
+        {
+            safety_timeout = 1u;
+        }
+
+        /* yaw达标或安全超时 → 进入RECOVER */
+        if (yaw_done || camera_done || safety_timeout)
         {
             ra_enter_recover();              /* 进入RECOVER阶段 */
             return r;                        /* 返回 */
@@ -2487,7 +2481,7 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
 
     float curve_boost = range_ratio_i16(turn_signal,
                                         STEER_GAIN_CURVE_T1,
-                                        STEER_GAIN_CURVE_T2) * 0.35f;
+                                        STEER_GAIN_CURVE_T2) * 0.20f;
     float speed_factor = 1.0f +
                          (float)base_speed * (float)steer_speed_k * 0.00025f +
                          curve_boost;       /* 速度因子 */
@@ -2509,6 +2503,19 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
 
     /* 差速限幅 */
     steer = limit_normal_steer(steer, speed_out); /* 限制差速幅度 */
+
+    /* yaw_rate 限幅：防止打转 */
+    if (imu_ready && !imu_error)              /* IMU正常工作 */
+    {
+        float yaw_rate_abs = abs_f((float)yaw_rate); /* 角速度绝对值 */
+        if (yaw_rate_abs > YAW_RATE_LIMIT)    /* 超过限幅阈值 */
+        {
+            float scale = 1.0f - (yaw_rate_abs - YAW_RATE_LIMIT) / YAW_RATE_LIMIT; /* 按比例减小 */
+            if (scale < 0.0f) scale = 0.0f;   /* 最小为0 */
+            steer *= scale;                   /* 转向输出按比例缩放 */
+        }
+    }
+
     speed_dbg_out = (int16)speed_out;       /* 记录速度调试值 */
     steer_dbg_out = (int16)steer;           /* 记录转向调试值 */
 
@@ -2554,6 +2561,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
         reset_speed_planner();               /* 复位速度规划器 */
         reset_speed_ff_state();              /* 复位速度前馈 */
         g_ra_pre_slow_flag = 0u;             /* 清除预减速专用标志 */
+        s_ra_post_turn_gap_cnt = 0u;         /* 清除出弯间隔 */
         ra_reset();                          /* 复位RA状态机 */
         return;                              /* 返回 */
     }
@@ -2579,6 +2587,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
         reset_speed_planner();               /* 复位速度规划器 */
         reset_speed_ff_state();              /* 复位速度前馈 */
         g_ra_pre_slow_flag = 0u;             /* 清除预减速专用标志 */
+        s_ra_post_turn_gap_cnt = 0u;         /* 清除出弯间隔 */
         ra_reset();                          /* 复位RA状态机 */
         return;                              /* 返回 */
     }
@@ -2608,6 +2617,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
             reset_speed_planner();           /* 复位速度规划器 */
             reset_speed_ff_state();          /* 复位速度前馈 */
             g_ra_pre_slow_flag = 0u;         /* 清除预减速专用标志 */
+            s_ra_post_turn_gap_cnt = 0u;     /* 清除出弯间隔 */
             ra_reset();                      /* 复位RA状态机 */
             return;                          /* 返回 */
         }

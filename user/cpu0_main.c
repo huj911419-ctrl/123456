@@ -3,6 +3,7 @@
 #include "Menu.h"
 #include "ImageTransfer.h"
 #include "Pid.h"
+#include "Battery.h"
 
 extern int16 cam_exposure;
 
@@ -60,6 +61,9 @@ int core0_main(void)
     /* 初始化按键 */
     key_init_all();
 
+    /* 初始化电池电压监测 */
+    battery_init();
+
     /* 等待所有核事件就绪 */
     cpu_wait_event_ready();
 
@@ -68,6 +72,7 @@ int core0_main(void)
         /* 帧同步 */
         while (!mt9v03x_finish_flag)
         {
+            battery_check();
             ui_process_keys();
             menu_show();
         }

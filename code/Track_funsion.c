@@ -46,6 +46,9 @@ static int16 s_first_miss_row = -1;
 /* 最后一个有效行的中点列号，当某行丢失时用于回退参考 */
 static int16 s_last_valid_center = TF_IMG_CENTER;
 
+/* Post-turn frames that skip pre-detect and intersection detect. */
+static volatile uint8 s_inter_post_turn_suppress_cnt = 0u;
+
 /* 基准行行号（基点行），即从底部开始搜索赛道的起始行 */
 static int16 s_jidian_row = TF_JIDIAN_ROW;
 
@@ -1153,6 +1156,7 @@ void track_fusion_init(void)
     Image_Threshold = (uint16)TF_OTSU_MIN_THRESHOLD;
     /* 阈值偏移量清零 */
     threshold_bias = 0;
+    s_inter_post_turn_suppress_cnt = 0u;
     g_tf_image_ready = 0u;
     g_tf_frame_count = 0u;
     g_tf_white_count = 0u;
@@ -1492,6 +1496,13 @@ void track_fusion_update(void)
         g_tf.error_trend = g_tf.lookahead_error - g_tf.error;
     }
 
+    if (s_inter_post_turn_suppress_cnt >
+        (INTER_POST_TURN_SUPPRESS_FRAMES - INTER_POST_TURN_FAR_BLOCK_FRAMES))
+    {
+        g_tf.lookahead_error = 0;
+        g_tf.error_trend = 0;
+    }
+
     /* ---- 步骤10：误差值乘以2，缩放到原始图像坐标系 ---- */
     /* 原始图像 188x120，压缩后 94x60，乘以2回到原始坐标尺度 */
     /* 这样 PID 参数可以基于原始图像坐标调整，不受压缩影响 */
@@ -1599,12 +1610,30 @@ void right_angle_pre_detect(void)
     int16 far_min_center = TF_IMG_W;
     int16 far_max_center = -1;
 
+    if (s_inter_post_turn_suppress_cnt >
+        (INTER_POST_TURN_SUPPRESS_FRAMES - INTER_POST_TURN_BLOCK_FRAMES))
+    {
+        s_on_cnt = 0u;
+        s_off_cnt = 0u;
+        s_slow_off_cnt = 0u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        return;
+    }
+    uint8 post_turn_guard =
+        (s_inter_post_turn_suppress_cnt > 0u) ? 1u : 0u;
+
     /* 近场保留原来的贴边判断；远场用边线打开/中线跳变提前降速。 */
     for (int16 i = (int16)RA_PRE_START_ROW;
          i >= (int16)RA_PRE_FAR_END_ROW; i--)
     {
         /* 跳过无效行（无有效边缘对的行） */
         if (!g_tf.row_valid[i])
+            continue;
+        if (s_inter_post_turn_suppress_cnt >
+            (INTER_POST_TURN_SUPPRESS_FRAMES - INTER_POST_TURN_FAR_BLOCK_FRAMES) &&
+            i <= (int16)RA_PRE_FAR_START_ROW)
             continue;
 
         /* 检查该行是否为对称分量（三极管干扰等） */
@@ -1704,6 +1733,13 @@ void right_angle_pre_detect(void)
         }
     }
 
+    if (post_turn_guard &&
+        (pre_dir == 0u || !route_next_flag_is((uint8)pre_dir)))
+    {
+        detected = 0u;
+        far_slow_detected = 0u;
+    }
+
     /* 若对称分量行数足够多(>=2)，判定为干扰（如三极管），清除标志并返回 */
     if (single_edge_ra_dir == 0u && sym_component_rows >= INTER_SYM_PRE_ROWS)
     {
@@ -1787,10 +1823,10 @@ IntersectionResult_t g_inter_result;
 uint8 g_ip_max_row = 0u;
 
 /* 路口锁定帧计数器，>0 表示正在锁定状态（RA 正在执行转弯动作） */
-static uint8 s_inter_lock_cnt = 0u;
+static volatile uint8 s_inter_lock_cnt = 0u;
 
 /* 路口冷却帧计数器，锁定结束后冷却期内不再检测新路口，防止重复触发 */
-static uint8 s_inter_cooldown_cnt = 0u;
+static volatile uint8 s_inter_cooldown_cnt = 0u;
 
 /* 框候选有效标志，1=当前有活跃的候选检测框 */
 static uint8 s_box_candidate_valid = 0u;
@@ -2776,6 +2812,19 @@ static void clear_inter_result(void)
     g_ip_max_row = 0u;
 }
 
+void track_intersection_suppress_after_turn(void)
+{
+    s_inter_post_turn_suppress_cnt = INTER_POST_TURN_SUPPRESS_FRAMES;
+    s_inter_lock_cnt = 0u;
+    s_inter_cooldown_cnt = 0u;
+    g_ra_flag = 0u;
+    g_ra_pre_flag = 0u;
+    g_ra_pre_dir = 0u;
+    g_ra_pre_slow_flag = 0u;
+    reset_box_lock();
+    clear_inter_result();
+}
+
 static uint8 valid_rows_in_range(int16 row_start, int16 row_end)
 {
     uint8 count = 0u;
@@ -2877,6 +2926,10 @@ static int16 clamp_i16(int16 v, int16 min_v, int16 max_v)
  */
 static int16 estimate_inter_track_width(int16 cy)
 {
+    (void)cy;
+    return (int16)BOX_WIDTH;
+#if 0
+
     /* 从偏移0开始，逐步扩大搜索范围 */
     for (int16 offset = 0; offset <= 8; offset++)
     {
@@ -2908,6 +2961,7 @@ static int16 estimate_inter_track_width(int16 cy)
 
     /* 兜底：使用默认赛道宽度值 */
     return (int16)(BOX_WIDTH / INTER_BOX_WIDTH_SCALE);
+#endif
 }
 
 /**
@@ -2933,13 +2987,9 @@ static void build_inter_box(int16 cx, int16 cy,
     /* 估算当前路口处的赛道宽度 */
     int16 track_w = estimate_inter_track_width(cy);
     /* 框宽度 = 赛道宽度 * 3，限制在 [28, 44] */
-    int16 box_w = clamp_i16((int16)(track_w * INTER_BOX_WIDTH_SCALE),
-                            INTER_BOX_WIDTH_MIN,
-                            INTER_BOX_WIDTH_MAX);
+    int16 box_w = track_w;
     /* 框高度 = 赛道宽度 * 2，限制在 [16, 24] */
-    int16 box_h = clamp_i16((int16)(track_w * INTER_BOX_HEIGHT_SCALE),
-                            INTER_BOX_HEIGHT_MIN,
-                            INTER_BOX_HEIGHT_MAX);
+    int16 box_h = (int16)BOX_HEIGHT;
     int16 front_h = (int16)((box_h * INTER_BOX_FRONT_PCT) / 100);
     int16 b_top = cy - front_h;
     int16 b_bottom = b_top + box_h;
@@ -3192,6 +3242,26 @@ static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok,
  */
 void detect_intersection(void)
 {
+    uint8 post_turn_guard = 0u;
+
+    if (s_inter_post_turn_suppress_cnt > 0u)
+    {
+        uint8 suppress_cnt = s_inter_post_turn_suppress_cnt;
+        s_inter_post_turn_suppress_cnt--;
+        if (suppress_cnt >
+            (INTER_POST_TURN_SUPPRESS_FRAMES - INTER_POST_TURN_BLOCK_FRAMES))
+        {
+            g_ra_flag = 0u;
+            g_ra_pre_flag = 0u;
+            g_ra_pre_dir = 0u;
+            g_ra_pre_slow_flag = 0u;
+            reset_box_lock();
+            clear_inter_result();
+            return;
+        }
+        post_turn_guard = 1u;
+    }
+
     /* ---- 阶段1：冷却期处理 ---- */
     /* 冷却期内（锁定结束后等待 INTER_COOLDOWN_FRAMES=8 帧），不进行新路口检测 */
     if (s_inter_cooldown_cnt > 0u)
@@ -3479,6 +3549,9 @@ void detect_intersection(void)
     uint8 top_valid_rows = valid_rows_in_range(
         (int16)INTER_FAST_PASS_TOP_START_ROW,
         (int16)INTER_FAST_PASS_TOP_END_ROW);
+    uint8 lower_valid_rows = valid_rows_in_range(
+        (int16)INTER_BOX_START_ROW,
+        (int16)RA_PRE_START_ROW);
     uint8 inline_component_candidate =
         (g_tf.line_lost == 0u &&
          g_tf.valid_row_count >= INTER_INLINE_COMPONENT_VALID_ROWS_MIN &&
@@ -3495,8 +3568,33 @@ void detect_intersection(void)
           top_valid_rows <= INTER_TRI_CROSS_TOP_VALID_MAX)) ? 1u : 0u;
     uint8 type5_side_ok =
         (left_dir_has && right_dir_has && side_cross_ok) ? 1u : 0u;
+    uint8 inline_straight_guard =
+        (g_tf.line_lost == 0u &&
+         single_edge_ra_dir == 0u &&
+         center_forward_has &&
+         abs_i16(g_tf.error) <= INTER_INLINE_STRAIGHT_ERR_LIMIT &&
+         abs_i16(g_tf.lookahead_error) <= INTER_INLINE_STRAIGHT_LA_LIMIT &&
+         abs_i16(g_tf.error_trend) <= INTER_INLINE_STRAIGHT_TREND_LIMIT &&
+         ((g_tf.valid_row_count >= INTER_INLINE_STRAIGHT_VALID_ROWS &&
+           top_valid_rows >= INTER_INLINE_STRAIGHT_TOP_VALID_MIN) ||
+          (ip.row <= (int16)INTER_INLINE_STRAIGHT_IP_ROW_MAX &&
+           lower_valid_rows >= INTER_INLINE_STRAIGHT_LOWER_VALID_MIN))) ? 1u : 0u;
+
+    if (type5_side_ok || tri_cross_candidate)
+        inline_straight_guard = 0u;
 
     if (single_edge_ra_dir == 0u && inline_component_candidate)
+    {
+        g_sym_component_flag = 1u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        reset_box_lock();
+        clear_inter_result();
+        return;
+    }
+
+    if (inline_straight_guard)
     {
         g_sym_component_flag = 1u;
         g_ra_pre_flag = 0u;
@@ -3567,6 +3665,33 @@ void detect_intersection(void)
     /* 快速确认未通过，走投票确认流程 */
     if (voted_type == 0u)
         voted_type = vote_inter_type(detected);
+
+    if (s_inter_post_turn_suppress_cnt >
+        (INTER_POST_TURN_SUPPRESS_FRAMES - INTER_POST_TURN_BLOCK_FRAMES))
+    {
+        g_ra_flag = 0u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        reset_box_lock();
+        clear_inter_result();
+        return;
+    }
+
+    if (post_turn_guard &&
+        (voted_type == 0u || !route_next_flag_is(voted_type)))
+    {
+        g_ra_flag = 0u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        reset_box_lock();
+        clear_inter_result();
+        return;
+    }
+
+    if (post_turn_guard && voted_type != 0u)
+        s_inter_post_turn_suppress_cnt = 0u;
 
     /* 投票/快速确认通过，设置 RA 标志，触发 RA 状态机执行转弯 */
     if (voted_type != 0u)

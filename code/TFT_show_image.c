@@ -4,6 +4,7 @@
 #include "IMU.h"               /* 包含IMU模块头文件，提供yaw_angle等航向角数据 */
 #include "Menu.h"              /* 包含菜单模块头文件，提供motor_enable等运行参数 */
 #include "Pid.h"               /* 包含PID控制模块头文件，提供电机速度、调试变量等 */
+#include "Battery.h"           /* 包含电池电压模块头文件，提供battery_get_voltage_x10 */
 
 /* 外部性能计时变量，用于测量 track_fusion 和路口检测的执行耗时（微秒） */
 extern volatile uint32 prof_tf_us;      /* track_fusion_update() 的执行耗时（微秒） */
@@ -409,18 +410,16 @@ void draw_line(void)
     tft180_show_int(124, 24,
                     (int32)((g_ra_pre_flag || g_ra_pre_slow_flag) ? 1u : 0u),
                     2);
-    tft180_show_string(112, 32, "ST");                                 /* RA状态 */
-    tft180_show_int(124, 32, (int32)ra_dbg_state, 2);
-    tft180_show_string(112, 40, "PH");                                 /* RA阶段 */
-    tft180_show_int(124, 40, (int32)ra_dbg_phase, 2);
-    tft180_show_string(112, 48, "BS");                                 /* 基础速度 */
-    tft180_show_int(124, 48, (int32)base_speed, 4);
-    tft180_show_string(112, 56, "IP");                                 /* 最大拐点行 */
-    tft180_show_int(124, 56, (int32)g_ip_max_row, 3);
-    tft180_show_string(112, 64, "TF");                                 /* track_fusion耗时us */
-    tft180_show_int(124, 64, (int32)((prof_tf_us > 99999u) ? 99999u : prof_tf_us), 5);
-    tft180_show_string(112, 72, "IN");                                 /* 预检测+路口检测耗时us */
-    tft180_show_int(124, 72, (int32)((prof_inter_us > 99999u) ? 99999u : prof_inter_us), 5);
+    tft180_show_string(112, 32, "IP");                                 /* 最大拐点行 */
+    tft180_show_int(124, 32, (int32)g_ip_max_row, 3);
+    tft180_show_string(112, 40, "TF");                                 /* track_fusion耗时us */
+    tft180_show_int(124, 40, (int32)((prof_tf_us > 99999u) ? 99999u : prof_tf_us), 5);
+    tft180_show_string(112, 48, "IN");                                 /* 预检测+路口检测耗时us */
+    tft180_show_int(124, 48, (int32)((prof_inter_us > 99999u) ? 99999u : prof_inter_us), 5);
+    tft180_show_string(112, 56, "YA");                                 /* 航向角（度） */
+    tft180_show_int(124, 56, (int32)yaw_angle, 4);
+    tft180_show_string(112, 64, "B");                                  /* 电池电压x10 */
+    tft180_show_int(124, 64, (int32)(battery_get_voltage() * 10.0f), 3);
 
     /* 底部调试区：三列固定布局，每行8像素，避免重叠 */
     tft180_show_string(0,   84, "ER");                                 /* 转向误差 */
@@ -430,30 +429,23 @@ void draw_line(void)
     tft180_show_string(108, 84, "TH");                                 /* 二值化阈值 */
     tft180_show_int(126, 84, (int32)Image_Threshold, 3);
 
-    tft180_show_string(0,   92, "RW");                                 /* 原始目标速度 */
-    tft180_show_int(18, 92, (int32)speed_dbg_raw, 4);
-    tft180_show_string(54,  92, "TG");                                 /* 规划目标速度 */
-    tft180_show_int(72, 92, (int32)speed_dbg_plan, 4);
-    tft180_show_string(108, 92, "SO");                                 /* 速度PI输出 */
-    tft180_show_int(126, 92, (int32)speed_dbg_out, 4);
+    tft180_show_string(0,   92, "RS");                                 /* 速度原因 */
+    tft180_show_int(18, 92, (int32)speed_dbg_reason, 2);
+    tft180_show_string(54,  92, "DT");                                 /* 框分类 */
+    tft180_show_int(72, 92, (int32)g_inter_result.detected_type, 2);
+    tft180_show_string(102, 92, " ");
+    tft180_show_string(108, 92, "RC");                                 /* 比赛状态 */
+    tft180_show_int(126, 92, (int32)race_state, 1);
 
-    tft180_show_string(0,   100, "RS");                                /* 速度原因 */
-    tft180_show_int(18, 100, (int32)speed_dbg_reason, 2);
-    tft180_show_string(54,  100, "DT");                                /* 框分类 */
-    tft180_show_int(72, 100, (int32)g_inter_result.detected_type, 2);
+    tft180_show_string(0,   100, "WC");                                /* 白点计数 */
+    tft180_show_int(18, 100, (int32)g_tf_white_count, 4);
+    tft180_show_string(54, 100, "K");                                  /* 原始按键/拨码状态 */
+    tft180_show_int(66, 100, (int32)ui_raw_input_state(), 2);
     tft180_show_string(102, 100, (menu_cursor == 0u) ? ">" : " ");
-    tft180_show_string(108, 100, "E");                                 /* 电机使能 */
-    tft180_show_int(126, 100, (int32)motor_enable, 1);
+    tft180_show_string(108, 100, "Q");                                 /* 运行静默 */
+    tft180_show_int(126, 100, (int32)run_quiet_enable, 1);
 
-    tft180_show_string(0,   108, "WC");                                /* 白点计数 */
-    tft180_show_int(18, 108, (int32)g_tf_white_count, 4);
-    tft180_show_string(54, 108, "K");                                   /* 原始按键/拨码状态 */
-    tft180_show_int(66, 108, (int32)ui_raw_input_state(), 2);
     tft180_show_string(102, 108, (menu_cursor == 1u) ? ">" : " ");
-    tft180_show_string(108, 108, "Q");                                  /* 运行静默 */
-    tft180_show_int(126, 108, (int32)run_quiet_enable, 1);
-
-    tft180_show_string(102, 116, (menu_cursor == 2u) ? ">" : " ");
-    tft180_show_string(108, 116, "S");                                  /* 目标速度 */
-    tft180_show_int(126, 116, (int32)motor_speed, 3);
+    tft180_show_string(108, 108, "S");                                 /* 目标速度 */
+    tft180_show_int(126, 108, (int32)motor_speed, 3);
 }

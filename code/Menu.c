@@ -1,6 +1,7 @@
 #include "Menu.h"              /* 包含菜单模块头文件，提供MenuItem、MenuPage等结构体定义 */
 #include "Track_funsion.h"     /* 包含视觉融合模块头文件，提供阈值偏移、拐点检测等外部变量 */
 #include "Pid.h"               /* 包含PID控制模块头文件，提供电机运行时间等外部变量 */
+#include "IMU.h"
 #include "TFT_show_image.h"    /* 包含TFT显示模块头文件，提供draw_line()等显示函数 */
 
 /* ==================== 按键与拨码开关GPIO引脚定义 ==================== */
@@ -10,6 +11,10 @@
 #define KEY4 P20_7           /* 按键4：选择模式下=光标下移，调节模式下=减少值 */
 
 #define TURN_RIGHT_LED P20_8 /* 右转指示LED引脚，低电平点亮 */
+#define RACE_KEY P33_10
+#define RACE_LED_STOP P33_4
+#define RACE_LED_READY P33_5
+#define RACE_LED_RUN P33_6
 #define SWITCH1 P33_11       /* 拨码开关1：与SWITCH2配合决定选择/调节模式 */
 #define SWITCH2 P33_12       /* 拨码开关2：与SWITCH1配合决定选择/调节模式 */
                              /* 两个开关均未拨下=选择模式，任一拨下=调节模式 */
@@ -25,32 +30,34 @@
 /* ==================== 菜单可调参数变量 ==================== */
 /* 每个变量都绑定到菜单的某个条目，用户可通过按键实时修改 */
 
-int16 motor_speed = 170;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
+int16 motor_speed = 180;       /* 目标电机速度（PWM占空比单位），范围0~600，步进20 */
 int16 motor_enable = 0;       /* 电机使能开关：0=禁用（停止），1=启用（允许运行） */
 int16 motor_run_time =20;     /* 电机最大运行时间（秒） */
 int16 run_quiet_enable =RUN_QUIET_STOP_KEY; /* 运行静默模式：运行时关闭TFT/UART图传/普通按键 *///RUN_QUIET_STOP_KEY   RUN_QUIET_DEFAULT_ENABLE
+uint8 race_state = RACE_STATE_STOP;
 
 int16 cam_exposure = 600;      /* 摄像头曝光时间（行周期数），值越大画面越亮 */
 
-int16 pid_kp = 7;              /* 转向PD控制器的比例系数Kp */
+int16 pid_kp = 10;             /* 转向PD控制器的比例系数Kp */
 int16 pid_ki = 2;              /* 速度PI控制器的积分系数Ki */
-int16 pid_kd = 14;             /* 转向PD控制器的微分系数Kd */
+int16 pid_kd = 18;             /* 转向PD控制器的微分系数Kd */
 
 int16 sp_err_t1 = 4;          /* 速度规划：直线判定误差阈值，|error|<=此值视为直线 */
 int16 sp_err_t2 = 20;         /* 速度规划：弯道判定误差阈值，|error|>=此值视为急弯 */
 int16 sp_ratio_1 = 100;       /* 速度规划：直道目标速度百分比（100%=满速） */
-int16 sp_ratio_2 = 48;        /* 速度规划：弯道目标速度百分比（48%=降速过弯） */
-int16 steer_speed_k = 1;      /* 转向速度耦合系数：速度越快，转向补偿温和增加 */
-int16 steer_ff_k = 10;        /* 前瞻前馈系数：根据前瞻误差提前施加转向补偿 */
+int16 sp_ratio_2 = 35;        /* 速度规划：弯道目标速度百分比（35%=降速过弯） */
+int16 steer_speed_k = 8;      /* 转向速度耦合系数：速度越快，转向补偿增加 */
+int16 steer_ff_k = 15;        /* 前瞻前馈系数：根据前瞻误差提前施加转向补偿 */
 
 /* ==================== 直角弯RA状态机参数 ==================== */
 int16 ra_hard_inner = 0;       /* 直角弯HARD阶段内侧电机占空比，0=内侧轮停住 */
-int16 ra_hard_outer = 2000;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转向 */
-int16 ra_hard_yaw = 56;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退出 */
-int16 ra_slow_row = 38;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减速 */
-int16 ra_slow_pct = 35;        /* 直角弯SLOW阶段速度百分比（35%=更快刹住） */
-int16 ra_turn_row = 64;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
-int16 ra_approach_frames = 1;  /* 直角弯APPROACH阶段等待帧数，等待完毕后进入HARD急转 */
+int16 ra_hard_outer = 1550;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转向 */
+int16 ra_hard_yaw = 42;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退出 */
+int16 ra_slow_row = 33;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减速 */
+int16 ra_slow_pct = 35;        /* 直角弯SLOW阶段速度百分比（30%=更快刹住） */
+int16 ra_turn_row = 50;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
+int16 ra_approach_frames = 2;  /* 直角弯APPROACH阶段刹车稳车帧数，结束后进入HARD急转 */
+int16 ra_post_turn_gap_frames = 3; /* 上一个弯结束后，延迟几帧才允许下一次RA启动 */
 
 int16 yaw_kp = 8;             /* IMU级联控制的航向角比例系数Kp */
 
@@ -59,7 +66,6 @@ int16 yaw_kp = 8;             /* IMU级联控制的航向角比例系数Kp */
 
 /* 主页菜单条目：常用运行开关和速度档位 */
 static MenuItem items_main[] = {
-    {"Enable", &motor_enable, 0, 1, 1},       /* 使能开关：0=关，1=开，步进1 */
     {"Quiet", &run_quiet_enable, 0, 1, 1},    /* 运行静默：1=运行时关闭TFT/UART/普通按键 */
     {"Speed", &motor_speed, 0, 600, 20},      /* 速度设定：0~600，步进20 */
 };
@@ -84,10 +90,11 @@ static MenuItem items_ra[] = {
     {"SlwRow", &ra_slow_row, 30, 110, 5},    /* SLOW触发行号：IP行号>=此值开始减速 */
     {"SlwPct", &ra_slow_pct, 10, 100, 5},    /* SLOW速度百分比：减速后的速度 */
     {"TrnRow", &ra_turn_row, 40, 115, 5},    /* APPROACH触发行号：IP行号>=此值准备转弯 */
-    {"AproF", &ra_approach_frames, 1, 30, 1},/* APPROACH等待帧数：进入HARD前的等待时间 */
+    {"AproF", &ra_approach_frames, 1, 6, 1}, /* APPROACH刹车稳车帧数：进入HARD前主动收速 */
     {"Outer", &ra_hard_outer, 500, 5000, 100},/* HARD外侧电机占空比：转弯时外侧轮驱动力 */
     {"Inner", &ra_hard_inner, 0, 0, 1},      /* HARD内侧电机占空比：内侧轮固定停住 */
     {"Yaw", &ra_hard_yaw, 30, 85, 5},        /* HARD退出航向角：IMU累计转过的角度阈值 */
+    {"GapF", &ra_post_turn_gap_frames, 0, 20, 1}, /* 出弯后允许下一次RA前的间隔帧数 */
     {"IpCol", &ip_col_offset, 0, 7, 1},      /* 拐点检测列偏移：调整拐点检测区域的起始列 */
     {"IpL", &ip_left_col, 0, 47, 1},         /* 左侧拐点搜索列：左拐点检测的参考列号 */
     {"IpR", &ip_right_col, 47, 93, 1},       /* 右侧拐点搜索列：右拐点检测的参考列号 */
@@ -105,9 +112,9 @@ static MenuItem items_imu[] = {
 /* g_pages数组定义了菜单页面，每个页面包含标题、条目数组、条目数和自定义绘制函数 */
 /* draw为NULL表示使用default_draw默认绘制函数 */
 static MenuPageDef g_pages[PAGE_MAX] = {
-    { .title = "MAIN",  .items = items_main,  .item_count = 3,  .draw = NULL },  /* 第0页：主页，显示使能、静默和速度 */
+    { .title = "MAIN",  .items = items_main,  .item_count = 2,  .draw = NULL },  /* 第0页：主页，显示静默和速度 */
     { .title = "TUNE",  .items = items_tune,  .item_count = 12, .draw = NULL },  /* 第1页：电机/摄像头/PID/速度规划 */
-    { .title = "RA",    .items = items_ra,    .item_count = 10, .draw = NULL },  /* 第2页：直角弯页，调整RA状态机各阶段参数 */
+    { .title = "RA",    .items = items_ra,    .item_count = 11, .draw = NULL },  /* 第2页：直角弯页，调整RA状态机各阶段参数 */
     { .title = "IMU",   .items = items_imu,   .item_count = 4,  .draw = NULL },  /* 第3页：IMU页，调整航向角级联控制参数 */
 };
 
@@ -337,6 +344,150 @@ static void cursor_clamp(void)
         menu_cursor = max_items - 1u;  /* 钳位到最后一个条目 */
 }
 
+static void race_led_apply(void)
+{
+    gpio_set_level(RACE_LED_STOP, (race_state == RACE_STATE_STOP || race_state == RACE_STATE_DONE) ? GPIO_HIGH : GPIO_LOW);
+    gpio_set_level(RACE_LED_READY, (race_state == RACE_STATE_READY || race_state == RACE_STATE_ARMED) ? GPIO_HIGH : GPIO_LOW);
+    gpio_set_level(RACE_LED_RUN, (race_state == RACE_STATE_RUN) ? GPIO_HIGH : GPIO_LOW);
+}
+
+static uint8 race_key_event(void)
+{
+    typedef enum
+    {
+        RACE_KEY_IDLE = 0,
+        RACE_KEY_DEBOUNCE_DOWN,
+        RACE_KEY_HOLD,
+        RACE_KEY_DEBOUNCE_UP
+    } RaceKeyState;
+
+    static RaceKeyState state = RACE_KEY_IDLE;
+    static uint8 cnt = 0u;
+    uint8 pressed = (gpio_get_level(RACE_KEY) == 0) ? 1u : 0u;
+
+    switch (state)
+    {
+    case RACE_KEY_IDLE:
+        if (pressed)
+        {
+            cnt = 0u;
+            state = RACE_KEY_DEBOUNCE_DOWN;
+        }
+        break;
+
+    case RACE_KEY_DEBOUNCE_DOWN:
+        if (pressed)
+        {
+            if (++cnt >= DEBOUNCE_CNT)
+            {
+                cnt = 0u;
+                state = RACE_KEY_HOLD;
+            }
+        }
+        else
+        {
+            cnt = 0u;
+            state = RACE_KEY_IDLE;
+        }
+        break;
+
+    case RACE_KEY_HOLD:
+        if (!pressed)
+        {
+            cnt = 0u;
+            state = RACE_KEY_DEBOUNCE_UP;
+        }
+        break;
+
+    case RACE_KEY_DEBOUNCE_UP:
+        if (!pressed)
+        {
+            if (++cnt >= RELEASE_CNT)
+            {
+                cnt = 0u;
+                state = RACE_KEY_IDLE;
+                return 1u;
+            }
+        }
+        else
+        {
+            cnt = 0u;
+            state = RACE_KEY_HOLD;
+        }
+        break;
+
+    default:
+        cnt = 0u;
+        state = RACE_KEY_IDLE;
+        break;
+    }
+
+    return 0u;
+}
+
+static void race_control_prepare(void)
+{
+    motor_enable = 0;
+    line_pid_init();
+    imu_reset_yaw();
+    tft180_clear();
+    race_state = RACE_STATE_ARMED;
+    race_led_apply();
+}
+
+static void race_control_start(void)
+{
+    motor_enable = 1;
+    race_state = RACE_STATE_RUN;
+    race_led_apply();
+}
+
+void race_control_process(void)
+{
+    uint8 event = race_key_event();
+
+    if (motor_enable != 0 && race_state != RACE_STATE_RUN)
+    {
+        race_state = RACE_STATE_RUN;
+        race_led_apply();
+    }
+    else if (motor_enable == 0 && race_state == RACE_STATE_RUN)
+    {
+        race_state = RACE_STATE_DONE;
+        race_led_apply();
+    }
+
+    if (!event)
+        return;
+
+    switch (race_state)
+    {
+    case RACE_STATE_STOP:
+        motor_enable = 0;
+        race_state = RACE_STATE_READY;
+        race_led_apply();
+        break;
+
+    case RACE_STATE_READY:
+        race_control_prepare();
+        break;
+
+    case RACE_STATE_ARMED:
+        race_control_start();
+        break;
+
+    case RACE_STATE_RUN:
+        break;
+
+    case RACE_STATE_DONE:
+    default:
+        motor_enable = 0;
+        race_state = RACE_STATE_READY;
+        race_led_apply();
+        break;
+    }
+}
+
 uint8 run_quiet_active(void)
 {
     return (motor_enable != 0 && run_quiet_enable != 0u) ? 1u : 0u;
@@ -352,6 +503,7 @@ uint8 ui_raw_input_state(void)
     if (gpio_get_level(KEY4) == 0) state |= 0x08u;
     if (gpio_get_level(SWITCH1) == 0) state |= 0x10u;
     if (gpio_get_level(SWITCH2) == 0) state |= 0x20u;
+    if (gpio_get_level(RACE_KEY) == 0) state |= 0x40u;
 
     return state;
 }
@@ -370,9 +522,14 @@ void key_init_all(void)
     gpio_init(KEY2, GPI, GPIO_HIGH, GPI_PULL_UP);      /* KEY2：输入模式，上拉 */
     gpio_init(KEY3, GPI, GPIO_HIGH, GPI_PULL_UP);      /* KEY3：输入模式，上拉 */
     gpio_init(KEY4, GPI, GPIO_HIGH, GPI_PULL_UP);      /* KEY4：输入模式，上拉 */
+    gpio_init(RACE_KEY, GPI, GPIO_HIGH, GPI_PULL_UP);
     gpio_init(SWITCH1, GPI, GPIO_HIGH, GPI_PULL_UP);   /* 拨码开关1：输入模式，上拉 */
     gpio_init(SWITCH2, GPI, GPIO_HIGH, GPI_PULL_UP);   /* 拨码开关2：输入模式，上拉 */
     gpio_init(TURN_RIGHT_LED, GPO, GPIO_HIGH, GPI_PULL_UP); /* 右转LED：输出模式，默认高电平（LED熄灭） */
+    gpio_init(RACE_LED_STOP, GPO, GPIO_LOW, GPO_PUSH_PULL);
+    gpio_init(RACE_LED_READY, GPO, GPIO_LOW, GPO_PUSH_PULL);
+    gpio_init(RACE_LED_RUN, GPO, GPIO_LOW, GPO_PUSH_PULL);
+    race_led_apply();
 }
 
 /* ==================== 按键事件处理主函数 ==================== */
@@ -515,6 +672,11 @@ void key_process_quiet(void)
 
 void ui_process_keys(void)
 {
+    race_control_process();
+
+    if (motor_enable != 0)
+        return;
+
     if (run_quiet_active())
     {
         key_process_quiet();
