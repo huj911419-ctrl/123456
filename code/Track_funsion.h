@@ -116,6 +116,7 @@ extern volatile uint16 g_tf_white_count;
 #define INTER_TYPE_VOTE_FRAMES 2
 #define INTER_TYPE_VOTE_MIN    2
 #define INTER_FAST_CONFIRM_ENABLE 1
+#define INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN 14u
 #define INTER_IP_SIDE_BIAS     8
 #define INTER_IP_ROW_BIAS      2
 #define INTER_SYM_ROW_DELTA    3

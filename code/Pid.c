@@ -175,6 +175,7 @@ static RaPhase s_ra_phase = RA_PH_WAIT;      /* RA当前阶段，初始为等待
 static uint8 s_ra_dir = 0u;                  /* RA转弯方向 */
 /* 触发RA的原始flag值（1~5），用于查路线表和超时配置 */
 static uint8 s_ra_orig_flag = 0u;            /* 原始触发flag */
+static int16 s_ra_speed_ref_latched = 0;
 /* RA记录的拐点最大行号，用于阶段转换判断 */
 static uint8 s_ra_ip_row = 0u;               /* 拐点最大行号 */
 /* 直行通过标志（1=该路口直行不转弯） */
@@ -447,6 +448,74 @@ static int16 abs_i16(int16 v)               /* int16绝对值函数 */
     return (v >= 0) ? v : (int16)(-v);      /* 正数返回原值，负数取反并强转 */
 }
 
+static int16 ra_speed_ref(void)
+{
+    int32 actual = ((int32)abs_i16(motor_value.receive_left_speed_data) +
+                    (int32)abs_i16(motor_value.receive_right_speed_data)) / 2;
+    int32 cmd = (int32)motor_speed * 8;
+    int16 ref;
+
+    if (cmd < 0) cmd = 0;
+    if (cmd > 32767) cmd = 32767;
+    if (actual > 32767) actual = 32767;
+
+    ref = (int16)cmd;
+    if (actual > (int32)ref) ref = (int16)actual;
+
+    if (s_ra_state == RA_ST_ACTIVE && s_ra_speed_ref_latched > 0)
+        ref = s_ra_speed_ref_latched;
+
+    return ref;
+}
+
+static uint8 ra_turn_row_for_speed(void)
+{
+    int16 row = ra_turn_row;
+    int16 speed_ref = ra_speed_ref();
+
+    if (s_ra_orig_flag < 3u)
+    {
+        if (speed_ref >= RA_FAST_SPEED_START)
+            row -= (int16)RA_FAST_TURN_ROW_ADVANCE;
+        else if (speed_ref <= RA_LOW_SPEED_START)
+            row += (int16)RA_LOW_TURN_ROW_DELAY;
+    }
+
+    if (row < 0) row = 0;
+    if (row > (int16)(TF_IMG_H - 1u)) row = (int16)(TF_IMG_H - 1u);
+    return (uint8)row;
+}
+
+static uint16 ra_slow_limit_for_speed(void)
+{
+    int16 speed_ref = ra_speed_ref();
+
+    if (s_ra_orig_flag >= 3u)
+        return RA_CROSS_SLOW_TIMEOUT;
+    if (speed_ref >= RA_FAST_SPEED_START)
+        return RA_FAST_SLOW_TIMEOUT;
+    if (speed_ref <= RA_LOW_SPEED_START)
+        return RA_LOW_SLOW_TIMEOUT;
+    return RA_SLOW_TIMEOUT;
+}
+
+static uint16 ra_approach_frames_for_speed(uint8 turn_row)
+{
+    uint16 frames = (ra_approach_frames < 1) ? 1u : (uint16)ra_approach_frames;
+    uint16 late_row = (uint16)turn_row + (uint16)RA_LATE_APPROACH_SKIP_ROW_MARGIN;
+    int16 speed_ref = ra_speed_ref();
+
+    if (s_ra_orig_flag < 3u && speed_ref >= RA_FAST_SPEED_START)
+        frames = RA_FAST_APPROACH_FRAMES;
+    else if (s_ra_orig_flag < 3u && speed_ref <= RA_LOW_SPEED_START &&
+             frames > RA_LOW_APPROACH_FRAMES)
+        frames = RA_LOW_APPROACH_FRAMES;
+    else if ((uint16)s_ra_ip_row >= late_row && frames > 1u)
+        frames = 1u;
+
+    return frames;
+}
+
 /* normalize_angle - 角度归一化到[-180, 180]范围
  * @angle: 输入角度（度）
  * 返回: 归一化后的角度 */
@@ -532,6 +601,7 @@ static void ra_reset(void)                  /* RA状态机全复位 */
     s_ra_phase = RA_PH_WAIT;                /* 阶段重置为等待 */
     s_ra_dir = 0u;                          /* 方向重置为直行 */
     s_ra_orig_flag = 0u;                    /* 清除原始flag */
+    s_ra_speed_ref_latched = 0;
     s_ra_ip_row = 0u;                       /* 清除拐点行号 */
     s_ra_straight = 0u;                     /* 清除直行标志 */
     s_ra_post_edge_side = EDGE_BOTH;        /* 单边方向重置为双边 */
@@ -1123,9 +1193,10 @@ static void ra_start(uint8 dir, uint8 orig_flag, uint8 straight,
 
     s_ra_dir = dir;                         /* 设置转弯方向 */
     s_ra_orig_flag = orig_flag;             /* 保存原始flag */
+    s_ra_speed_ref_latched = ra_speed_ref();
     s_ra_state = RA_ST_ACTIVE;              /* 状态切换为活跃 */
     /* 直行模式直接进入SLOW阶段，否则从WAIT开始等待拐点 */
-    if (straight || base_speed >= RA_FAST_SPEED_START)
+    if (straight || ra_speed_ref() >= RA_FAST_SPEED_START)
         s_ra_phase = RA_PH_SLOW;
     else
         s_ra_phase = RA_PH_WAIT;
@@ -2172,14 +2243,9 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
     /* ===== SLOW阶段 ===== */
     else if (s_ra_phase == RA_PH_SLOW)        /* SLOW阶段 */
     {
-        uint8 turn_row = (uint8)ra_turn_row;
-        uint16 slow_limit = RA_SLOW_TIMEOUT;
+        uint8 turn_row = ra_turn_row_for_speed();
+        uint16 slow_limit = ra_slow_limit_for_speed();
         uint8 slow_timeout;
-
-        if (s_ra_orig_flag >= 3u)
-            slow_limit = RA_CROSS_SLOW_TIMEOUT;
-        else if (base_speed >= RA_FAST_SPEED_START)
-            slow_limit = RA_FAST_SLOW_TIMEOUT;
 
         slow_timeout = (s_ra_phase_cnt >= slow_limit) ? 1u : 0u;
 
@@ -2206,7 +2272,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
     /* ===== APPROACH阶段 ===== */
     else if (s_ra_phase == RA_PH_APPROACH)    /* APPROACH阶段 */
     {
-        uint16 approach_frames = (ra_approach_frames < 1) ? 1u : (uint16)ra_approach_frames;
+        uint16 approach_frames = ra_approach_frames_for_speed(ra_turn_row_for_speed());
 
         if (s_ra_approach_cnt < approach_frames)
         {
@@ -2226,7 +2292,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
     {
         /* 是否使用快速直角模式（高速+纯直角时更激进） */
         uint8 direct_fast = (s_ra_orig_flag < 3u && /* 纯直角（flag=1或2） */
-                             base_speed >= RA_FAST_SPEED_START) ? 1u : 0u; /* 速度≥520 */
+                             ra_speed_ref() >= RA_FAST_SPEED_START) ? 1u : 0u; /* 速度≥520 */
         /* 最小HARD帧数：路口需要更少帧 */
         uint8 min_hard = (s_ra_orig_flag >= 3u) ? /* 普通路口(3/4/5) */
                          RA_CROSS_HARD_MIN_FRAMES : /* 路口最小HARD帧 */
@@ -2361,7 +2427,18 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
 
     /* SLOW/APPROACH阶段降速 */
     if (s_ra_phase == RA_PH_SLOW || s_ra_phase == RA_PH_APPROACH) /* SLOW或APPROACH阶段 */
-        r.speed_scale = (float)ra_slow_pct * 0.01f; /* 速度缩放到ra_slow_pct% */
+    {
+        uint8 slow_pct = (uint8)ra_slow_pct;
+
+        if (s_ra_phase == RA_PH_SLOW &&
+            s_ra_orig_flag < 3u &&
+            slow_pct < (uint8)RA_DIRECT_SLOW_PCT)
+        {
+            slow_pct = (uint8)RA_DIRECT_SLOW_PCT;
+        }
+
+        r.speed_scale = (float)slow_pct * 0.01f; /* 速度缩放 */
+    }
 
     r.need_pid = 1u;                         /* 需要PID控制 */
     ra_debug_update();                       /* 更新调试 */
@@ -2718,7 +2795,7 @@ void line_pid_control(void)                  /* 主PID控制入口 */
             if (s_pre_lock)                  /* 仍在锁定 */
             {
                 pre_slow_active = 1u;        /* 标记预减速激活 */
-                target_base_speed = (int16)((int32)target_base_speed * ra_slow_pct / 100); /* 降速 */
+                target_base_speed = (int16)((int32)target_base_speed * RA_PRE_SLOW_PCT / 100); /* 降速 */
             }
         }
 

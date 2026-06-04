@@ -3189,7 +3189,11 @@ static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok,
         pure_ra_ok &&
         !straight_inline_view())
     {
-        return detected;
+        uint16 late_row = (ra_turn_row > 0) ? (uint16)ra_turn_row : 0u;
+        late_row = (uint16)(late_row + (uint16)INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN);
+
+        if ((uint16)g_ip_max_row >= late_row)
+            return detected;
     }
 
     if (detected == 5u && type5_fast_ok)
@@ -3500,8 +3504,6 @@ void detect_intersection(void)
     uint8 left_branch_has = inter_side_branch_has_road(ip.row, ip.col, 2u);
     /* 检查右侧是否有足够长的分支道路（纯侧路检测） */
     uint8 right_branch_has = inter_side_branch_has_road(ip.row, ip.col, 1u);
-    uint8 left_branch_strong = inter_side_branch_strong_has_road(ip.row, ip.col, 2u);
-    uint8 right_branch_strong = inter_side_branch_strong_has_road(ip.row, ip.col, 1u);
     uint8 center_forward_has = inter_vertical_band_has_road(
         ip.col,
         b_top,
@@ -3540,12 +3542,12 @@ void detect_intersection(void)
     uint8 right_cross_has =
         inter_side_crossing_has_road(b_top, b_bottom, b_left, b_right, 1u);
     uint8 side_cross_ok = (left_cross_has && right_cross_has) ? 1u : 0u;
-    uint8 left_dir_has = (left_branch_has || left_frame_has) ? 1u : 0u;
-    uint8 right_dir_has = (right_branch_has || right_frame_has) ? 1u : 0u;
-    uint8 left_strong_dir_has = (left_branch_strong || left_frame_has) ? 1u : 0u;
-    uint8 right_strong_dir_has = (right_branch_strong || right_frame_has) ? 1u : 0u;
-    uint8 left_t_dir_has = (left_branch_strong || left_cross_has) ? 1u : 0u;
-    uint8 right_t_dir_has = (right_branch_strong || right_cross_has) ? 1u : 0u;
+    uint8 left_box_road = left_frame_has;
+    uint8 right_box_road = right_frame_has;
+    uint8 left_strong_dir_has = (left_box_road && left_cross_has) ? 1u : 0u;
+    uint8 right_strong_dir_has = (right_box_road && right_cross_has) ? 1u : 0u;
+    uint8 left_t_dir_has = (left_box_road && (left_has || left_cross_has)) ? 1u : 0u;
+    uint8 right_t_dir_has = (right_box_road && (right_has || right_cross_has)) ? 1u : 0u;
     uint8 top_valid_rows = valid_rows_in_range(
         (int16)INTER_FAST_PASS_TOP_START_ROW,
         (int16)INTER_FAST_PASS_TOP_END_ROW);
@@ -3557,17 +3559,17 @@ void detect_intersection(void)
          g_tf.valid_row_count >= INTER_INLINE_COMPONENT_VALID_ROWS_MIN &&
          top_valid_rows >= INTER_INLINE_COMPONENT_TOP_VALID_MIN &&
          center_forward_has &&
-         !left_branch_strong &&
-         !right_branch_strong) ? 1u : 0u;
+         !left_box_road &&
+         !right_box_road) ? 1u : 0u;
     uint8 tri_cross_candidate =
         (g_sym_component_flag != 0u &&
-         left_dir_has && right_dir_has &&
+         left_box_road && right_box_road &&
          side_cross_ok &&
          !straight_inline_view() &&
          (g_tf.valid_row_count <= INTER_TRI_CROSS_VALID_ROWS_MAX ||
           top_valid_rows <= INTER_TRI_CROSS_TOP_VALID_MAX)) ? 1u : 0u;
     uint8 type5_side_ok =
-        (left_dir_has && right_dir_has && side_cross_ok) ? 1u : 0u;
+        (left_box_road && right_box_road && side_cross_ok) ? 1u : 0u;
     uint8 inline_straight_guard =
         (g_tf.line_lost == 0u &&
          single_edge_ra_dir == 0u &&
@@ -3579,9 +3581,6 @@ void detect_intersection(void)
            top_valid_rows >= INTER_INLINE_STRAIGHT_TOP_VALID_MIN) ||
           (ip.row <= (int16)INTER_INLINE_STRAIGHT_IP_ROW_MAX &&
            lower_valid_rows >= INTER_INLINE_STRAIGHT_LOWER_VALID_MIN))) ? 1u : 0u;
-
-    if (type5_side_ok || tri_cross_candidate)
-        inline_straight_guard = 0u;
 
     if (single_edge_ra_dir == 0u && inline_component_candidate)
     {
@@ -3620,10 +3619,10 @@ void detect_intersection(void)
     }
 
     /* ---- 路口类型分类逻辑 ---- */
-    /* 3/4/5 use box direction plus continuous side-branch evidence. */
-    if (single_edge_ra_dir == 1u && pure_ra_ok)
+    /* Final RA classification must use box-edge / crossing evidence. */
+    if (single_edge_ra_dir == 1u && pure_ra_ok && right_strong_dir_has)
         detected = 1u;
-    else if (single_edge_ra_dir == 2u && pure_ra_ok)
+    else if (single_edge_ra_dir == 2u && pure_ra_ok && left_strong_dir_has)
         detected = 2u;
     else if (type5_side_ok || tri_cross_candidate)
         detected = 5u;
@@ -3637,9 +3636,11 @@ void detect_intersection(void)
     else if (!top_road_has && pure_ra_ok && ra_dir_hint == 2u &&
              left_strong_dir_has)
         detected = 2u;
-    else if (!top_road_has && pure_ra_ok && found_side == 1u && right_branch_strong)
+    else if (!top_road_has && pure_ra_ok && found_side == 1u &&
+             right_strong_dir_has)
         detected = 1u;
-    else if (!top_road_has && pure_ra_ok && found_side == 2u && left_branch_strong)
+    else if (!top_road_has && pure_ra_ok && found_side == 2u &&
+             left_strong_dir_has)
         detected = 2u;
 
     /* 记录原始检测类型到结果结构体 */

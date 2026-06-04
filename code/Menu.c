@@ -38,26 +38,26 @@ uint8 race_state = RACE_STATE_STOP;
 
 int16 cam_exposure = 600;      /* 摄像头曝光时间（行周期数），值越大画面越亮 */
 
-int16 pid_kp = 10;             /* 转向PD控制器的比例系数Kp */
+int16 pid_kp = 11;             /* 转向PD控制器的比例系数Kp */
 int16 pid_ki = 2;              /* 速度PI控制器的积分系数Ki */
 int16 pid_kd = 18;             /* 转向PD控制器的微分系数Kd */
 
-int16 sp_err_t1 = 4;          /* 速度规划：直线判定误差阈值，|error|<=此值视为直线 */
-int16 sp_err_t2 = 20;         /* 速度规划：弯道判定误差阈值，|error|>=此值视为急弯 */
+int16 sp_err_t1 = 6;          /* 速度规划：直线判定误差阈值，|error|<=此值视为直线 */
+int16 sp_err_t2 = 16 ;         /* 速度规划：弯道判定误差阈值，|error|>=此值视为急弯 */
 int16 sp_ratio_1 = 100;       /* 速度规划：直道目标速度百分比（100%=满速） */
-int16 sp_ratio_2 = 35;        /* 速度规划：弯道目标速度百分比（35%=降速过弯） */
+int16 sp_ratio_2 = 32;        /* 速度规划：弯道目标速度百分比（35%=降速过弯） */
 int16 steer_speed_k = 8;      /* 转向速度耦合系数：速度越快，转向补偿增加 */
-int16 steer_ff_k = 15;        /* 前瞻前馈系数：根据前瞻误差提前施加转向补偿 */
+int16 steer_ff_k = 12;        /* 前瞻前馈系数：根据前瞻误差提前施加转向补偿 */
 
 /* ==================== 直角弯RA状态机参数 ==================== */
 int16 ra_hard_inner = 0;       /* 直角弯HARD阶段内侧电机占空比，0=内侧轮停住 */
 int16 ra_hard_outer = 1550;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转向 */
-int16 ra_hard_yaw = 42;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退出 */
-int16 ra_slow_row = 33;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减速 */
+int16 ra_hard_yaw = 40;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退出 */
+int16 ra_slow_row = 31;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减速 */
 int16 ra_slow_pct = 35;        /* 直角弯SLOW阶段速度百分比（30%=更快刹住） */
-int16 ra_turn_row = 50;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
-int16 ra_approach_frames = 2;  /* 直角弯APPROACH阶段刹车稳车帧数，结束后进入HARD急转 */
-int16 ra_post_turn_gap_frames = 3; /* 上一个弯结束后，延迟几帧才允许下一次RA启动 */
+int16 ra_turn_row = 54;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
+int16 ra_approach_frames = 3;  /* 直角弯APPROACH阶段刹车稳车帧数，结束后进入HARD急转 */
+int16 ra_post_turn_gap_frames = 4; /* 上一个弯结束后，延迟几帧才允许下一次RA启动 */
 
 int16 yaw_kp = 8;             /* IMU级联控制的航向角比例系数Kp */
 
@@ -477,6 +477,9 @@ void race_control_process(void)
         break;
 
     case RACE_STATE_RUN:
+        motor_enable = 0;
+        race_state = RACE_STATE_DONE;
+        race_led_apply();
         break;
 
     case RACE_STATE_DONE:
