@@ -2337,7 +2337,8 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
             yaw_done = 1u;                   /* 设置yaw退出标志 */
         }
 
-        if (imu_ready && !imu_error && hard_yaw_target > 0.0f &&
+        if (!direct_fast &&
+            imu_ready && !imu_error && hard_yaw_target > 0.0f &&
             s_ra_hard_cnt >= min_hard &&
             s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES &&
             yaw_progress >= camera_min_yaw)
@@ -2370,7 +2371,7 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状态机主逻辑
             inner = inner * (float)RA_COMPLEX_DUTY_PCT * 0.01f;
         }
 
-        if (imu_ready && !imu_error && hard_yaw_target > 1.0f)
+        if (!direct_fast && imu_ready && !imu_error && hard_yaw_target > 1.0f)
         {
             float yaw_ratio = yaw_progress / hard_yaw_target;
             if (yaw_ratio > RA_HARD_TAPER_START_RATIO)
