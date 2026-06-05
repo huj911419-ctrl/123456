@@ -34,9 +34,11 @@ extern int16 threshold_bias;
 #define TRACK_HALF_WIDTH_MIN 4
 #define TRACK_HALF_WIDTH_MAX 14
 #define TF_INVALID          (-1)
-#define TF_OTSU_MIN_THRESHOLD 75
+#define TF_OTSU_MIN_THRESHOLD 60
 #define TF_DENOISE_WHITE_MIN 4
 #define TF_DENOISE_BLACK_FILL 7
+#define TF_ERROR_FILTER_MAX_STEP 8
+#define TF_LOOKAHEAD_FILTER_MAX_STEP 10
 
 /* Lookahead rows. */
 #define TF_LOOKAHEAD_START_ROW 35
@@ -71,10 +73,10 @@ extern volatile uint32 g_tf_frame_count;
 extern volatile uint16 g_tf_white_count;
 
 /* Intersection detection parameters. */
-#define INTER_COOLDOWN_FRAMES  8
-#define INTER_POST_TURN_SUPPRESS_FRAMES 10u
-#define INTER_POST_TURN_BLOCK_FRAMES 3u
-#define INTER_POST_TURN_FAR_BLOCK_FRAMES 3u
+#define INTER_COOLDOWN_FRAMES  2
+#define INTER_POST_TURN_SUPPRESS_FRAMES 4u
+#define INTER_POST_TURN_BLOCK_FRAMES 1u
+#define INTER_POST_TURN_FAR_BLOCK_FRAMES 1u
 #define INTER_MAX_LOCK_FRAMES  300
 #define INTER_BOX_START_ROW    30
 #define INTER_MIN_MISS_ROW     24
@@ -116,7 +118,7 @@ extern volatile uint16 g_tf_white_count;
 #define INTER_TYPE_VOTE_FRAMES 2
 #define INTER_TYPE_VOTE_MIN    2
 #define INTER_FAST_CONFIRM_ENABLE 1
-#define INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN 14u
+#define INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN 6u
 #define INTER_IP_SIDE_BIAS     8
 #define INTER_IP_ROW_BIAS      2
 #define INTER_SYM_ROW_DELTA    3
@@ -174,9 +176,9 @@ typedef struct
 } IntersectionResult_t;
 
 /* Right-angle pre-detection parameters. */
-#define RA_PRE_START_ROW    55
+#define RA_PRE_START_ROW    65
 #define RA_PRE_END_ROW      28
-#define RA_PRE_LOST_THRESH  2
+#define RA_PRE_LOST_THRESH  1
 #define RA_PRE_EDGE_MARGIN  6
 #define RA_PRE_FAR_START_ROW 28
 #define RA_PRE_FAR_END_ROW   4

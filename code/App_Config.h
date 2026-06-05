@@ -24,11 +24,11 @@
 #define VACUUM_RUN_ENABLE 1u
 
 /* Otsu threshold update interval. Larger values reduce CPU cost. */
-#define TF_OTSU_INTERVAL_DEBUG 4u
-#define TF_OTSU_INTERVAL_RACE  8u
+#define TF_OTSU_INTERVAL_DEBUG 2u
+#define TF_OTSU_INTERVAL_RACE  4u
 
 /* Optional fastest mode for stable lighting: 1 uses fixed threshold only. */
 #define TF_FIXED_THRESHOLD_ENABLE 0
-#define TF_FIXED_THRESHOLD_VALUE  75
+#define TF_FIXED_THRESHOLD_VALUE  70
 
 #endif /* APP_CONFIG_H */

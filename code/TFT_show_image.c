@@ -307,10 +307,10 @@ void draw_line(void)
      * TFT 上看起来会比二值图更接近连续视频。
      * ============================================================ */
     tft180_show_gray_image(0, 0,                    /* 图像在TFT屏幕左上角(0,0)开始显示 */
-        image_0[0],                                  /* 压缩灰度图像数据指针（一维数组形式访问二维数组首地址） */
+        Image_Binarize[0],                           /* 二值化图像数据指针（一维数组形式访问二维数组首地址） */
         COMP_W, COMP_H,                              /* 原始压缩图像尺寸：宽94 x 高60 */
         TFT_IMG_DISP_W, TFT_IMG_DISP_H,             /* TFT 显示目标尺寸：宽108 x 高80 */
-        0);                                          /* 阈值=0：按灰度图像显示，不二值化 */
+        128);                                        /* 阈值=128：按黑白二值显示 */
 
     /* 丢线时在左上角显示 "LOST" 提示，但仍叠加拐点与框供调试观察 */
     if (g_tf.line_lost)  /* 视觉模块判定赛道线丢失 */
@@ -442,8 +442,8 @@ void draw_line(void)
     tft180_show_string(54, 100, "K");                                  /* 原始按键/拨码状态 */
     tft180_show_int(66, 100, (int32)ui_raw_input_state(), 2);
     tft180_show_string(102, 100, (menu_cursor == 0u) ? ">" : " ");
-    tft180_show_string(108, 100, "Q");                                 /* 运行静默 */
-    tft180_show_int(126, 100, (int32)run_quiet_enable, 1);
+    tft180_show_string(108, 100, "E");                                 /* 单边巡线 */
+    tft180_show_int(126, 100, (int32)g_post_edge_side, 1);
 
     tft180_show_string(102, 108, (menu_cursor == 1u) ? ">" : " ");
     tft180_show_string(108, 108, "S");                                 /* 目标速度 */

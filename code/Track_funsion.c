@@ -54,6 +54,9 @@ static int16 s_jidian_row = TF_JIDIAN_ROW;
 
 /* 动态赛道半宽度（像素），根据有效边缘对自动更新，用于单边模式补全缺失边缘 */
 static int16 s_track_half_width = TRACK_HALF_WIDTH;
+static int16 s_tf_error_filtered = 0;
+static int16 s_tf_lookahead_filtered = 0;
+static uint8 s_tf_error_filter_valid = 0u;
 
 /* 中点列号环形缓冲区大小，用于路口检测时选取倒数第 N 个有效中点 */
 #define IP_COL_BUF_SIZE 8
@@ -135,6 +138,33 @@ static uint16 clamp_threshold_i16(int16 value)
     if (value > 240) value = 240;
     /* 将钳位后的 int16 值转为 uint16 类型返回 */
     return (uint16)value;
+}
+
+static void reset_track_error_filter(void)
+{
+    s_tf_error_filtered = 0;
+    s_tf_lookahead_filtered = 0;
+    s_tf_error_filter_valid = 0u;
+}
+
+static int16 filter_track_signal(int16 raw, int16 *state, int16 max_step)
+{
+    int16 delta;
+
+    if (s_tf_error_filter_valid == 0u)
+    {
+        *state = raw;
+        return raw;
+    }
+
+    delta = raw - *state;
+    if (delta > max_step)
+        delta = max_step;
+    else if (delta < -max_step)
+        delta = (int16)-max_step;
+
+    *state = (int16)(*state + delta);
+    return *state;
 }
 
 /* ========================================================================
@@ -851,24 +881,32 @@ static uint8 normalize_edges_for_mode(int16 *lb, int16 *rb)
     /* 单边左侧巡线模式：只需左边缘有效，右边缘由半宽度推算 */
     if (g_post_edge_side == EDGE_LEFT)
     {
-        /* 左边缘无效则无法推算，返回失败 */
         if (*lb == TF_INVALID)
-            return 0u;
-        /* 右边缘 = 左边缘 + 2*半宽度，钳位到合法范围 */
-        *rb = clamp_edge_col((int16)(*lb + half * 2));
-        /* 检查推算后的边缘对是否合法（右 > 左） */
+        {
+            if (*rb == TF_INVALID)
+                return 0u;
+            *lb = clamp_edge_col((int16)(*rb - half * 2));
+        }
+        else
+        {
+            *rb = clamp_edge_col((int16)(*lb + half * 2));
+        }
         return (*rb > *lb) ? 1u : 0u;
     }
 
     /* 单边右侧巡线模式：只需右边缘有效，左边缘由半宽度推算 */
     if (g_post_edge_side == EDGE_RIGHT)
     {
-        /* 右边缘无效则无法推算，返回失败 */
         if (*rb == TF_INVALID)
-            return 0u;
-        /* 左边缘 = 右边缘 - 2*半宽度，钳位到合法范围 */
-        *lb = clamp_edge_col((int16)(*rb - half * 2));
-        /* 检查推算后的边缘对是否合法（右 > 左） */
+        {
+            if (*lb == TF_INVALID)
+                return 0u;
+            *rb = clamp_edge_col((int16)(*lb + half * 2));
+        }
+        else
+        {
+            *lb = clamp_edge_col((int16)(*rb - half * 2));
+        }
         return (*rb > *lb) ? 1u : 0u;
     }
 
@@ -1164,6 +1202,7 @@ void track_fusion_init(void)
     s_otsu_cnt = (uint8)TF_OTSU_INTERVAL;
     /* 赛道半宽度重置为默认值 */
     s_track_half_width = TRACK_HALF_WIDTH;
+    reset_track_error_filter();
 
     /* 清零压缩图像、二值化图像和临时缓冲区 */
     for (i = 0; i < COMP_H; i++)
@@ -1305,6 +1344,7 @@ void track_fusion_update(void)
     {
         /* 设置丢线标志 */
         g_tf.line_lost = 1u;
+        reset_track_error_filter();
         /* 丢线状态下不进行后续处理，直接返回 */
         return;
     }
@@ -1472,6 +1512,7 @@ void track_fusion_update(void)
     {
         /* 设置丢线标志 */
         g_tf.line_lost = 1u;
+        reset_track_error_filter();
         /* 丢线状态下直接返回 */
         return;
     }
@@ -1479,8 +1520,10 @@ void track_fusion_update(void)
     /* ---- 步骤8：计算加权横向偏差（底部加权，用于正常巡线控制） ---- */
     /* 计算所有有效行的加权平均中线列号（底部行权重更高） */
     int16 avg_center = calc_weighted_center(jrow, end_row, 0);
+    int16 raw_error;
+    int16 raw_lookahead;
     /* 横向偏差 = -(平均中线 - 图像中心)，负号使得左偏为正、右偏为负 */
-    g_tf.error = -(avg_center - (int16)TF_IMG_CENTER);
+    raw_error = -(avg_center - (int16)TF_IMG_CENTER);
     /* 有有效行，清除丢线标志 */
     g_tf.line_lost = 0u;
 
@@ -1491,17 +1534,24 @@ void track_fusion_update(void)
         int16 la_center = calc_weighted_center(
             (int16)TF_LOOKAHEAD_START_ROW, (int16)TF_LOOKAHEAD_END_ROW, 1);
         /* 前瞻误差 = -(前瞻中线 - 图像中心) */
-        g_tf.lookahead_error = -(la_center - (int16)TF_IMG_CENTER);
-        /* 误差趋势 = 前瞻误差 - 当前误差，正值表示前方弯道更急 */
-        g_tf.error_trend = g_tf.lookahead_error - g_tf.error;
+        raw_lookahead = -(la_center - (int16)TF_IMG_CENTER);
     }
 
     if (s_inter_post_turn_suppress_cnt >
         (INTER_POST_TURN_SUPPRESS_FRAMES - INTER_POST_TURN_FAR_BLOCK_FRAMES))
     {
-        g_tf.lookahead_error = 0;
-        g_tf.error_trend = 0;
+        raw_lookahead = 0;
+        s_tf_lookahead_filtered = 0;
     }
+
+    g_tf.error = filter_track_signal(raw_error,
+                                     &s_tf_error_filtered,
+                                     TF_ERROR_FILTER_MAX_STEP);
+    g_tf.lookahead_error = filter_track_signal(raw_lookahead,
+                                               &s_tf_lookahead_filtered,
+                                               TF_LOOKAHEAD_FILTER_MAX_STEP);
+    s_tf_error_filter_valid = 1u;
+    g_tf.error_trend = g_tf.lookahead_error - g_tf.error;
 
     /* ---- 步骤10：误差值乘以2，缩放到原始图像坐标系 ---- */
     /* 原始图像 188x120，压缩后 94x60，乘以2回到原始坐标尺度 */
@@ -1532,6 +1582,9 @@ static uint8 single_edge_side_evidence(uint8 side)
     if (center < 0 || center >= (int16)TF_IMG_W)
         center = (int16)TF_IMG_CENTER;
 
+    if (g_tf.line_lost != 0u || g_tf.valid_row_count < 18u)
+        return 0u;
+
     if (side == 1u)
         probe_col = ip_right_col;
     else if (side == 2u)
@@ -1555,7 +1608,9 @@ static uint8 single_edge_side_evidence(uint8 side)
             if (strong_hits < 255u) strong_hits++;
         }
 
-        if (strong_hits >= 1u || branch_hits >= 2u || probe_hits >= 3u)
+        if (strong_hits >= 2u ||
+            (strong_hits >= 1u && branch_hits >= 2u) ||
+            (branch_hits >= 4u && probe_hits >= 3u))
         {
             s_single_edge_ra_row = row;
             return 1u;
@@ -3223,7 +3278,7 @@ static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok,
  * 检测流程（三阶段）：
  *
  * 阶段1 - 冷却期处理：
- *   锁定结束后有 INTER_COOLDOWN_FRAMES(8) 帧冷却期，期间不检测新路口
+ *   异常锁定结束后有 INTER_COOLDOWN_FRAMES 帧冷却期，正常RECOVER不额外冷却
  *
  * 阶段2 - 锁定期处理：
  *   RA 执行期间持续更新拐点信息（用于 g_ip_max_row），超时则强制清除
@@ -3267,7 +3322,7 @@ void detect_intersection(void)
     }
 
     /* ---- 阶段1：冷却期处理 ---- */
-    /* 冷却期内（锁定结束后等待 INTER_COOLDOWN_FRAMES=8 帧），不进行新路口检测 */
+    /* 冷却期内（异常锁定结束后等待 INTER_COOLDOWN_FRAMES 帧），不进行新路口检测 */
     if (s_inter_cooldown_cnt > 0u)
     {
         /* 递增冷却计数器 */
@@ -3311,13 +3366,13 @@ void detect_intersection(void)
             g_ip_max_row = (uint8)(ip.row * 2);
         }
 
-        /* RA 已清除标志（转弯完成），结束锁定，进入冷却期 */
+        /* RA 已清除标志（通常进入RECOVER），结束锁定但不额外冷却 */
         if (g_ra_flag == 0u)
         {
             /* 清除锁定计数器 */
             s_inter_lock_cnt = 0u;
-            /* 启动冷却期（计数器设为1） */
-            s_inter_cooldown_cnt = 1u;
+            /* RA进入RECOVER后允许下一帧立即检测近距离下一个弯 */
+            s_inter_cooldown_cnt = 0u;
             /* 重置框锁定状态 */
             reset_box_lock();
             /* 清除路口检测结果 */
@@ -3546,6 +3601,22 @@ void detect_intersection(void)
     uint8 right_box_road = right_frame_has;
     uint8 left_strong_dir_has = (left_box_road && left_cross_has) ? 1u : 0u;
     uint8 right_strong_dir_has = (right_box_road && right_cross_has) ? 1u : 0u;
+    uint16 direct_fast_row =
+        (uint16)((ra_turn_row > 0) ? (uint16)ra_turn_row : 0u) +
+        (uint16)INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN;
+    uint8 direct_fast_late =
+        ((int32)motor_speed * 8 >= (int32)RA_FAST_SPEED_START &&
+         (uint16)g_ip_max_row >= direct_fast_row) ? 1u : 0u;
+    uint8 right_fast_dir_has =
+        (right_strong_dir_has ||
+         (direct_fast_late &&
+          (ra_dir_hint == 1u || found_side == 1u || single_edge_ra_dir == 1u) &&
+          right_box_road)) ? 1u : 0u;
+    uint8 left_fast_dir_has =
+        (left_strong_dir_has ||
+         (direct_fast_late &&
+          (ra_dir_hint == 2u || found_side == 2u || single_edge_ra_dir == 2u) &&
+          left_box_road)) ? 1u : 0u;
     uint8 left_t_dir_has = (left_box_road && (left_has || left_cross_has)) ? 1u : 0u;
     uint8 right_t_dir_has = (right_box_road && (right_has || right_cross_has)) ? 1u : 0u;
     uint8 top_valid_rows = valid_rows_in_range(
@@ -3620,9 +3691,9 @@ void detect_intersection(void)
 
     /* ---- 路口类型分类逻辑 ---- */
     /* Final RA classification must use box-edge / crossing evidence. */
-    if (single_edge_ra_dir == 1u && pure_ra_ok && right_strong_dir_has)
+    if (single_edge_ra_dir == 1u && pure_ra_ok && right_fast_dir_has)
         detected = 1u;
-    else if (single_edge_ra_dir == 2u && pure_ra_ok && left_strong_dir_has)
+    else if (single_edge_ra_dir == 2u && pure_ra_ok && left_fast_dir_has)
         detected = 2u;
     else if (type5_side_ok || tri_cross_candidate)
         detected = 5u;
@@ -3631,16 +3702,16 @@ void detect_intersection(void)
     else if (top_road_has && right_t_dir_has)
         detected = 4u;
     else if (!top_road_has && pure_ra_ok && ra_dir_hint == 1u &&
-             right_strong_dir_has)
+             right_fast_dir_has)
         detected = 1u;
     else if (!top_road_has && pure_ra_ok && ra_dir_hint == 2u &&
-             left_strong_dir_has)
+             left_fast_dir_has)
         detected = 2u;
     else if (!top_road_has && pure_ra_ok && found_side == 1u &&
-             right_strong_dir_has)
+             right_fast_dir_has)
         detected = 1u;
     else if (!top_road_has && pure_ra_ok && found_side == 2u &&
-             left_strong_dir_has)
+             left_fast_dir_has)
         detected = 2u;
 
     /* 记录原始检测类型到结果结构体 */
@@ -3666,6 +3737,18 @@ void detect_intersection(void)
     /* 快速确认未通过，走投票确认流程 */
     if (voted_type == 0u)
         voted_type = vote_inter_type(detected);
+
+    if (g_post_edge_side != EDGE_BOTH &&
+        voted_type >= 3u && voted_type <= 5u)
+    {
+        g_ra_flag = 0u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        reset_box_lock();
+        clear_inter_result();
+        return;
+    }
 
     if (s_inter_post_turn_suppress_cnt >
         (INTER_POST_TURN_SUPPRESS_FRAMES - INTER_POST_TURN_BLOCK_FRAMES))
