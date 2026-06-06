@@ -207,6 +207,7 @@ extern int16 ip_right_col;
 
 void track_fusion_init(void);
 void track_fusion_update(void);
+void track_fusion_publish(void);
 void track_intersection_suppress_after_turn(void);
 void right_angle_pre_detect(void);
 void detect_intersection(void);

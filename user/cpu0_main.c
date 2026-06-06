@@ -56,7 +56,7 @@ int core0_main(void)
     
 
     /* 初始化PID周期中断（PID在ISR中直接调用） */
-   pit_ms_init(CCU60_CH0, PID_PERIOD_MS);
+   //pit_ms_init(CCU60_CH0, PID_PERIOD_MS);
 
     /* 初始化按键 */
     key_init_all();
@@ -72,15 +72,19 @@ int core0_main(void)
         /* 帧同步 */
         while (!mt9v03x_finish_flag)
         {
-            battery_check();
             ui_process_keys();
             menu_show();
         }
        mt9v03x_finish_flag = 0;
+        if (motor_enable == 0)
+        {
+            battery_check();
+        }
 
         /* 更新赛道融合检测结果 */
         system_start();
        track_fusion_update();
+        track_fusion_publish();
         prof_tf_us = system_getval_us();
 
         /* 直角预判检测（远距离，必须在 track_fusion_update 之后） */
@@ -89,6 +93,7 @@ int core0_main(void)
 
         /* 拐点画框路口检测（替代原 right_angle_detect） */
         detect_intersection();
+        track_fusion_publish();
        prof_inter_us = system_getval_us();
 
 #if !RACE_MODE

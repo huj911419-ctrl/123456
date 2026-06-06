@@ -419,7 +419,9 @@ void draw_line(void)
     tft180_show_string(112, 56, "YA");                                 /* 航向角（度） */
     tft180_show_int(124, 56, (int32)yaw_angle, 4);
     tft180_show_string(112, 64, "B");                                  /* 电池电压x10 */
-    tft180_show_int(124, 64, (int32)(battery_get_voltage() * 10.0f), 3);
+    tft180_show_int(124, 64, (int32)battery_get_voltage_x10(), 3);
+    tft180_show_string(112, 72, "AD");
+    tft180_show_int(124, 72, (int32)battery_get_adc(), 4);
 
     /* 底部调试区：三列固定布局，每行8像素，避免重叠 */
     tft180_show_string(0,   84, "ER");                                 /* 转向误差 */

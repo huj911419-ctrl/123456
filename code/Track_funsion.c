@@ -9,6 +9,16 @@
 
 /* 巡线融合主结构体，存储每帧的边缘、中线、误差等所有巡线结果 */
 TrackFusion_t g_tf;
+static TrackFusion_t s_tf_work;
+static TrackFusion_t * const s_tf_publish_target = &g_tf;
+#define g_tf s_tf_work
+
+void track_fusion_publish(void)
+{
+    uint32 irq_state = interrupt_global_disable();
+    *s_tf_publish_target = s_tf_work;
+    interrupt_global_enable(irq_state);
+}
 
 /* 二值化后的图像数据（压缩后 94x60），255=白（赛道），0=黑（背景） */
 uint8 Image_Binarize[TF_IMG_H][TF_IMG_W];
@@ -1215,6 +1225,8 @@ void track_fusion_init(void)
             /* 降噪临时缓冲区清零 */
             s_bin_tmp[i][j] = Image_BLACK;
         }
+
+    track_fusion_publish();
 }
 
 /* ========================================================================
@@ -2443,7 +2455,8 @@ static uint8 inter_side_window_has_road(int16 top,
         }
     }
 
-    if (max_streak >= INTER_BAND_MIN_STREAK)
+    if (max_streak >= INTER_SIDE_CROSS_MIN_STREAK &&
+        hit_rows >= INTER_SIDE_HIT_ROWS)
         return 1u;
 
     if (hit_rows >= INTER_SIDE_HIT_ROWS &&
@@ -2544,6 +2557,10 @@ static uint8 inter_side_crossing_has_road(int16 top,
             hit_rows++;
             if (hit_rows >= INTER_SIDE_CROSS_HIT_ROWS)
                 return 1u;
+        }
+        else
+        {
+            hit_rows = 0u;
         }
     }
 
@@ -3570,9 +3587,14 @@ void detect_intersection(void)
         ((found_side == 1u && right_branch_has && !left_branch_has) ||
          (found_side == 2u && left_branch_has && !right_branch_has)) ? 1u : 0u;
     uint8 single_edge_ra_dir = single_edge_route_ra_dir();
-    uint8 pure_ra_ok =
-        (g_tf.line_lost != 0u || pure_ra_shape ||
+    uint8 cutoff_ready =
+        (s_first_miss_row >= (int16)INTER_MIN_MISS_ROW ||
+         g_tf.line_lost != 0u ||
          single_edge_ra_dir != 0u) ? 1u : 0u;
+    uint8 pure_ra_ok =
+        (g_tf.line_lost != 0u ||
+         single_edge_ra_dir != 0u ||
+         (cutoff_ready && pure_ra_shape)) ? 1u : 0u;
     uint8 ra_dir_hint = 0u;
     if (g_ra_pre_flag != 0u && (g_ra_pre_dir == 1u || g_ra_pre_dir == 2u))
         ra_dir_hint = g_ra_pre_dir;
@@ -3597,10 +3619,16 @@ void detect_intersection(void)
     uint8 right_cross_has =
         inter_side_crossing_has_road(b_top, b_bottom, b_left, b_right, 1u);
     uint8 side_cross_ok = (left_cross_has && right_cross_has) ? 1u : 0u;
-    uint8 left_box_road = left_frame_has;
-    uint8 right_box_road = right_frame_has;
-    uint8 left_strong_dir_has = (left_box_road && left_cross_has) ? 1u : 0u;
-    uint8 right_strong_dir_has = (right_box_road && right_cross_has) ? 1u : 0u;
+    uint8 left_box_edge_has = (left_has && left_box_has) ? 1u : 0u;
+    uint8 right_box_edge_has = (right_has && right_box_has) ? 1u : 0u;
+    uint8 left_box_road = (left_cross_has || left_box_edge_has) ? 1u : 0u;
+    uint8 right_box_road = (right_cross_has || right_box_edge_has) ? 1u : 0u;
+    uint8 left_strong_dir_has =
+        (left_cross_has ||
+         (left_box_edge_has && left_branch_has)) ? 1u : 0u;
+    uint8 right_strong_dir_has =
+        (right_cross_has ||
+         (right_box_edge_has && right_branch_has)) ? 1u : 0u;
     uint16 direct_fast_row =
         (uint16)((ra_turn_row > 0) ? (uint16)ra_turn_row : 0u) +
         (uint16)INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN;
@@ -3611,12 +3639,14 @@ void detect_intersection(void)
         (right_strong_dir_has ||
          (direct_fast_late &&
           (ra_dir_hint == 1u || found_side == 1u || single_edge_ra_dir == 1u) &&
-          right_box_road)) ? 1u : 0u;
+          right_box_edge_has &&
+          right_branch_has)) ? 1u : 0u;
     uint8 left_fast_dir_has =
         (left_strong_dir_has ||
          (direct_fast_late &&
           (ra_dir_hint == 2u || found_side == 2u || single_edge_ra_dir == 2u) &&
-          left_box_road)) ? 1u : 0u;
+          left_box_edge_has &&
+          left_branch_has)) ? 1u : 0u;
     uint8 left_t_dir_has = (left_box_road && (left_has || left_cross_has)) ? 1u : 0u;
     uint8 right_t_dir_has = (right_box_road && (right_has || right_cross_has)) ? 1u : 0u;
     uint8 top_valid_rows = valid_rows_in_range(
