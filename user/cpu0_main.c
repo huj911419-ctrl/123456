@@ -56,7 +56,7 @@ int core0_main(void)
     
 
     /* 初始化PID周期中断（PID在ISR中直接调用） */
-   //pit_ms_init(CCU60_CH0, PID_PERIOD_MS);
+   pit_ms_init(CCU60_CH0, PID_PERIOD_MS);
 
     /* 初始化按键 */
     key_init_all();

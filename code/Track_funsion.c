@@ -1010,6 +1010,8 @@ static uint8 find_jidian_at_row(int16 row, int16 *out_lb, int16 *out_rb)
     const int16 tqtr = (int16)(TF_IMG_W * 3 / 4);
     /* 初始化左右边缘为无效值 */
     int16 lb = TF_INVALID, rb = TF_INVALID;
+    *out_lb = TF_INVALID;
+    *out_rb = TF_INVALID;
 
     /* 策略1：检查中心列(mid)附近3个像素是否为白色（赛道区域） */
     if (is_white(row, mid - 1) && is_white(row, mid) && is_white(row, mid + 1))
@@ -1114,6 +1116,8 @@ static uint8 search_row_edges(int16 row, int16 prev_lb, int16 prev_rb,
 {
     /* 初始化左右边缘为无效值 */
     int16 lb = TF_INVALID, rb = TF_INVALID;
+    *out_lb = TF_INVALID;
+    *out_rb = TF_INVALID;
     /* 局部搜索范围 ±10 像素 */
     const int16 R = TF_LOCAL_RANGE;
     /* 图像中心列号 */
@@ -1504,8 +1508,8 @@ void track_fusion_update(void)
         else
         {
             /* 该行未找到有效边缘对，记录为无效 */
-            g_tf.left_edge[row] = lb;
-            g_tf.right_edge[row] = rb;
+            g_tf.left_edge[row] = TF_INVALID;
+            g_tf.right_edge[row] = TF_INVALID;
             /* 标记当前行为无效 */
             g_tf.row_valid[row] = 0u;
             /* 连续丢失计数递增 */
@@ -2822,7 +2826,8 @@ static void apply_ip_col_from_buffer(InflectionPoint_t *ip, uint8 found_side)
  */
 static int16 abs_i16(int16 v)
 {
-    /* 负数取反，正数直接返回 */
+    if (v == (int16)(-32767 - 1))
+        return 32767;
     return (v < 0) ? (int16)(-v) : v;
 }
 

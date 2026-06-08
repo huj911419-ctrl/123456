@@ -21,7 +21,7 @@
 #define UART0_TELEMETRY_DIV     1u
 
 /* 1 = turn on vacuum PWM whenever motor_enable is on. */
-#define VACUUM_RUN_ENABLE 1u
+#define VACUUM_RUN_ENABLE 0u
 
 /* Otsu threshold update interval. Larger values reduce CPU cost. */
 #define TF_OTSU_INTERVAL_DEBUG 2u

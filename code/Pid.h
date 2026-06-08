@@ -14,8 +14,8 @@
 #define PID_SECONDS_TO_TICKS(sec) \
     ((uint32)((((uint32)(sec) * 1000u) + (uint32)PID_PERIOD_MS - 1u) / (uint32)PID_PERIOD_MS))
 
-extern int16 base_speed;
-extern int16 speed_dbg_out;
+extern int16 base_speed; 
+extern int16 speed_dbg_out;//
 extern int16 steer_dbg_out;
 extern int16 duty_dbg_left;
 extern int16 duty_dbg_right;
@@ -152,7 +152,7 @@ extern volatile uint8 vacuum_enable;
  * IMU is used below only as a hard-turn exit reference. */
 #define YAW_COMP_ENABLE 0
 #define YAW_DEADZONE 1.0f
-#define YAW_RATE_LIMIT 200.0f  /* yaw_rate 限幅阈值（�?秒），超过此值转向输出被压住 */
+#define YAW_RATE_LIMIT 200.0f  /* yaw_rate 限幅阈值（�?秒），超过此值转向输出被压住 */
 
 /* RA state timing, one frame is PID_PERIOD_MS. */
 #define RA_HARD_TIMEOUT          14u
@@ -222,7 +222,7 @@ extern volatile uint8 vacuum_enable;
 #define RA_STRAIGHT_FRAMES       55u
 #define RULES_DONE_DELAY         136u
 
-/* 直角和丢线保底�?*/
+/* 直角和丢线保底�?*/
 #define RA_FALLBACK_DIRECT_ENABLE 1u
 
 #define LOST_SEARCH_ENTER_FRAMES 3u
