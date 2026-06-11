@@ -3726,9 +3726,9 @@ void detect_intersection(void)
 
     /* ---- 路口类型分类逻辑 ---- */
     /* Final RA classification must use box-edge / crossing evidence. */
-    if (single_edge_ra_dir == 1u && pure_ra_ok && right_fast_dir_has)
+    if (single_edge_ra_dir == 1u && !top_road_has && pure_ra_ok && right_fast_dir_has)
         detected = 1u;
-    else if (single_edge_ra_dir == 2u && pure_ra_ok && left_fast_dir_has)
+    else if (single_edge_ra_dir == 2u && !top_road_has && pure_ra_ok && left_fast_dir_has)
         detected = 2u;
     else if (type5_side_ok || tri_cross_candidate)
         detected = 5u;

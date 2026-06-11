@@ -74,9 +74,9 @@ extern volatile uint16 g_tf_white_count;
 
 /* Intersection detection parameters. */
 #define INTER_COOLDOWN_FRAMES  2
-#define INTER_POST_TURN_SUPPRESS_FRAMES 4u
-#define INTER_POST_TURN_BLOCK_FRAMES 1u
-#define INTER_POST_TURN_FAR_BLOCK_FRAMES 1u
+#define INTER_POST_TURN_SUPPRESS_FRAMES 6u
+#define INTER_POST_TURN_BLOCK_FRAMES 3u
+#define INTER_POST_TURN_FAR_BLOCK_FRAMES 2u
 #define INTER_MAX_LOCK_FRAMES  300
 #define INTER_BOX_START_ROW    30
 #define INTER_MIN_MISS_ROW     24
@@ -176,7 +176,7 @@ typedef struct
 } IntersectionResult_t;
 
 /* Right-angle pre-detection parameters. */
-#define RA_PRE_START_ROW    65
+#define RA_PRE_START_ROW    (TF_IMG_H - 5)
 #define RA_PRE_END_ROW      28
 #define RA_PRE_LOST_THRESH  1
 #define RA_PRE_EDGE_MARGIN  6
@@ -185,9 +185,9 @@ typedef struct
 #define RA_PRE_FAR_WIDTH_MIN 14
 #define RA_PRE_FAR_LEFT_COL  32
 #define RA_PRE_FAR_RIGHT_COL 68
-#define RA_PRE_FAR_OPEN_ROWS 2
-#define RA_PRE_VALID_ROWS_LOW 35
-#define RA_PRE_CENTER_SPAN_MIN 8
+#define RA_PRE_FAR_OPEN_ROWS 4
+#define RA_PRE_VALID_ROWS_LOW 20
+#define RA_PRE_CENTER_SPAN_MIN 20
 #define RA_PRE_COMPONENT_OPEN_ROWS 5
 #define RA_PRE_COMPONENT_CENTER_SPAN 30
 #define RA_PRE_COMPONENT_VALID_ROWS 36

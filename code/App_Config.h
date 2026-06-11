@@ -20,8 +20,17 @@
 #define UART0_PARAMS_DIV        1u
 #define UART0_TELEMETRY_DIV     1u
 
-/* 1 = turn on vacuum PWM whenever motor_enable is on. */
-#define VACUUM_RUN_ENABLE 0u
+#define AUTO_TUNE_LOG_ENABLE    1u
+#define AUTO_TUNE_LOG_PID_DIV   4u
+#define AUTO_TUNE_LOG_CAPACITY  512u
+#define AUTO_TUNE_DUMP_PER_PKT  4u
+#define AUTO_TUNE_LIVE_ENABLE   0u
+#define AUTO_TUNE_LIVE_DIV      32u
+
+/* 1 = enable vacuum PWM control during race run. */
+#define VACUUM_RUN_ENABLE      1u
+/* 1 = ramp vacuum in LAUNCH state before the drive motors start. */
+#define VACUUM_PREARM_ENABLE   1u
 
 /* Otsu threshold update interval. Larger values reduce CPU cost. */
 #define TF_OTSU_INTERVAL_DEBUG 2u

@@ -35,6 +35,7 @@ typedef struct
 #define RACE_STATE_RUN   2u
 #define RACE_STATE_DONE  3u
 #define RACE_STATE_ARMED 4u
+#define RACE_STATE_LAUNCH 5u
 
 extern MenuPage now_page;
 extern uint8 menu_cursor;

@@ -4,6 +4,7 @@
 #include "ImageTransfer.h"
 #include "Pid.h"
 #include "Battery.h"
+#include "AutoTuneLog.h"
 
 extern int16 cam_exposure;
 
@@ -72,6 +73,7 @@ int core0_main(void)
         /* 帧同步 */
         while (!mt9v03x_finish_flag)
         {
+            auto_tune_log_task();
             ui_process_keys();
             menu_show();
         }
@@ -79,6 +81,7 @@ int core0_main(void)
         if (motor_enable == 0)
         {
             battery_check();
+            auto_tune_log_task();
         }
 
         /* 更新赛道融合检测结果 */
@@ -98,7 +101,7 @@ int core0_main(void)
 
 #if !RACE_MODE
         /* 通过UART0发送压缩二值化图像到电脑 */
-        if (!run_quiet_active())
+        if (!run_quiet_active() && !auto_tune_log_busy())
         {
            send_image_uart0();
         }
@@ -106,6 +109,7 @@ int core0_main(void)
 
         /* 按键处理 */
         ui_process_keys();
+        auto_tune_log_task();
 
         /* 显示菜单 */
         menu_show();
