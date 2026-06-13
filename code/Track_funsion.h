@@ -118,7 +118,7 @@ extern volatile uint16 g_tf_white_count;
 #define INTER_TYPE_VOTE_FRAMES 2
 #define INTER_TYPE_VOTE_MIN    2
 #define INTER_FAST_CONFIRM_ENABLE 1
-#define INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN 6u
+#define INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN 0u
 #define INTER_IP_SIDE_BIAS     8
 #define INTER_IP_ROW_BIAS      2
 #define INTER_SYM_ROW_DELTA    3
@@ -177,9 +177,9 @@ typedef struct
 
 /* Right-angle pre-detection parameters. */
 #define RA_PRE_START_ROW    (TF_IMG_H - 5)
-#define RA_PRE_END_ROW      28
+#define RA_PRE_END_ROW      18
 #define RA_PRE_LOST_THRESH  1
-#define RA_PRE_EDGE_MARGIN  6
+#define RA_PRE_EDGE_MARGIN  12
 #define RA_PRE_FAR_START_ROW 28
 #define RA_PRE_FAR_END_ROW   4
 #define RA_PRE_FAR_WIDTH_MIN 14
@@ -191,7 +191,13 @@ typedef struct
 #define RA_PRE_COMPONENT_OPEN_ROWS 5
 #define RA_PRE_COMPONENT_CENTER_SPAN 30
 #define RA_PRE_COMPONENT_VALID_ROWS 36
-#define RA_PRE_CONFIRM_FRAMES 2
+#define RA_PRE_ROUTE_VALID_ROWS 42u
+#define RA_PRE_ROUTE_START_ROWS 36u
+#define RA_PRE_ROUTE_VALID_ROWS_MIN 12u
+#define RA_PRE_ROUTE_ERR_MAX 38
+#define RA_PRE_ROUTE_LA_MAX 48
+#define RA_PRE_ROUTE_IP_ROW 44u
+#define RA_PRE_CONFIRM_FRAMES 1
 #define RA_PRE_SLOW_OFF_FRAMES 4
 
 extern uint8 g_ra_flag;

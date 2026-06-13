@@ -17,6 +17,7 @@ extern volatile uint32 prof_inter_us;
 typedef struct
 {
     uint16 seq;
+    uint16 pid_tick;
     int16 base_speed_value;
     int16 speed_plan;
     int16 speed_out;
@@ -26,6 +27,8 @@ typedef struct
     int16 trend;
     int16 yaw10;
     int16 ra_yaw10;
+    int16 ra_hard_target10;
+    int16 ra_outer_cmd;
     int16 yaw_rate_dps;
     int16 duty_left;
     int16 duty_right;
@@ -41,6 +44,9 @@ typedef struct
     uint8 ra_phase;
     uint8 ra_dir;
     uint8 ra_ip_row;
+    uint8 ra_slow_row;
+    uint8 ra_turn_row;
+    uint8 ra_exit_reason;
     uint8 route_step;
     uint8 route_flag;
     uint8 route_action;
@@ -63,6 +69,7 @@ static AutoTuneRecord s_at_buf[AUTO_TUNE_LOG_CAPACITY];
 static volatile uint16 s_at_write = 0u;
 static volatile uint16 s_at_count = 0u;
 static volatile uint16 s_at_seq = 0u;
+static volatile uint16 s_at_pid_tick = 0u;
 static volatile uint8 s_at_div = 0u;
 static volatile uint8 s_at_overflow = 0u;
 static volatile uint8 s_at_capture_active = 0u;
@@ -122,6 +129,7 @@ static void at_pack_record(uint8 *p, const AutoTuneRecord *r)
     uint16 idx = 0u;
 
     at_put_u16(p, &idx, r->seq);
+    at_put_u16(p, &idx, r->pid_tick);
     at_put_i16(p, &idx, r->base_speed_value);
     at_put_i16(p, &idx, r->speed_plan);
     at_put_i16(p, &idx, r->speed_out);
@@ -131,6 +139,8 @@ static void at_pack_record(uint8 *p, const AutoTuneRecord *r)
     at_put_i16(p, &idx, r->trend);
     at_put_i16(p, &idx, r->yaw10);
     at_put_i16(p, &idx, r->ra_yaw10);
+    at_put_i16(p, &idx, r->ra_hard_target10);
+    at_put_i16(p, &idx, r->ra_outer_cmd);
     at_put_i16(p, &idx, r->yaw_rate_dps);
     at_put_i16(p, &idx, r->duty_left);
     at_put_i16(p, &idx, r->duty_right);
@@ -146,6 +156,9 @@ static void at_pack_record(uint8 *p, const AutoTuneRecord *r)
     p[idx++] = r->ra_phase;
     p[idx++] = r->ra_dir;
     p[idx++] = r->ra_ip_row;
+    p[idx++] = r->ra_slow_row;
+    p[idx++] = r->ra_turn_row;
+    p[idx++] = r->ra_exit_reason;
     p[idx++] = r->route_step;
     p[idx++] = r->route_flag;
     p[idx++] = r->route_action;
@@ -219,6 +232,7 @@ static void at_reset_capture(void)
     s_at_write = 0u;
     s_at_count = 0u;
     s_at_seq = 0u;
+    s_at_pid_tick = 0u;
     s_at_div = 0u;
     s_at_overflow = 0u;
     s_at_dump_pending = 0u;
@@ -234,10 +248,28 @@ uint8 auto_tune_log_busy(void)
     return (s_at_capture_active != 0u || s_at_dump_pending != 0u) ? 1u : 0u;
 }
 
+static uint8 at_force_pid_sample(void)
+{
+    return (ra_dbg_state != 0u ||
+            g_ra_flag != 0u ||
+            g_ra_pre_flag != 0u ||
+            g_ra_pre_slow_flag != 0u) ? 1u : 0u;
+}
+
+static uint8 at_record_div(void)
+{
+    uint8 div = (uint8)AUTO_TUNE_LOG_PID_DIV;
+
+    if (at_force_pid_sample())
+        return 1u;
+
+    return (div < 1u) ? 1u : div;
+}
+
 void auto_tune_log_pid_tick(void)
 {
     AutoTuneRecord *r;
-    uint8 div = (uint8)AUTO_TUNE_LOG_PID_DIV;
+    uint8 div;
 
     if (motor_enable == 0)
         return;
@@ -248,16 +280,24 @@ void auto_tune_log_pid_tick(void)
         s_at_capture_active = 1u;
     }
 
-    if (div < 1u)
-        div = 1u;
+    s_at_pid_tick++;
+    div = at_record_div();
 
-    s_at_div++;
-    if (s_at_div < div)
-        return;
-    s_at_div = 0u;
+    if (div > 1u)
+    {
+        s_at_div++;
+        if (s_at_div < div)
+            return;
+        s_at_div = 0u;
+    }
+    else
+    {
+        s_at_div = 0u;
+    }
 
     r = &s_at_buf[s_at_write];
     r->seq = s_at_seq++;
+    r->pid_tick = s_at_pid_tick;
     r->base_speed_value = base_speed;
     r->speed_plan = speed_dbg_plan;
     r->speed_out = speed_dbg_out;
@@ -267,6 +307,8 @@ void auto_tune_log_pid_tick(void)
     r->trend = g_tf.error_trend;
     r->yaw10 = at_clip_i16(yaw_angle * 10.0f);
     r->ra_yaw10 = ra_dbg_yaw10;
+    r->ra_hard_target10 = ra_dbg_hard_target10;
+    r->ra_outer_cmd = ra_dbg_outer_cmd;
     r->yaw_rate_dps = at_clip_i16(yaw_rate);
     r->duty_left = duty_dbg_left;
     r->duty_right = duty_dbg_right;
@@ -282,6 +324,9 @@ void auto_tune_log_pid_tick(void)
     r->ra_phase = ra_dbg_phase;
     r->ra_dir = ra_dbg_dir;
     r->ra_ip_row = ra_dbg_ip_row;
+    r->ra_slow_row = ra_dbg_slow_row;
+    r->ra_turn_row = ra_dbg_turn_row;
+    r->ra_exit_reason = ra_dbg_exit_reason;
     r->route_step = route_dbg_step;
     r->route_flag = route_dbg_flag;
     r->route_action = route_dbg_action;

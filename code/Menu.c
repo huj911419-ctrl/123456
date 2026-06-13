@@ -46,18 +46,18 @@ int16 pid_kd = 20;             /* 转向PD控制器的微分系数Kd */
 int16 sp_err_t1 = 6;          /* 速度规划：直线判定误差阈值，|error|<=此值视为直�?*/
 int16 sp_err_t2 = 16 ;         /* 速度规划：弯道判定误差阈值，|error|>=此值视为急弯 */
 int16 sp_ratio_1 = 100;       /* 速度规划：直道目标速度百分比（100%=满速） */
-int16 sp_ratio_2 = 50;        /* 速度规划：弯道目标速度百分比（35%=降速过弯） */
+int16 sp_ratio_2 = 85;        /* 速度规划：弯道目标速度百分比（35%=降速过弯） */
 int16 steer_speed_k = 8;      /* 转向速度耦合系数：速度越快，转向补偿增�?*/
 int16 steer_ff_k = 12;        /* 前瞻前馈系数：根据前瞻误差提前施加转向补�?*/
 
 /* ==================== 直角弯RA状态机参数 ==================== */
 int16 ra_hard_inner = 0;       /* 直角弯HARD阶段内侧电机占空比，0=内侧轮停�?*/
-int16 ra_hard_outer = 1700;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转�?*/
-int16 ra_hard_yaw =82;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退�?*/
-int16 ra_slow_row = 28;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减�?*/
-int16 ra_slow_pct = 55;        /* 直角弯SLOW阶段速度百分比（20%=更快刹住�?*/
-int16 ra_turn_row = 55;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
-int16 ra_approach_frames = 1;  /* 直角弯APPROACH阶段刹车稳车帧数，结束后进入HARD急转 */
+int16 ra_hard_outer = 1850;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转�?*/
+int16 ra_hard_yaw =88;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退�?*/
+int16 ra_slow_row = 12;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减�?*/
+int16 ra_slow_pct = 45;        /* 直角弯SLOW阶段速度百分比（20%=更快刹住�?*/
+int16 ra_turn_row = 40;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
+int16 ra_approach_frames = 2;  /* 直角弯APPROACH阶段刹车稳车帧数，结束后进入HARD急转 */
 
 int16 yaw_kp = 12;            /* IMU级联控制的航向角比例系数Kp */
 
