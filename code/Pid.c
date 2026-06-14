@@ -32,7 +32,7 @@ uint8 g_post_edge_side = EDGE_BOTH; /* 单边巡线方向，全�变量供���
 
 /* RA状�机当前状�（0=空闲 1=活跃�?*/
 uint8 ra_dbg_state = 0u;        /* RA状�调试变�?*/
-/* RA当前阶��?=WAIT 1=SLOW 2=APPROACH 3=HARD 4=RECOVER�?*/
+/* RA当前阶��?=WAIT 1=SLOW 2=APPROACH 3=HARD 4=YAW_LOCK 5=RECOVER�?*/
 uint8 ra_dbg_phase = 0u;        /* RA阶�调试变� */
 /* RA��方向�?=直� 1=右转 2=左转�?*/
 uint8 ra_dbg_dir = 0u;          /* RA方向调试变量 */
@@ -51,6 +51,7 @@ uint8 ra_dbg_turn_row = 0u;
 uint8 ra_dbg_exit_reason = 0u;
 int16 ra_dbg_hard_target10 = 0;
 int16 ra_dbg_outer_cmd = 0;
+
 
 /* ======================== �向PD控制静�变�?======================== */
 
@@ -252,7 +253,7 @@ typedef enum { RA_ST_NONE, RA_ST_ACTIVE } RaState;  /* RA状�枚�?*/
 #define RA_EXIT_RA_TO     7u
 #define RA_EXIT_RECOVER   8u
 /* RA阶�：等待拐点接�?�?减�?�?接近 �?���?�?恢� */
-typedef enum { RA_PH_WAIT, RA_PH_SLOW, RA_PH_APPROACH, RA_PH_HARD, RA_PH_RECOVER } RaPhase; /* RA阶�枚� */
+typedef enum { RA_PH_WAIT, RA_PH_SLOW, RA_PH_APPROACH, RA_PH_HARD, RA_PH_YAW_LOCK, RA_PH_RECOVER } RaPhase; /* RA阶�枚� */
 
 /* RA状�机当前状�?*/
 static RaState s_ra_state = RA_ST_NONE;      /* RA当前状�，初�为空�?*/
@@ -283,11 +284,13 @@ static uint16 s_ra_timer = 0u;               /* RA全局计时�?*/
 static uint16 s_ra_hard_cnt = 0u;            /* HARD阶�帧计�?*/
 /* RECOVER阶�帧计�?*/
 static uint16 s_ra_recover_cnt = 0u;         /* RECOVER阶�帧计�?*/
+static uint16 s_ra_yaw_lock_cnt = 0u;       /* YAW_LOCK frame counter */
 /* 当前阶�内的帧计数（WAIT/SLOW�� */
 static uint16 s_ra_phase_cnt = 0u;           /* 当前阶�帧计�?*/
 static float s_ra_yaw_base = 0.0f;
 static float s_ra_hard_yaw_target = 0.0f;
-static uint8 s_ra_post_recover_cnt = 0u;           /* HARD入口yaw基准 */
+static uint8 s_ra_post_recover_cnt = 0u;
+static uint8 s_ra_lost_guard_cnt = 0u;           /* HARD入口yaw基准 */
 /* HARD阶�的速度种子值，用于RECOVER阶�的速度平滑过渡 */
 static float s_ra_hard_speed_seed = 0.0f;    /* HARD阶��度种子 */
 /* HARD阶�的�向�子值，用于RECOVER阶�的�向平滑过�?*/
@@ -340,10 +343,10 @@ static const IntersectionRule user_rules[] = {
 
     /* 当前���线：
      * 右直�?-> 右直�?-> 左直�?-> 4�?-> 5�?-> 5�?-> 4�?-> 4�?     * -> 5�?-> 3�?-> 3直� -> 5�?-> 右直�?-> 右直角后单边�?*/
-    RULE_RA(  1u, 1u),    /* �?个flag=1（右直�）：自动方� */
-    RULE(     1u, 4u, ACT_RIGHT),   /* �?个flag=4（T右）：右�?*/
-    RULE_RA(  1u, 2u),    /* �?个flag=2（左直�）：自动方� */
-    RULE(     1u, 5u, ACT_LEFT),    /* �?个flag=5（十字）：左�?*/
+    RULE_RA(  1u, 1u),    /* first flag=1: auto direct turn */
+    RULE_EDGE(1u, 4u, ACT_RIGHT, EDGE_LEFT, SINGLE_EDGE_UNTIL_NEXT_TURN), /* first flag=4: right turn */
+    RULE_RA(  1u, 2u),    /* first flag=2: auto direct turn */
+    RULE(     1u, 5u, ACT_LEFT),    /* first flag=5: left turn */
     RULE(     2u, 5u, ACT_RIGHT),   /* �?个flag=5（十字）：右�?*/
     RULE(     2u, 4u, ACT_RIGHT),   /* �?个flag=4（T右）：右�?*/
     RULE(     3u, 4u, ACT_RIGHT),   /* �?个flag=4（T右）：右�?*/
@@ -587,6 +590,9 @@ static uint8 ra_turn_trigger_row(void)
     advance = ra_turn_speed_advance();
     turn_row = (turn_row > advance) ? (uint8)(turn_row - advance) : 0u;
 
+    if (ra_speed_ref() >= RA_FAST_SPEED_START && turn_row < RA_TURN_ROW_MIN)
+        turn_row = RA_TURN_ROW_MIN;
+
     return turn_row;
 }
 
@@ -604,6 +610,7 @@ static uint8 ra_slow_trigger_row(void)
     return slow_row;
 }
 
+
 static uint16 ra_slow_limit_for_speed(void)
 {
     return RA_SLOW_TIMEOUT;
@@ -611,8 +618,20 @@ static uint16 ra_slow_limit_for_speed(void)
 static uint16 ra_approach_frames_for_speed(uint8 turn_row)
 {
     uint16 frames = (ra_approach_frames < 1) ? 1u : (uint16)ra_approach_frames;
+    int16 ref = ra_speed_ref();
+    uint16 cap = frames;
 
     (void)turn_row;
+
+    if (s_ra_orig_flag < 3u && ref >= RA_FAST_SPEED_START)
+        cap = RA_FAST_APPROACH_FRAMES;
+    else if (ref <= RA_LOW_SPEED_START)
+        cap = RA_LOW_APPROACH_FRAMES;
+
+    if (cap < 1u)
+        cap = 1u;
+    if (frames > cap)
+        frames = cap;
 
     return frames;
 }
@@ -635,7 +654,8 @@ static float ra_pre_turn_steer_ff(void)
         if (g_ra_flag == 0u && g_ra_pre_flag != 0u &&
             (g_ra_pre_dir == 1u || g_ra_pre_dir == 2u))
         {
-            dir = g_ra_pre_dir;
+            if (route_next_flag_is((uint8)g_ra_pre_dir))
+                dir = g_ra_pre_dir;
         }
     }
     else if (s_ra_orig_flag < 3u &&
@@ -815,6 +835,8 @@ static void ra_reset(void)                  /* RA状�机全��?*/
     s_ra_timer = 0u;                        /* 全局计时器清�?*/
     s_ra_hard_cnt = 0u;                     /* HARD计数清零 */
     s_ra_recover_cnt = 0u;                  /* RECOVER计数清零 */
+    s_ra_yaw_lock_cnt = 0u;
+    s_ra_lost_guard_cnt = 0u;
     s_ra_phase_cnt = 0u;                    /* 阶��数清零 */
     s_ra_yaw_base = 0.0f;
     s_ra_hard_yaw_target = 0.0f;
@@ -835,19 +857,7 @@ static void ra_reset(void)                  /* RA状�机全��?*/
  * 全部满足则置 s_rules_done=1，触发延迟停�? * 无参数，无返回�?*/
 static void update_rules_done(void)
 {
-    uint8 all_done = 1u;
-
-    for (uint8 i = 0u; i < USER_RULE_COUNT; i++)
-    {
-        uint8 flag = user_rules[i].flag;
-        if (flag >= 7u || s_inter_count[flag] < user_rules[i].count)
-        {
-            all_done = 0u;
-            break;
-        }
-    }
-
-    if (all_done)
+    if (route_dbg_step >= (uint8)USER_RULE_COUNT && !s_route_pending_valid)
         s_rules_done = 1u;
 }
 
@@ -937,23 +947,10 @@ static void reset_speed_ff_state(void)      /* 复位速度前� */
  * @flag: �口类型flag�?~5�? * 返回: 1=有下��匹配�0=�?*/
 static uint8 route_has_next_match(uint8 flag)
 {
-    uint8 next_count;
-
-    if (flag >= 7u)
+    if (route_dbg_step >= (uint8)USER_RULE_COUNT)
         return 0u;
 
-    next_count = s_inter_count[flag] + 1u;
-
-    for (uint8 i = 0u; i < USER_RULE_COUNT; i++)
-    {
-        if (user_rules[i].flag == flag &&
-            user_rules[i].count == next_count)
-        {
-            return 1u;
-        }
-    }
-
-    return 0u;
+    return (user_rules[route_dbg_step].flag == flag) ? 1u : 0u;
 }
 
 uint8 route_next_flag_is(uint8 flag)
@@ -1049,6 +1046,14 @@ static uint8 lost_search_step(int16 pos_err) /* 丢线搜索主�辑 */
     /* 有RA flag时不搜索（�RA处理�?*/
     if (g_ra_flag != 0u || g_ra_pre_flag != 0u) /* 有RA标志 */
         return 0u;                          /* 不搜�，交给RA处理 */
+
+    if (s_ra_lost_guard_cnt > 0u)
+    {
+        s_ra_lost_guard_cnt--;
+        s_lost_line_cnt = 0u;
+        s_lost_search_active = 0u;
+        return 0u;
+    }
 
     if (s_ra_post_recover_cnt > 0u)
     {
@@ -1271,6 +1276,21 @@ static void ra_finish(void)                 /* RA正常结束 */
     ra_finish_ex(0u);                   /* 清除flag，启动转�屏�?*/
 }
 
+static void ra_enter_yaw_lock(void)
+{
+    turn_right_led_off();
+    g_ra_flag = 0u;
+    g_ra_pre_dir = 0u;
+    g_ra_pre_slow_flag = 0u;
+    s_ra_phase = RA_PH_YAW_LOCK;
+    s_ra_phase_cnt = 0u;
+    s_ra_yaw_lock_cnt = 0u;
+    s_ra_recover_cnt = 0u;
+    s_speed_integral *= 0.50f;
+    line_pid_reset_derivative();
+    ra_debug_update();
+}
+
 /* ra_enter_recover - 进入RECOVER阶�
  * 特点�? *   - 使用HARD阶�的速度/�向�子值平滑过�? *   - 重新初�化PD控制�（以当前��为初始�）
  *   - 速度前�就�（避免启动突变）
@@ -1284,6 +1304,8 @@ static void ra_enter_recover(void)          /* 进入RECOVER阶� */
     s_ra_phase = RA_PH_RECOVER;             /* 切换到RECOVER阶� */
     s_ra_phase_cnt = 0u;                    /* 阶��数清零 */
     s_ra_recover_cnt = 0u;                  /* RECOVER帧�数清�?*/
+    s_ra_yaw_lock_cnt = 0u;
+    s_ra_lost_guard_cnt = RA_LOST_GUARD_FRAMES;
     s_ra_recover_good_cnt = 0u;             /* RECOVER�认�数清零 */
     s_speed_integral *= 0.60f;
     s_steer_d_reset_flag = 1u;              /* 设置�分重�标志 */
@@ -1330,6 +1352,7 @@ static void ra_start(uint8 dir, uint8 orig_flag, uint8 straight,
     s_ra_timer = 0u;                        /* 全局计时器清�?*/
     s_ra_hard_cnt = 0u;                     /* HARD计数清零 */
     s_ra_recover_cnt = 0u;                  /* RECOVER计数清零 */
+    s_ra_yaw_lock_cnt = 0u;
     s_ra_phase_cnt = 0u;                    /* 阶��数清零 */
     s_ra_yaw_base = normalize_angle(yaw_angle);
     s_ra_hard_yaw_target = 0.0f;
@@ -1359,14 +1382,10 @@ static void ra_enter_hard(void)             /* 进入HARD���阶�?*/
     s_ra_exit_good_cnt = 0u;                /* �出确认�数清�?*/
     s_ra_recover_good_cnt = 0u;             /* 恢�确认�数清零 */
     s_ra_recover_cnt = 0u;                  /* RECOVER计数清零 */
+    s_ra_yaw_lock_cnt = 0u;
     s_speed_integral *= 0.50f;
     s_ra_pre_turn_ff = 0.0f;
     line_pid_reset_derivative();            /* 重置�分状�?*/
-
-    /* 重置yaw角为0，用于HARD阶�的yaw进度判断 */
-    if (imu_ready)                          /* 校准告�时仍使用实时yaw输出 */
-        imu_reset_yaw();                    /* 重置yaw角为0 */
-    s_ra_yaw_base = normalize_angle(yaw_angle);
 
     ra_debug_update();                      /* 更新调试变量 */
 }
@@ -1655,6 +1674,49 @@ static uint8 straight_speed_candidate(int16 pos_err_abs) /* 判断直道加���
     return 1u;                              /* 满足�有条件，�直道候�?*/
 }
 
+static uint8 straight_pre_slow_clear_candidate(int16 pos_err_abs)
+{
+    if (g_tf.line_lost != 0u || g_ra_flag != 0u)
+        return 0u;
+
+    if (straight_speed_candidate(pos_err_abs))
+        return 1u;
+
+    if (g_tf.valid_row_count >= SPEED_VALID_RUSH_ROWS &&
+        pos_err_abs <= SPEED_COMPONENT_ERR_MAX &&
+        abs_i16(g_tf.lookahead_error) <= SPEED_COMPONENT_LA_MAX &&
+        abs_i16(g_tf.error_trend) <= SPEED_COMPONENT_TREND_MAX)
+    {
+        return 1u;
+    }
+
+    if (g_tf.valid_row_count >= SPEED_VALID_RUN_ROWS &&
+        pos_err_abs <= SPEED_STRAIGHT_HOLD_ERR_MAX &&
+        abs_i16(g_tf.lookahead_error) <= SPEED_STRAIGHT_HOLD_LOOKAHEAD_MAX &&
+        abs_i16(g_tf.error_trend) <= SPEED_STRAIGHT_HOLD_TREND_MAX)
+    {
+        return 1u;
+    }
+
+    return 0u;
+}
+
+static uint8 pre_slow_signal_trusted(int16 pos_err_abs)
+{
+    if (g_ra_pre_flag != 0u &&
+        (g_ra_pre_dir == 1u || g_ra_pre_dir == 2u))
+    {
+        return route_next_flag_is((uint8)g_ra_pre_dir);
+    }
+
+    if (g_ra_pre_slow_flag == 0u)
+        return 0u;
+
+    if (straight_pre_slow_clear_candidate(pos_err_abs))
+        return 0u;
+
+    return 1u;
+}
 /* sym_straight_speed_candidate - 判断当前�否为对称组件直道加���? * @pos_err_abs: 位置��绝��? * 对称组件（�三极�干扰区）��测到时，说明赛道较直
  * 条件：有对称组件、未丢线、有效�足够���适中、无RA
  * 返回 1=�候�?*/
@@ -2050,26 +2112,32 @@ static uint8 ra_hard_exit_reason(uint8 direct_fast,
                                   float yaw_progress,
                                   float yaw_progress_rate)
 {
-    (void)direct_fast;
+    uint16 force_limit;
+    uint16 emergency_limit;
 
-    if (!imu_ready || imu_error || hard_yaw_target <= 0.0f)
-    {
-        if (s_ra_hard_cnt < min_hard)
-            return RA_EXIT_NONE;
-        if (line_ok && s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES)
-            return RA_EXIT_LINE;
-        return (s_ra_hard_cnt >=
-                (uint16)hard_limit) ?
-               RA_EXIT_NO_IMU : RA_EXIT_NONE;
-    }
+    (void)direct_fast;
 
     if (s_ra_hard_cnt < min_hard)
         return RA_EXIT_NONE;
 
+    force_limit =
+        (uint16)((uint16)hard_limit + (uint16)RA_HARD_FORCE_TIMEOUT_EXTRA);
+    emergency_limit =
+        (uint16)((uint16)force_limit + (uint16)RA_HARD_EMERGENCY_TIMEOUT_EXTRA);
+
+    if (!imu_ready || imu_error || hard_yaw_target <= 0.0f)
+    {
+        if (line_ok && s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES)
+            return RA_EXIT_LINE;
+        return (s_ra_hard_cnt >= emergency_limit) ?
+               RA_EXIT_NO_IMU : RA_EXIT_NONE;
+    }
+
     if (yaw_progress >= hard_yaw_target)
         return RA_EXIT_YAW;
 
-    if (yaw_progress +
+    if (yaw_progress >= hard_yaw_target - RA_HARD_COAST_REMAIN_DEG &&
+        yaw_progress +
         yaw_progress_rate * (RA_HARD_YAW_PREDICT_MS * 0.001f) >= hard_yaw_target)
         return RA_EXIT_COAST;
 
@@ -2077,15 +2145,12 @@ static uint8 ra_hard_exit_reason(uint8 direct_fast,
         yaw_progress >= hard_yaw_target - RA_HARD_COAST_REMAIN_DEG)
         return RA_EXIT_COAST;
 
-    if (s_ra_hard_cnt >=
-        (uint16)((uint16)hard_limit + (uint16)RA_HARD_FORCE_TIMEOUT_EXTRA))
-        return RA_EXIT_TIMEOUT;
-
-    if (s_ra_hard_cnt >=
-        (uint16)((uint16)hard_limit +
-                 (uint16)RA_HARD_FORCE_TIMEOUT_EXTRA +
-                 (uint16)RA_HARD_EMERGENCY_TIMEOUT_EXTRA))
+    if (s_ra_hard_cnt >= emergency_limit)
         return RA_EXIT_EMERGENCY;
+
+    if (s_ra_hard_cnt >= force_limit &&
+        yaw_progress >= hard_yaw_target - RA_HARD_TIMEOUT_REMAIN_DEG)
+        return RA_EXIT_TIMEOUT;
 
     return RA_EXIT_NONE;
 }
@@ -2260,48 +2325,85 @@ static RouteDecision fallback_intersection_decision(uint8 flag) /* 保底�口�
 static RouteDecision select_intersection_decision(uint8 flag)
 {
     RouteDecision d = fallback_intersection_decision(flag);
-    uint8 next_count;
+    const IntersectionRule *rule;
 
     if (flag >= 7u)
         return d;
-
-    next_count = s_inter_count[flag] + 1u;
-
-    for (uint8 i = 0u; i < USER_RULE_COUNT; i++)
-    {
-        if (user_rules[i].flag == flag &&
-            user_rules[i].count == next_count)
-        {
-            s_inter_count[flag] = next_count;
-
-            d.action = (user_rules[i].action == ACT_AUTO) ?
-                       route_action_from_flag(flag) :
-                       user_rules[i].action;
-            d.post_edge_side = user_rules[i].post_edge_side;
-            d.post_edge_ms = user_rules[i].post_edge_ms;
-            d.valid = 1u;
-
-            s_route_pending_valid = 1u;
-            s_route_pending_flag = flag;
-            s_route_pending_count = next_count;
-            s_route_pending_action = d.action;
-            return d;
-        }
-    }
-
-    if (ra_fallback_direct_enabled(flag))
-    {
-        d.action = route_action_from_flag(flag);
-        d.post_edge_side = EDGE_BOTH;
-        d.post_edge_ms = 0u;
-        d.valid = 1u;
+    if (route_dbg_step >= (uint8)USER_RULE_COUNT)
         return d;
-    }
 
+    rule = &user_rules[route_dbg_step];
+    if (rule->flag != flag)
+        return d;
+
+    s_inter_count[flag] = rule->count;
+
+    d.action = (rule->action == ACT_AUTO) ?
+               route_action_from_flag(flag) :
+               rule->action;
+    d.post_edge_side = rule->post_edge_side;
+    d.post_edge_ms = rule->post_edge_ms;
+    d.valid = 1u;
+
+    s_route_pending_valid = 1u;
+    s_route_pending_flag = flag;
+    s_route_pending_count = rule->count;
+    s_route_pending_action = d.action;
     return d;
 }
 
 static uint8 ra_try_start_direct_flag(void);
+static uint8 ra_try_start_route_pre_hard_flag(void)
+{
+#if RA_ROUTE_PRE_HARD_ENABLE
+    uint8 flag = 0u;
+    uint8 consumed;
+    uint8 dir_ok = 0u;
+    uint8 row_ok = 0u;
+
+    if (s_ra_state != RA_ST_NONE || g_ra_flag != 0u)
+        return 0u;
+    if (ra_speed_ref() < RA_FAST_SPEED_START)
+        return 0u;
+    if (g_sym_component_flag != 0u)
+        return 0u;
+    if (g_ra_pre_slow_flag == 0u && g_ra_pre_flag == 0u)
+        return 0u;
+
+    if (route_immediate_flag_is(1u))
+        flag = 1u;
+    else if (route_immediate_flag_is(2u))
+        flag = 2u;
+    else
+        return 0u;
+
+    if (g_ra_pre_flag != 0u && g_ra_pre_dir != 0u)
+    {
+        if (g_ra_pre_dir != flag)
+            return 0u;
+        dir_ok = 1u;
+    }
+
+    if (g_ip_max_row >= RA_ROUTE_PRE_HARD_IP_ROW)
+        row_ok = 1u;
+
+    if (dir_ok == 0u && row_ok == 0u)
+        return 0u;
+
+    if (g_tf.valid_row_count > RA_ROUTE_PRE_HARD_VALID_ROWS &&
+        row_ok == 0u &&
+        abs_i16(g_tf.lookahead_error) < RA_ROUTE_PRE_HARD_LOOKAHEAD_MIN)
+        return 0u;
+
+    g_ra_flag = flag;
+    consumed = ra_try_start_direct_flag();
+    if (consumed)
+        return consumed;
+    return 0u;
+#else
+    return 0u;
+#endif
+}
 static uint8 ra_try_start_pre_direct_flag(void)
 {
     uint8 flag;
@@ -2319,6 +2421,9 @@ static uint8 ra_try_start_pre_direct_flag(void)
     if (!route_next_flag_is(flag) && !ra_fallback_direct_enabled(flag))
         return 0u;
 
+    if (g_ip_max_row < RA_PRE_ROUTE_IP_ROW)
+        g_ip_max_row = RA_PRE_ROUTE_IP_ROW;
+
     g_ra_flag = flag;
     consumed = ra_try_start_direct_flag();
     if (consumed)
@@ -2330,6 +2435,8 @@ static uint8 ra_try_start_pre_direct_flag(void)
 static uint8 ra_try_start_direct_flag(void)
 {
     if ((g_ra_flag != 1u && g_ra_flag != 2u) || s_ra_state != RA_ST_NONE)
+        return 0u;
+    if (g_ip_max_row < RA_PRE_ROUTE_IP_ROW)
         return 0u;
 
     RouteDecision d = select_intersection_decision((uint8)g_ra_flag);
@@ -2349,6 +2456,7 @@ static uint8 ra_try_start_direct_flag(void)
              0u,
              d.post_edge_side,
              d.post_edge_ms);
+
     ra_clear_pre_flags();
     return 0u;
 }
@@ -2464,74 +2572,25 @@ static uint8 ra_handle_straight_phase(RaResult *r)
 
 static uint8 ra_handle_recover_phase(RaResult *r)
 {
-    uint8 recover_line_ok;
     uint8 recover_visible;
-    uint8 recover_yaw_ok;
-    float recover_yaw_target;
 
     if (s_ra_phase != RA_PH_RECOVER)
         return 0u;
 
     s_ra_recover_cnt++;
-    recover_yaw_target = (s_ra_hard_yaw_target > 1.0f) ?
-                         s_ra_hard_yaw_target :
-                         ra_hard_target_limit((float)ra_hard_yaw);
     ra_clear_all_flags();
 
-    if (imu_ready && !imu_error && s_ra_dir != 0u)
+    if (s_ra_recover_cnt >= RA_RECOVER_MAX_FRAMES)
     {
-        float brake_progress = ra_yaw_progress();
-        float brake_rate = ra_yaw_progress_rate();
-        if (brake_rate >= RA_RECOVER_BRAKE_RATE ||
-            brake_progress >= recover_yaw_target - RA_RECOVER_BRAKE_REMAIN_DEG)
-        {
-            int16 brake_duty = clamp_duty(RA_RECOVER_BRAKE_DUTY);
-            int16 out_l = (s_ra_dir == 1u) ? brake_duty : 0;
-            int16 out_r = (s_ra_dir == 1u) ? 0 : brake_duty;
-            speed_dbg_out = (int16)(((int32)out_l + (int32)out_r) / 2);
-            steer_dbg_out = (int16)(((int32)out_l - (int32)out_r) / 2);
-            pid_set_duty(out_l, out_r);
-            r->should_return = 1u;
-            ra_debug_update();
-            return 1u;
-        }
+        ra_finish();
+        return 1u;
     }
 
     recover_visible =
         (g_tf.line_lost == 0u &&
          g_tf.valid_row_count >= RA_EXIT_VALID_ROWS) ? 1u : 0u;
 
-    recover_yaw_ok =
-        (imu_ready && !imu_error &&
-         abs_f((float)yaw_rate) <= RA_RECOVER_YAW_RATE_MAX &&
-         ra_yaw_progress() >= (recover_yaw_target - RA_RECOVER_YAW_ERROR_MAX)) ? 1u : 0u;
-
-    recover_line_ok =
-        (g_tf.line_lost == 0u &&
-         g_tf.valid_row_count >= RA_RECOVER_VALID_ROWS &&
-         abs_i16(g_tf.error) <= RA_RECOVER_ERROR_MAX &&
-         abs_i16(g_tf.lookahead_error) <= RA_RECOVER_LOOKAHEAD_MAX &&
-         abs_i16(g_tf.error_trend) <= RA_RECOVER_TREND_MAX &&
-         (!imu_ready || recover_yaw_ok)) ? 1u : 0u;
-
-    if (recover_line_ok || recover_yaw_ok)
-    {
-        if (s_ra_recover_good_cnt < 255u)
-            s_ra_recover_good_cnt++;
-    }
-    else
-    {
-        s_ra_recover_good_cnt = 0u;
-    }
-
-    if (s_ra_recover_cnt >= RA_RECOVER_FIXED_FRAMES &&
-        (recover_yaw_ok || s_ra_recover_good_cnt >= RA_RECOVER_CONFIRM_FRAMES))
-    {
-        ra_finish();
-        return 1u;
-    }
-
-    if (s_ra_recover_cnt >= RA_RECOVER_MAX_FRAMES)
+    if (s_ra_recover_cnt >= RA_RECOVER_FIXED_FRAMES)
     {
         ra_finish();
         return 1u;
@@ -2545,13 +2604,96 @@ static uint8 ra_handle_recover_phase(RaResult *r)
     return 1u;
 }
 
+static void ra_output_yaw_lock_drive(void)
+{
+    float base = (float)ra_speed_ref() *
+                 ((float)RA_YAW_LOCK_SPEED_PCT * 0.01f);
+    float brake = 0.0f;
+    float out_l;
+    float out_r;
+
+    base = clamp_f(base, RA_YAW_LOCK_DUTY_MIN, RA_YAW_LOCK_DUTY_MAX);
+
+    if (imu_ready && !imu_error)
+    {
+        float rate = ra_yaw_progress_rate();
+        if (rate > RA_YAW_LOCK_BRAKE_RATE)
+        {
+            brake = (rate - RA_YAW_LOCK_BRAKE_RATE) *
+                    RA_YAW_LOCK_BRAKE_KD;
+            brake = clamp_f(brake, 0.0f, RA_YAW_LOCK_BRAKE_MAX);
+            if (brake > base)
+                brake = base;
+        }
+    }
+
+    if (s_ra_dir == 1u)
+    {
+        out_l = base + brake;
+        out_r = base - brake;
+    }
+    else
+    {
+        out_l = base - brake;
+        out_r = base + brake;
+    }
+
+    if (out_l < 0.0f) out_l = 0.0f;
+    if (out_r < 0.0f) out_r = 0.0f;
+
+    speed_dbg_out = (int16)((out_l + out_r) * 0.5f);
+    steer_dbg_out = (int16)((out_l - out_r) * 0.5f);
+    pid_set_duty(clamp_duty(out_l), clamp_duty(out_r));
+}
+
+static uint8 ra_handle_yaw_lock_phase(RaResult *r)
+{
+    float lock_target;
+    float progress;
+    float rate;
+    uint8 lock_done;
+
+    if (s_ra_phase != RA_PH_YAW_LOCK)
+        return 0u;
+
+    s_ra_yaw_lock_cnt++;
+    ra_clear_all_flags();
+
+    lock_target = s_ra_hard_yaw_target + RA_YAW_LOCK_EXTRA_DEG;
+    if (lock_target > RA_YAW_LOCK_FINAL_DEG)
+        lock_target = RA_YAW_LOCK_FINAL_DEG;
+
+    progress = ra_yaw_progress();
+    rate = ra_yaw_progress_rate();
+    lock_done = ((imu_ready && !imu_error &&
+                  progress >= lock_target - RA_YAW_LOCK_TARGET_MARGIN_DEG &&
+                  rate <= RA_YAW_LOCK_RATE_DONE) ||
+                 s_ra_yaw_lock_cnt >= RA_YAW_LOCK_FRAMES) ? 1u : 0u;
+
+    ra_output_yaw_lock_drive();
+    r->should_return = 1u;
+
+    if (lock_done)
+        ra_enter_recover();
+    else
+        ra_debug_update();
+
+    return 1u;
+}
+
 static uint8 ra_step_wait_slow_approach(RaResult *r)
 {
     if (s_ra_phase == RA_PH_WAIT)
     {
         uint8 slow_row = ra_slow_trigger_row();
+        uint8 turn_row = ra_turn_trigger_row();
+        uint16 late_row = (uint16)turn_row + RA_LATE_APPROACH_SKIP_ROW_MARGIN;
 
-        if (s_ra_ip_row >= slow_row)
+        if ((uint16)s_ra_ip_row >= late_row)
+        {
+            ra_enter_hard();
+        }
+        else if (s_ra_ip_row >= slow_row)
         {
             s_ra_phase = RA_PH_SLOW;
             s_ra_phase_cnt = 0u;
@@ -2642,7 +2784,20 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         if (exit_reason != RA_EXIT_NONE)
         {
             ra_dbg_exit_reason = exit_reason;
-            ra_enter_recover();
+            if ((exit_reason == RA_EXIT_NO_IMU) ||
+                (exit_reason == RA_EXIT_EMERGENCY))
+            {
+                ra_enter_recover();
+                r->speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f;
+                r->need_pid = 1u;
+            }
+            else
+            {
+                ra_enter_yaw_lock();
+                ra_output_yaw_lock_drive();
+                r->should_return = 1u;
+            }
+            ra_debug_update();
             return 1u;
         }
     }
@@ -2652,69 +2807,46 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     inner = RA_HARD_INNER_DUTY;
 
     if (s_ra_orig_flag >= 3u)
-    {
         outer = outer * (float)RA_COMPLEX_DUTY_PCT * 0.01f;
-    }
 
-    {
-        float outer_min = (s_ra_orig_flag >= 3u) ?
-                          RA_COMPLEX_OUTER_MIN_DUTY :
-                          RA_HARD_OUTER_MIN_DUTY;
-        if (outer < outer_min)
-            outer = outer_min;
-    }
+    if (outer < RA_PIVOT_OUTER_MIN_DUTY)
+        outer = RA_PIVOT_OUTER_MIN_DUTY;
 
     if (imu_ready && hard_yaw_target > 1.0f)
     {
-        float yaw_ratio = yaw_progress / hard_yaw_target;
-        float taper_start = direct_fast ?
-                            RA_FAST_HARD_TAPER_START_RATIO :
-                            RA_HARD_TAPER_START_RATIO;
-        float taper_end = direct_fast ?
-                          RA_FAST_HARD_TAPER_END_RATIO :
-                          RA_HARD_TAPER_END_RATIO;
-        float min_scale = (float)(direct_fast ?
-                                  RA_FAST_HARD_TAPER_MIN_PCT :
-                                  RA_HARD_TAPER_MIN_PCT) * 0.01f;
+        float remain = hard_yaw_target - yaw_progress;
+        float scale = 1.0f;
 
-        if (yaw_ratio > taper_start)
+        if (remain < 0.0f)
+            remain = 0.0f;
+        if (remain < RA_PIVOT_TAPER_REMAIN_DEG)
         {
-            float span = taper_end - taper_start;
-            float t;
-            float taper;
-
-            if (span < 0.01f)
-                span = 0.01f;
-            t = (yaw_ratio - taper_start) / span;
-
-            if (t > 1.0f)
-                t = 1.0f;
-            if (t < 0.0f)
-                t = 0.0f;
-
-            taper = 1.0f - t * (1.0f - min_scale);
-            outer *= taper;
+            float min_scale = (float)RA_PIVOT_TAPER_MIN_PCT * 0.01f;
+            float t = remain / RA_PIVOT_TAPER_REMAIN_DEG;
+            if (t < 0.0f) t = 0.0f;
+            if (t > 1.0f) t = 1.0f;
+            scale = min_scale + (1.0f - min_scale) * t;
         }
-    }
 
-    if (imu_ready)
-    {
-        if (yaw_progress_rate > RA_HARD_YAW_RATE_SOFT_LIMIT)
+        if (yaw_progress_rate > RA_PIVOT_YAW_RATE_SOFT_LIMIT)
         {
             float rate_scale =
-                1.0f - (yaw_progress_rate - RA_HARD_YAW_RATE_SOFT_LIMIT) /
-                RA_HARD_YAW_RATE_SOFT_LIMIT;
-            float rate_min =
-                (float)RA_HARD_YAW_RATE_MIN_PCT * 0.01f;
+                1.0f - (yaw_progress_rate - RA_PIVOT_YAW_RATE_SOFT_LIMIT) /
+                RA_PIVOT_YAW_RATE_SOFT_LIMIT;
+            float rate_min = (float)RA_PIVOT_YAW_RATE_MIN_PCT * 0.01f;
 
             if (rate_scale < rate_min)
                 rate_scale = rate_min;
-            if (rate_scale > 1.0f)
-                rate_scale = 1.0f;
-
-            outer *= rate_scale;
+            if (rate_scale < scale)
+                scale = rate_scale;
         }
+
+        outer *= scale;
+        inner *= scale;
     }
+
+    if (outer > MAX_DUTY)
+        outer = MAX_DUTY;
 
     if (s_ra_dir == 1u)
     {
@@ -2727,6 +2859,21 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         out_r = inner;
     }
 
+#if RA_HARD_LINE_TRIM_ENABLE
+    if (g_tf.line_lost == 0u &&
+        g_tf.valid_row_count >= RA_HARD_LINE_VALID_ROWS)
+    {
+        float line_trim =
+            (float)g_tf.error * RA_HARD_LINE_ERR_KP +
+            (float)g_tf.lookahead_error * RA_HARD_LINE_LA_KP;
+        line_trim = clamp_f(line_trim,
+                            -RA_HARD_LINE_TRIM_MAX,
+                            RA_HARD_LINE_TRIM_MAX);
+        out_l += line_trim;
+        out_r -= line_trim;
+    }
+#endif
+
     ramp_frames = direct_fast ? RA_FAST_HARD_RAMP_FRAMES : RA_HARD_RAMP_FRAMES;
     if (ramp_frames < 1u)
         ramp_frames = 1u;
@@ -2734,7 +2881,7 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     if (s_ra_hard_cnt <= ramp_frames)
     {
         float ramp = (float)s_ra_hard_cnt / (float)ramp_frames;
-        float ramp_min = direct_fast ? 0.35f : 0.20f;
+        float ramp_min = direct_fast ? 0.55f : 0.35f;
         if (ramp < ramp_min)
             ramp = ramp_min;
         out_l *= ramp;
@@ -2790,6 +2937,9 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状�机主�辑 *
 {
     RaResult r = { 0u, 0u, 1.0f };          /* 初�化：需要PID，不跳过，�度缩放100% */
 
+    if (ra_try_start_route_pre_hard_flag())
+        return r;
+
     if (ra_try_start_pre_direct_flag())
         return r;
 
@@ -2812,6 +2962,9 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状�机主�辑 *
         return r;
 
     if (ra_handle_straight_phase(&r))
+        return r;
+
+    if (ra_handle_yaw_lock_phase(&r))
         return r;
 
     if (ra_handle_recover_phase(&r))
@@ -3002,6 +3155,9 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
     }
 
     /* �速限�?*/
+    if (s_ra_post_recover_cnt > 0u)
+        steer *= (float)RA_POST_RECOVER_STEER_PCT * 0.01f;
+
     steer = limit_normal_steer(steer, speed_out); /* 限制�速幅�?*/
 
     /* yaw_rate 限幅：仅在转向与 yaw_rate 同号（即�向�在加剧旋转、有发散风险�
@@ -3048,6 +3204,7 @@ static void pid_stop_runtime_reset(uint8 clear_rules_done)
         s_rules_done_timer = 0u;
     }
     s_ra_post_recover_cnt = 0u;
+    s_ra_lost_guard_cnt = 0u;
     single_edge_reset();
     s_completed_right_ra_count = 0u;
     lost_search_reset();
@@ -3161,8 +3318,19 @@ void line_pid_control(void)                  /* 主PID控制入口 */
 
         if ((g_ra_pre_flag || g_ra_pre_slow_flag) && g_ra_flag == 0u)
         {
-            s_pre_lock = 1u;                 /* 锁定预减�?*/
-            s_pre_timeout = 0u;              /* 超时清零 */
+            if (pre_slow_signal_trusted(pos_err_abs))
+            {
+                s_pre_lock = 1u;
+                s_pre_timeout = 0u;
+            }
+            else
+            {
+                s_pre_lock = 0u;
+                s_pre_timeout = 0u;
+                g_ra_pre_flag = 0u;
+                g_ra_pre_dir = 0u;
+                g_ra_pre_slow_flag = 0u;
+            }
         }
 
         /* 正式flag到来 �?解除预减速（让RA接��?*/

@@ -88,6 +88,12 @@ static int16 at_clip_i16(float v)
     return (int16)v;
 }
 
+static int16 at_abs_i16(int16 v)
+{
+    if (v == (int16)-32768) return 32767;
+    return (v < 0) ? (int16)(-v) : v;
+}
+
 static uint8 at_clip_u8_u16(uint16 v)
 {
     return (v > 255u) ? 255u : (uint8)v;
@@ -343,6 +349,18 @@ void auto_tune_log_pid_tick(void)
     r->pre_detail = (uint8)((g_ra_pre_flag ? 0x01u : 0u) |
                             (g_ra_pre_slow_flag ? 0x02u : 0u) |
                             ((g_ra_pre_dir & 0x03u) << 2));
+    if (r->ra_phase == 3u &&
+        r->ra_hard_cnt >= 4u &&
+        at_abs_i16(r->ra_outer_cmd) >= 1800 &&
+        at_abs_i16(r->yaw_rate_dps) <= 80)
+    {
+        r->pre_detail |= 0x40u;
+        if (((int32)at_abs_i16(r->left_speed) +
+             (int32)at_abs_i16(r->right_speed)) <= 400)
+        {
+            r->pre_detail |= 0x80u;
+        }
+    }
 
     s_at_write = at_next_index(s_at_write);
     if (s_at_count < (uint16)AUTO_TUNE_LOG_CAPACITY)
