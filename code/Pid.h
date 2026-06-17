@@ -14,7 +14,7 @@
 #define PID_SECONDS_TO_TICKS(sec) \
     ((uint32)((((uint32)(sec) * 1000u) + (uint32)PID_PERIOD_MS - 1u) / (uint32)PID_PERIOD_MS))
 
-extern int16 base_speed; 
+extern int16 base_speed;
 extern int16 speed_dbg_out;//
 extern int16 steer_dbg_out;
 extern int16 duty_dbg_left;
@@ -93,12 +93,24 @@ extern volatile uint8 vacuum_enable;
 #define STEER_DIFF_MIN_LIMIT 250.0f
 #define STEER_DIFF_MAX_LIMIT 1900.0f
 #define STEER_DIFF_NORMAL_PCT 95
-#define STEER_DIFF_STRAIGHT_PCT 95
+#define STEER_DIFF_STRAIGHT_PCT 90
 #define STEER_DIFF_RECOVER_PCT 120
 #define STEER_STRAIGHT_KP_PCT 115
 #define STEER_STRAIGHT_KD_PCT 110
 #define STEER_STRAIGHT_FF_PCT 85
 #define STEER_STRAIGHT_SLEW_PCT 130
+#define STEER_COMPLEX_CURVE_KP_PCT 240
+#define STEER_COMPLEX_CURVE_KD_PCT 190
+#define STEER_COMPLEX_CURVE_FF_PCT 190
+#define STEER_COMPLEX_CURVE_SLEW_PCT 320
+#define STEER_COMPLEX_CURVE_DIFF_PCT 190
+#define STEER_COMPLEX_CURVE_DIFF_MAX 3900.0f
+#define STEER_RA_CURVE_KP_PCT 260
+#define STEER_RA_CURVE_KD_PCT 210
+#define STEER_RA_CURVE_FF_PCT 220
+#define STEER_RA_CURVE_SLEW_PCT 360
+#define STEER_RA_CURVE_DIFF_PCT 220
+#define STEER_RA_CURVE_DIFF_MAX 4200.0f
 
 /* Speed PI. */
 #define SPEED_KP 0.5f
@@ -116,7 +128,7 @@ extern volatile uint8 vacuum_enable;
 #define SPEED_SYM_VALID_ROWS 30u
 #define SPEED_SYM_ERR_MAX 12
 #define SPEED_STRAIGHT_CONFIRM_FRAMES 2u
-#define SPEED_STRAIGHT_BOOST_PCT 112
+#define SPEED_STRAIGHT_BOOST_PCT 105
 #define SPEED_STRAIGHT_HOLD_FRAMES 8u
 #define SPEED_STRAIGHT_HOLD_VALID_ROWS 18u
 #define SPEED_STRAIGHT_HOLD_ERR_MAX 70
@@ -132,7 +144,7 @@ extern volatile uint8 vacuum_enable;
 #define SPEED_VISION_BAD_VALID_ROWS 6u
 #define SPEED_VISION_BAD_PCT 82
 #define SPEED_QUALITY_GOOD_ROWS 35u
-#define SPEED_QUALITY_ROW_MIN_PCT 92
+#define SPEED_QUALITY_ROW_MIN_PCT 82
 #define SPEED_COMPONENT_VALID_ROWS 30u
 #define SPEED_COMPONENT_ERR_MAX 38
 #define SPEED_COMPONENT_LA_MAX 50
@@ -144,9 +156,9 @@ extern volatile uint8 vacuum_enable;
 #define SPEED_SINGLE_EDGE_BOOST_PCT 115
 #define SPEED_SINGLE_EDGE_HOLD_FRAMES 10u
 #define SPEED_VALID_RUSH_ROWS 48u
-#define SPEED_VALID_RUSH_PCT 100
+#define SPEED_VALID_RUSH_PCT 95
 #define SPEED_VALID_RUN_ROWS 42u
-#define SPEED_VALID_RUN_MIN_PCT 90
+#define SPEED_VALID_RUN_MIN_PCT 82
 #define SPEED_ERR_JUMP_T1 10
 #define SPEED_ERR_JUMP_T2 28
 #define SPEED_ERR_JUMP_MIN_PCT 90
@@ -159,7 +171,7 @@ extern volatile uint8 vacuum_enable;
 #define MAX_DUTY 5000.0f
 #define VAC_PWM_CH ATOM0_CH0_P21_2
 #define VAC_PWM_FREQ 10000u
-#define VAC_PWM_DUTY 4500u
+#define VAC_PWM_DUTY 5000u
 #define VAC_PWM_RAMP_START_DUTY 1000u
 #define VAC_PWM_RAMP_STEP 25u
 #define VAC_PREARM_TIMEOUT_TICKS PID_MS_TO_TICKS(5000u)
@@ -175,42 +187,45 @@ extern volatile uint8 vacuum_enable;
 过��且�向同向加剧旋�时才衰减 */
 #define YAW_RATE_LIMIT_MIN_PCT 35  /* yaw_rate 限�?
 �低保留百分比，防止真�道时�向��?
-�?*/
+�?*/
 
 /* RA state timing, one frame is PID_PERIOD_MS. */
 #define RA_HARD_TIMEOUT          28u
 #define RA_FAST_SPEED_START      520
 #define RA_FAST_HARD_TIMEOUT     28u
 #define RA_CROSS_HARD_TIMEOUT    28u
-#define RA_HARD_FORCE_TIMEOUT_EXTRA 10u
-#define RA_HARD_EMERGENCY_TIMEOUT_EXTRA 18u
+#define RA_HARD_FORCE_TIMEOUT_EXTRA 6u
+#define RA_HARD_EMERGENCY_TIMEOUT_EXTRA 8u
 #define RA_TIMEOUT_FRAMES        150u
 #define RA_WAIT_TIMEOUT          80u
 #define RA_SLOW_TIMEOUT          28u
 #define RA_FAST_SLOW_TIMEOUT     10u
 #define RA_LOW_SPEED_START       360
 #define RA_LOW_SLOW_TIMEOUT      10u
-#define RA_PRE_SLOW_PCT          85
+#define RA_PRE_SLOW_PCT          35
 #define RA_CROSS_WAIT_TIMEOUT    2u
 #define RA_CROSS_SLOW_TIMEOUT    10u
 #define RA_HARD_MIN_FRAMES       4u
 #define RA_FAST_HARD_MIN_FRAMES  4u
-#define RA_HARD_RAMP_FRAMES      1u
+#define RA_HARD_RAMP_FRAMES      2u
 #define RA_FAST_HARD_RAMP_FRAMES 1u
 #define RA_CROSS_HARD_MIN_FRAMES 4u
-#define RA_EXIT_VALID_ROWS       12u
+#define RA_EXIT_VALID_ROWS       10u
 #define RA_EXIT_ERROR_MAX        28
-#define RA_EXIT_CONFIRM_FRAMES   2u
-#define RA_RECOVER_FIXED_FRAMES  2u
-#define RA_RECOVER_SPEED_PCT     92
-#define RA_RECOVER_LOST_SPEED_PCT 88
+#define RA_EXIT_CONFIRM_FRAMES   4u
+#define RA_RECOVER_FIXED_FRAMES  3u
+#define RA_RECOVER_SPEED_PCT     75
+#define RA_RECOVER_LOST_SPEED_PCT 45
 #define RA_RECOVER_STEER_PCT     100
-#define RA_RECOVER_VALID_ROWS    20u
+#define RA_RECOVER_SEEN_ROWS     RA_EXIT_VALID_ROWS
+#define RA_RECOVER_SEEN_CONFIRM_FRAMES 2u
+#define RA_RECOVER_VALID_ROWS    6u
 #define RA_RECOVER_ERROR_MAX     18
-#define RA_RECOVER_LOOKAHEAD_MAX 22
-#define RA_RECOVER_TREND_MAX     24
-#define RA_RECOVER_CONFIRM_FRAMES 1u
-#define RA_RECOVER_MAX_FRAMES    3u
+#define RA_RECOVER_LOOKAHEAD_MAX 24
+#define RA_RECOVER_TREND_MAX     28
+#define RA_RECOVER_CONFIRM_FRAMES 2u
+#define RA_RECOVER_STABLE_MIN_YAW_DEG 58.0f
+#define RA_RECOVER_MAX_FRAMES    20u
 #define RA_RECOVER_YAW_ERROR_MAX 1.0f
 #define RA_RECOVER_YAW_RATE_MAX  130.0f
 #define RA_RECOVER_NEAR_DETECT_MIN_FRAMES RA_RECOVER_FIXED_FRAMES
@@ -221,10 +236,25 @@ extern volatile uint8 vacuum_enable;
 #define RA_RECOVER_YAW_RATE_MAX_CORR 900.0f
 #define RA_RECOVER_YAW_DRIVE_RATE_MAX 150.0f
 #define RA_RECOVER_YAW_DEADZONE   3.0f
-#define RA_RECOVER_SEED_STEER_PCT 8
+#define RA_RECOVER_SEED_STEER_PCT 20
+#define RA_EXIT_VIS_MIN_YAW_DEG 50.0f
+#define RA_EXIT_VIS_STRONG_ROWS 16u
+#define RA_EXIT_BEZIER_VALID_ROWS 14u
+#define RA_EXIT_BEZIER_IP_ROW   34u
+#define RA_EXIT_FIND_YAW_DEG    74.0f
+#define RA_EXIT_FORCE_YAW_DEG   84.0f
+#define RA_EXIT_VIS_DUTY_MIN      560.0f
+#define RA_EXIT_VIS_DUTY_MAX      1350.0f
+#define RA_EXIT_VIS_KP_SCALE      1.45f
+#define RA_EXIT_VIS_KD_SCALE      2.20f
+#define RA_EXIT_VIS_TURN_MAX      980.0f
+#define RA_EXIT_VIS_TURN_PCT      95
+#define RA_EXIT_VIS_SLEW_MAX      520.0f
+#define RA_EXIT_LOST_OUTER_DUTY   100.0f
+#define RA_EXIT_LOST_INNER_DUTY   100.0f
 #define RA_FAST_DIRECT_YAW_OFFSET 0.0f
 #define RA_HARD_YAW_MAX_DEG       92.0f
-#define RA_HARD_YAW_PREDICT_MS    34.0f
+#define RA_HARD_YAW_PREDICT_MS    40.0f
 #define RA_HARD_COAST_REMAIN_DEG 22.0f
 #define RA_HARD_TIMEOUT_REMAIN_DEG 2.0f
 #define RA_HARD_COAST_YAW_RATE 900.0f
@@ -239,32 +269,76 @@ extern volatile uint8 vacuum_enable;
 #define RA_YAW_LOCK_BRAKE_RATE    60.0f
 #define RA_YAW_LOCK_BRAKE_KD      3.0f
 #define RA_YAW_LOCK_BRAKE_MAX     1250.0f
+#define RA_CURVE_PID_TURN_ENABLE  0u
+#define RA_COMPLEX_CURVE_PID_ENABLE 1u
+#define RA_CURVE_PID_SPEED_PCT    58
+#define RA_CURVE_PID_EXIT_REMAIN_DEG 0.8f
+#define RA_CURVE_PID_MIN_FRAMES   3u
+#define RA_CURVE_PID_MAX_FRAMES   44u
+#define RA_COMPLEX_CURVE_PID_MAX_FRAMES 36u
+#define RA_COMPLEX_WAIT_SPEED_PCT 82
+#define RA_COMPLEX_CURVE_PID_SPEED_PCT 56
+#define RA_COMPLEX_CURVE_PID_EXIT_REMAIN_DEG 0.8f
+#define RA_COMPLEX_CURVE_INNER_ERR_BIAS 36
+#define RA_COMPLEX_CURVE_PID_LINE_EXIT_MIN_YAW_DEG 86.0f
+#define RA_COMPLEX_CURVE_PID_TIMEOUT_MIN_YAW_DEG 86.0f
+#define RA_COMPLEX_CURVE_LOCK_MIN_YAW_DEG 86.0f
+#define RA_COMPLEX_CURVE_ASSIST_PCT 145
+#define RA_COMPLEX_CURVE_ASSIST_LATE_MIN_PCT 90
+#define RA_COMPLEX_CURVE_ASSIST_RATE_MIN_PCT 72
+#define RA_CURVE_PID_LINE_EXIT_MIN_FRAMES 7u
+#define RA_CURVE_PID_LINE_EXIT_MIN_YAW_DEG 86.0f
+#define RA_CURVE_PID_TIMEOUT_MIN_YAW_DEG 86.0f
+#define RA_CURVE_PID_LINE_VALID_ROWS 30u
+#define RA_CURVE_PID_LINE_ERR_MAX 16
+#define RA_CURVE_PID_LINE_LA_MAX 22
+#define RA_CURVE_PID_LINE_TREND_MAX 24
+#define RA_CURVE_PID_LINE_TAKEOVER_YAW_DEG 72.0f
+#define RA_CURVE_PID_TAKEOVER_BIAS_PCT 0
+#define RA_CURVE_PID_TAKEOVER_ASSIST_PCT 0
+#define RA_CURVE_ASSIST_ENABLE   0u
+#define RA_CURVE_ASSIST_MIN      900.0f
+#define RA_CURVE_ASSIST_MAX      2600.0f
+#define RA_CURVE_ASSIST_SPEED_END 1600
+#define RA_CURVE_ASSIST_TAPER_DEG 24.0f
+#define RA_CURVE_ASSIST_RATE_LIMIT 520.0f
+#define RA_CURVE_ASSIST_RATE_MIN_PCT 35
+#define RA_CURVE_SLOW_ASSIST_PCT 115
+#define RA_CURVE_INNER_ERR_BIAS  46
+#define RA_CURVE_YAW_GUARD_DEG   89.0f
+#define RA_CURVE_YAW_GUARD_PREDICT_MS 60.0f
+#define RA_CURVE_YAW_BRAKE_KP    70.0f
+#define RA_CURVE_YAW_BRAKE_KD    1.8f
+#define RA_CURVE_YAW_BRAKE_MAX   1700.0f
 #define RA_SLOW_BEFORE_TURN_ROWS 12u
-#define RA_SLOW_TO_HARD_FALLBACK_FRAMES 4u
-#define RA_APPROACH_SPEED_PCT    85
-#define RA_HARD_INNER_DUTY       0.0f
-#define RA_PIVOT_OUTER_MIN_DUTY  2200.0f
-#define RA_PIVOT_TAPER_REMAIN_DEG 14.0f
-#define RA_PIVOT_TAPER_MIN_PCT   50
-#define RA_PIVOT_YAW_RATE_SOFT_LIMIT 460.0f
-#define RA_PIVOT_YAW_RATE_MIN_PCT 50
+#define RA_SLOW_TO_HARD_FALLBACK_FRAMES 1u
+#define RA_CURVE_SLOW_TO_APPROACH_FALLBACK_FRAMES 8u
+#define RA_CURVE_FALLBACK_VALID_ROWS 44u
+#define RA_APPROACH_SPEED_PCT    65
+#define RA_HARD_INNER_DUTY       -100.0f
+#define RA_PIVOT_OUTER_MIN_DUTY  1200.0f
+#define RA_COMPLEX_PIVOT_OUTER_MIN_DUTY 1500.0f
+#define RA_PIVOT_TAPER_REMAIN_DEG 32.0f//什么时候开始收力(剩多少度)
+#define RA_PIVOT_TAPER_MIN_PCT   18//收力最低收到多少(%)
+#define RA_PIVOT_YAW_RATE_SOFT_LIMIT 283.0f////角速度上限(超过多少就开始压)
+#define RA_PIVOT_YAW_RATE_MIN_PCT 32//收力最低收到多少(%)
 #define RA_HARD_LINE_TRIM_ENABLE 0u
 #define RA_HARD_LINE_VALID_ROWS  42u
 #define RA_HARD_LINE_ERR_KP      2.0f
 #define RA_HARD_LINE_LA_KP       1.2f
 #define RA_HARD_LINE_TRIM_MAX    160.0f
-#define RA_HARD_OUTER_PCT        108
-#define RA_FAST_HARD_OUTER_PCT   112
+#define RA_HARD_OUTER_PCT        85
+#define RA_FAST_HARD_OUTER_PCT   90
 #define RA_DIRECT_TURN_ROW_OFFSET 0u
-#define RA_COMPLEX_TURN_ROW_OFFSET 26u
-#define RA_FAST_TURN_ROW_ADVANCE 22u
-#define RA_FAST_TURN_ROW_ADVANCE_MAX 38u
+#define RA_COMPLEX_TURN_ROW_OFFSET 12u
+#define RA_FAST_TURN_ROW_ADVANCE 16u
+#define RA_FAST_TURN_ROW_ADVANCE_MAX 24u
 #define RA_FAST_TURN_ROW_ADVANCE_SPEED_END 1700
-#define RA_TURN_ROW_MIN         12u
+#define RA_TURN_ROW_MIN         18u
 #define RA_ROUTE_PRE_HARD_ENABLE 0u
-#define RA_ROUTE_PRE_HARD_VALID_ROWS 48u
+#define RA_ROUTE_PRE_HARD_VALID_ROWS 35u
 #define RA_ROUTE_PRE_HARD_LOOKAHEAD_MIN 18
-#define RA_ROUTE_PRE_HARD_IP_ROW 44u
+#define RA_ROUTE_PRE_HARD_IP_ROW 55u
 #define RA_LOW_TURN_ROW_DELAY    0u
 #define RA_LATE_APPROACH_SKIP_ROW_MARGIN 6u
 #define RA_FAST_APPROACH_FRAMES  1u
@@ -275,12 +349,14 @@ extern volatile uint8 vacuum_enable;
 #define RA_PRE_TURN_SPEED_END    1400
 #define RA_PRE_TURN_STEER_MAX    1200.0f
 #define RA_PRE_TURN_SLEW_MAX     360.0f
-#define RA_PRE_TURN_ENABLE       1
+#define RA_PRE_TURN_ENABLE       0
 #define RA_COMPLEX_DUTY_PCT       100
 #define RA_STRAIGHT_FRAMES       24u
 #define RA_STRAIGHT_SPEED_PCT    100
-#define RA_POST_RECOVER_FRAMES   6u
-#define RA_POST_RECOVER_SPEED_PCT 88
+#define RA_POST_RECOVER_FRAMES   10u
+#define RA_POST_RECOVER_COMPLEX_FRAMES 12u
+#define RA_POST_RECOVER_COMPLEX_SPEED_PCT 76
+#define RA_POST_RECOVER_SPEED_PCT 85
 #define RA_POST_RECOVER_STEER_PCT 100
 #define RA_LOST_GUARD_FRAMES 16u
 #define RA_INTER_START_VALID_ROWS 35u
@@ -290,6 +366,14 @@ extern volatile uint8 vacuum_enable;
 #define RA_INTER_START_TREND_MAX  48
 #define RA_INTER_ROUTE_LA_MAX     28
 #define RA_INTER_ROUTE_TREND_MAX  34
+#define RA_INTER_COMPLEX_ROUTE_VALID_ROWS 10u
+#define RA_INTER_COMPLEX_ROUTE_ERR_MAX 42
+#define RA_INTER_COMPLEX_ROUTE_LA_MAX 42
+#define RA_INTER_COMPLEX_ROUTE_TREND_MAX 46
+#define RA_INTER_COMPLEX_LAST_CHANCE_ROW 46u
+#define RA_INTER_COMPLEX_LAST_ERR_MAX 32
+#define RA_INTER_COMPLEX_LAST_LA_MAX 38
+#define RA_INTER_COMPLEX_LAST_TREND_MAX 42
 #define RULES_DONE_DELAY         136u
 
 /* 直�和丢线保底�?*/
@@ -319,7 +403,7 @@ extern uint8 g_post_edge_side;
 #define CAS_TARGET_FILTER   0.55f
 #define CAS_YAW_KP_SCALE    0.10f
 #define CAS_YAW_KD_SCALE    0.10f
-#define CAS_DEADZONE_DPS    1.0f
+#define CAS_DEADZONE_DPS    8.0f
 #define YAW_DAMP_SCALE      0.18f
 
 void line_pid_init(void);
@@ -327,5 +411,11 @@ void line_pid_control(void);
 void line_pid_reset_derivative(void);
 void start_single_edge(uint8 side, uint16 duration_ms);
 uint8 route_next_flag_is(uint8 flag);
+uint8 route_next_turn_dir(uint8 flag);
+uint8 ra_curve_turn_dir(void);
+uint8 ra_curve_yaw_takeover_ready(void);
+uint8 ra_curve_ip_row(void);
+uint8 ra_exit_bezier_turn_dir(void);
+uint8 ra_exit_bezier_ip_row(void);
 
 #endif /* CODE_PID_H_ */

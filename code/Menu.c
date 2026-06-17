@@ -31,9 +31,9 @@
 /* ==================== 菜单可调参数变量 ==================== */
 /* 每个变量都绑定到菜单的某个条目，用户可通过按键实时修改 */
 
-int16 motor_speed = 300;       /* 目标电机速度（PWM占空比单位），范�?~600，步�?0 */
+int16 motor_speed =260;       /* 目标电机速度（PWM占空比单位），范�?~600，步�?0 */
 int16 motor_enable = 0;       /* 电机使能开关：0=禁用（停止）�?=启用（允许运行） */
-int16 motor_run_time =3;     /* 电机最大运行时间（秒） */
+int16 motor_run_time =15;     /* 电机最大运行时间（秒） */
 int16 run_quiet_enable =RUN_QUIET_STOP_KEY; /* 运行静默模式：运行时关闭TFT/UART图传/普通按�?*///RUN_QUIET_STOP_KEY   RUN_QUIET_DEFAULT_ENABLE
 uint8 race_state = RACE_STATE_STOP;
 
@@ -46,18 +46,18 @@ int16 pid_kd = 20;             /* 转向PD控制器的微分系数Kd */
 int16 sp_err_t1 = 6;          /* 速度规划：直线判定误差阈值，|error|<=此值视为直�?*/
 int16 sp_err_t2 = 16 ;         /* 速度规划：弯道判定误差阈值，|error|>=此值视为急弯 */
 int16 sp_ratio_1 = 100;       /* 速度规划：直道目标速度百分比（100%=满速） */
-int16 sp_ratio_2 = 85;        /* 速度规划：弯道目标速度百分比（35%=降速过弯） */
+int16 sp_ratio_2 = 82;        /* 速度规划：弯道目标速度百分比（35%=降速过弯） */
 int16 steer_speed_k = 8;      /* 转向速度耦合系数：速度越快，转向补偿增�?*/
 int16 steer_ff_k = 12;        /* 前瞻前馈系数：根据前瞻误差提前施加转向补�?*/
 
 /* ==================== 直角弯RA状态机参数 ==================== */
-int16 ra_hard_inner = 0;       /* 直角弯HARD阶段内侧电机占空比，0=内侧轮停�?*/
-int16 ra_hard_outer = 1550;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转�?*/
-int16 ra_hard_yaw =90;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退�?*/
-int16 ra_slow_row = 12;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减�?*/
-int16 ra_slow_pct = 80;        /* 直角弯SLOW阶段速度百分比（20%=更快刹住�?*/
-int16 ra_turn_row = 40;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
-int16 ra_approach_frames = 1;  /* 直角弯APPROACH阶段刹车稳车帧数，结束后进入HARD急转 */
+int16 ra_hard_inner = -25;       /* 直角弯HARD阶段内侧电机占空比，0=内侧轮停�?*/
+int16 ra_hard_outer = 1660;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转�?*/
+int16 ra_hard_yaw = 80;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退�?*/
+int16 ra_slow_row = 70;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减�?*/
+int16 ra_slow_pct = 70;        /* 直角弯SLOW阶段速度百分比（20%=更快刹住�?*/
+int16 ra_turn_row = 112;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
+int16 ra_approach_frames =3;  /* 直角弯APPROACH阶段刹车稳车帧数，结束后进入HARD急转 */
 
 int16 yaw_kp = 12;            /* IMU级联控制的航向角比例系数Kp */
 

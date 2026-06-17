@@ -28,8 +28,8 @@ extern int16 threshold_bias;
 #define TF_SEARCH_END_ROW   4
 #define TF_LOCAL_RANGE      10
 #define TF_MAX_MISS_ROWS    5
-/* 1 = 扫到分支行时跳过该行继续向上扫（保住前瞻，修T�?斜入弯冷启动�?
- * 0 = 旧行为：扫到分支行立即停扫（valid_rows会塌�?�?*/
+/* 1 = 扫到分支行时跳过该行继续向上扫（保住前瞻，修T�?斜入弯冷启动�?
+ * 0 = 旧行为：扫到分支行立即停扫（valid_rows会塌�?�?*/
 #define TF_BRANCH_ROW_KEEP_SCAN 1
 #define TF_MIN_TRACK_WIDTH  4
 #define TF_MAX_TRACK_WIDTH  30
@@ -46,6 +46,24 @@ extern int16 threshold_bias;
 /* Lookahead rows. */
 #define TF_LOOKAHEAD_START_ROW 35
 #define TF_LOOKAHEAD_END_ROW   20
+
+#define CORNER_FILL_ENABLE 1
+#define CORNER_FILL_ENTRY_MARGIN 5
+#define CORNER_FILL_EXIT_MARGIN 5
+#define CORNER_FILL_MIN_SPAN 6
+#define CORNER_FILL_BRANCH_GAP 4
+#define CORNER_FILL_EDGE_MARGIN 6
+#define CORNER_FILL_BRANCH_MIN_STREAK 5
+#define CORNER_FILL_EXIT_SCAN_ROWS 8
+#define CORNER_FILL_L1_PCT 14
+#define CORNER_FILL_L2_PCT 22
+#define CORNER_FILL_OUT_SLOPE 1.6f
+#define CORNER_FILL_DIR_MAX 3
+#define CORNER_FILL_EXIT_SHIFT_MIN 12
+#define CORNER_FILL_EXIT_SHIFT_MAX 24
+#define CORNER_FILL_INNER_SHIFT_MIN 8
+#define CORNER_FILL_INNER_SHIFT_MAX 16
+#define CORNER_FILL_TAKEOVER_LA_ROWS 6u
 
 #define Image_WHITE 255u
 #define Image_BLACK 0u
@@ -68,6 +86,9 @@ typedef struct
 } TrackFusion_t;
 
 extern TrackFusion_t g_tf;
+extern uint8 g_corner_fill_active;
+extern int16 g_corner_fill_center[TF_IMG_H];
+extern uint8 g_corner_fill_valid[TF_IMG_H];
 extern uint8 Image_Binarize[TF_IMG_H][TF_IMG_W];
 extern uint8 image_0[COMP_H][COMP_W];
 extern uint16 Image_Threshold;
@@ -77,12 +98,12 @@ extern volatile uint16 g_tf_white_count;
 
 /* Intersection detection parameters. */
 #define INTER_COOLDOWN_FRAMES  2
-#define INTER_POST_TURN_SUPPRESS_FRAMES 3u
+#define INTER_POST_TURN_SUPPRESS_FRAMES 1u
 #define INTER_POST_TURN_BLOCK_FRAMES 1u
 #define INTER_POST_TURN_FAR_BLOCK_FRAMES 1u
 #define INTER_MAX_LOCK_FRAMES  300
 #define INTER_BOX_START_ROW    30
-#define INTER_MIN_MISS_ROW     24
+#define INTER_MIN_MISS_ROW     16
 #define INTER_MIN_VALID_ROWS   25
 #define BOX_HEIGHT             36
 #define BOX_WIDTH              60
@@ -119,7 +140,7 @@ extern volatile uint16 g_tf_white_count;
 #define INTER_BOX_STABLE_DELTA 3
 #define INTER_BOX_STABLE_FRAMES 1
 #define INTER_TYPE_VOTE_FRAMES 2
-#define INTER_TYPE_VOTE_MIN    2
+#define INTER_TYPE_VOTE_MIN    1
 #define INTER_FAST_CONFIRM_ENABLE 1
 #define INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN 0u
 #define INTER_IP_SIDE_BIAS     8
@@ -156,9 +177,9 @@ extern volatile uint16 g_tf_white_count;
 #define INTER_INLINE_STRAIGHT_TOP_VALID_MIN 4u
 #define INTER_INLINE_STRAIGHT_LOWER_VALID_MIN 20u
 #define INTER_INLINE_STRAIGHT_IP_ROW_MAX 32
-#define INTER_INLINE_STRAIGHT_ERR_LIMIT 12
-#define INTER_INLINE_STRAIGHT_LA_LIMIT 12
-#define INTER_INLINE_STRAIGHT_TREND_LIMIT 12
+#define INTER_INLINE_STRAIGHT_ERR_LIMIT 20
+#define INTER_INLINE_STRAIGHT_LA_LIMIT 20
+#define INTER_INLINE_STRAIGHT_TREND_LIMIT 20
 
 typedef struct
 {
@@ -200,6 +221,7 @@ typedef struct
 #define RA_PRE_ROUTE_ERR_MAX 38
 #define RA_PRE_ROUTE_LA_MAX 48
 #define RA_PRE_ROUTE_IP_ROW 30u
+#define RA_PRE_ROUTE_GEOM_ROWS 42u
 #define RA_PRE_CONFIRM_FRAMES 1
 #define RA_PRE_SLOW_OFF_FRAMES 4
 

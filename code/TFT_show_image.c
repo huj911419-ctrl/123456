@@ -217,6 +217,42 @@ static void tft_draw_line(uint8 x0, uint8 y0, uint8 x1, uint8 y1, uint16 color)
  * g_ra_flag: 路口/直角标志（0=无，1~5 表示不同类型路口）
  * g_inter_result: 路口检测结果结构体，包含左右拐点和检测框信息
  */
+static void draw_corner_fill_overlay(void)
+{
+    uint8 have_prev = 0u;
+    uint8 prev_x = 0u;
+    uint8 prev_y = 0u;
+    uint8 prev_src_row = 0u;
+
+    if (g_corner_fill_active == 0u)
+        return;
+
+    for (uint8 i = TF_JIDIAN_ROW; i > TF_SEARCH_END_ROW; i--)
+    {
+        uint8 x;
+        uint8 y;
+
+        if (g_corner_fill_valid[i] == 0u)
+        {
+            have_prev = 0u;
+            continue;
+        }
+
+        x = tft_map_col(g_corner_fill_center[i]);
+        y = tft_map_row((int16)i);
+
+        if (have_prev && (uint8)(prev_src_row - i) <= (uint8)TF_MAX_MISS_ROWS)
+            tft_draw_line(prev_x, prev_y, x, y, RGB565_YELLOW);
+        else
+            tft180_draw_point(x, y, RGB565_YELLOW);
+
+        have_prev = 1u;
+        prev_x = x;
+        prev_y = y;
+        prev_src_row = i;
+    }
+}
+
 static void draw_inflection_overlay(void)
 {
     uint8 has_box = 0u;  /* 标记是否需要绘制路口检测框，1=需要绘制 */
@@ -373,6 +409,8 @@ void draw_line(void)
 
     /* 拐点标记与路口检测框叠加层 */
     /* 黄色 X = 左拐点，洋红色 X = 右拐点，青色矩形 = 路口检测框 */
+    draw_corner_fill_overlay();
+
     draw_inflection_overlay();  /* 绘制拐点标记和路口检测框叠加层 */
 
     /* ============================================================
