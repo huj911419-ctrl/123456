@@ -46,18 +46,19 @@ int16 pid_kd = 20;             /* 转向PD控制器的微分系数Kd */
 int16 sp_err_t1 = 6;          /* 速度规划：直线判定误差阈值，|error|<=此值视为直�?*/
 int16 sp_err_t2 = 16 ;         /* 速度规划：弯道判定误差阈值，|error|>=此值视为急弯 */
 int16 sp_ratio_1 = 100;       /* 速度规划：直道目标速度百分比（100%=满速） */
-int16 sp_ratio_2 = 82;        /* 速度规划：弯道目标速度百分比（35%=降速过弯） */
+int16 sp_ratio_2 = 74;        /* 速度规划：弯道目标速度百分比（35%=降速过弯） */
 int16 steer_speed_k = 8;      /* 转向速度耦合系数：速度越快，转向补偿增�?*/
 int16 steer_ff_k = 12;        /* 前瞻前馈系数：根据前瞻误差提前施加转向补�?*/
 
 /* ==================== 直角弯RA状态机参数 ==================== */
-int16 ra_hard_inner = -25;       /* 直角弯HARD阶段内侧电机占空比，0=内侧轮停�?*/
-int16 ra_hard_outer = 1660;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转�?*/
+int16 ra_hard_inner = 320;       /* 直角弯HARD阶段内侧电机占空比，0=内侧轮停�?*/
+int16 ra_hard_outer = 1850;    /* 直角弯HARD阶段外侧电机占空比，外侧轮推动车身转�?*/
+int16 ra_hard_rate = 500;      /* HARD target yaw-rate, deg/s */
 int16 ra_hard_yaw = 80;        /* 直角弯HARD阶段退出航向角阈值（度），IMU累计转过此角度退�?*/
 int16 ra_slow_row = 70;        /* 直角弯SLOW阶段触发行号：IP最大行>=此值时进入减�?*/
-int16 ra_slow_pct = 70;        /* 直角弯SLOW阶段速度百分比（20%=更快刹住�?*/
+int16 ra_slow_pct = 85;        /* 直角弯SLOW阶段速度百分比（20%=更快刹住�?*/
 int16 ra_turn_row = 112;        /* 直角弯APPROACH阶段触发行号：IP最大行>=此值时准备转弯 */
-int16 ra_approach_frames =3;  /* 直角弯APPROACH阶段刹车稳车帧数，结束后进入HARD急转 */
+int16 ra_approach_frames =1;  /* 直角弯APPROACH阶段刹车稳车帧数，结束后进入HARD急转 */
 
 int16 yaw_kp = 12;            /* IMU级联控制的航向角比例系数Kp */
 
@@ -83,8 +84,10 @@ static MenuItem items_ra[] = {
     {"SlwPct", &ra_slow_pct, 10, 100, 5},    /* SLOW速度百分比：减速后的速度 */
     {"TrnRow", &ra_turn_row, 40, 115, 5},    /* APPROACH触发行号：IP行号>=此值准备转�?*/
     {"AproF", &ra_approach_frames, 1, 6, 1}, /* APPROACH刹车稳车帧数：进入HARD前主动收�?*/
+    {"Inner", &ra_hard_inner, 0, 1500, 50},
     {"Outer", &ra_hard_outer, 500, 5000, 100},/* HARD外侧电机占空比：转弯时外侧轮驱动�?*/
-    {"Yaw", &ra_hard_yaw, 50, 92, 2},       /* HARD退出航向角：IMU累计转过的角度阈�?*/
+    {"Rate", &ra_hard_rate, 220, 720, 20},
+    {"Yaw", &ra_hard_yaw, 50, 96, 2},       /* HARD退出航向角：IMU累计转过的角度阈�?*/
 };
 
 /* IMU级联控制页菜单条目：航向角闭环控制参�?*/
@@ -100,7 +103,7 @@ static MenuItem items_imu[] = {
 static MenuPageDef g_pages[PAGE_MAX] = {
     { .title = "MAIN",  .items = items_main,  .item_count = 2,  .draw = NULL },  /* �?页：主页，显示静默和速度 */
     { .title = "TUNE",  .items = items_tune,  .item_count = 4, .draw = NULL },  /* �?页：电机/摄像�?PID/速度规划 */
-    { .title = "RA",    .items = items_ra,    .item_count = 5, .draw = NULL },  /* �?页：直角弯页，调整RA状态机各阶段参�?*/
+    { .title = "RA",    .items = items_ra,    .item_count = 7, .draw = NULL },  /* �?页：直角弯页，调整RA状态机各阶段参�?*/
     { .title = "IMU",   .items = items_imu,   .item_count = 3,  .draw = NULL },  /* �?页：IMU页，调整航向角级联控制参�?*/
 };
 

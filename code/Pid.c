@@ -2,6 +2,7 @@
 #include "Menu.h"               /* 菜单系统头文件，提供菜单变量（�motor_speed等） */
 #include "Track_funsion.h"      /* 视�融合头文件，提供g_tf视�状态结构体 */
 #include "IMU.h"                /* IMU头文件，提供yaw_angle、yaw_rate等IMU数据 */
+#include "Battery.h"
 #include "AutoTuneLog.h"
 
 /* ======================== 全局调试变量 ======================== */
@@ -299,6 +300,8 @@ static uint8 s_ra_lost_guard_cnt = 0u;           /* HARD入口yaw基准 */
 static float s_ra_hard_speed_seed = 0.0f;    /* HARD阶��度种子 */
 /* HARD阶�的�向�子值，用于RECOVER阶�的�向平滑过�?*/
 static float s_ra_hard_steer_seed = 0.0f;    /* HARD阶�转向�子 */
+static float s_ra_hard_diff_cmd = 0.0f;
+static uint8 s_ra_hard_diff_ready = 0u;
 static float s_ra_exit_last_err = 0.0f;
 static float s_ra_exit_last_turn = 0.0f;
 static uint8 s_ra_exit_pd_ready = 0u;
@@ -457,6 +460,24 @@ static float lerp_f(float a, float b, float t) /* 线�插值函�?*/
     return a + (b - a) * t;                 /* 标准线�插值公�?*/
 }
 
+static float ra_voltage_comp_scale(void)
+{
+#if RA_VOLT_COMP_ENABLE
+    uint16 volt_x10 = battery_get_voltage_x10();
+    float scale;
+
+    if (volt_x10 < 90u || volt_x10 > 160u)
+        return 1.0f;
+
+    scale = (float)RA_VOLT_REF_X10 / (float)volt_x10;
+    return clamp_f(scale,
+                   (float)RA_VOLT_COMP_MIN_PCT * 0.01f,
+                   (float)RA_VOLT_COMP_MAX_PCT * 0.01f);
+#else
+    return 1.0f;
+#endif
+}
+
 /* range_ratio_i16 - 将int16值映射到[start, end]区间的比例（0.0~1.0�? * @value: 输入�? * @start: 区间起点（返�?.0�? * @end: 区间终点（返�?.0�? * 返回: 0.0~1.0之间的比例�? * 用�：增益调度�的归��?*/
 static float range_ratio_i16(int16 value, int16 start, int16 end) /* 区间比例映射 */
 {
@@ -550,9 +571,10 @@ static int16 ra_speed_ref(void)
 static uint8 ra_turn_row_for_speed(void)
 {
     int16 row = ra_turn_row;
+    int16 max_row = (int16)((uint16)(TF_IMG_H - 1u) * 2u);
 
     if (row < 0) row = 0;
-    if (row > (int16)(TF_IMG_H - 1u)) row = (int16)(TF_IMG_H - 1u);
+    if (row > max_row) row = max_row;
     return (uint8)row;
 }
 
@@ -725,6 +747,81 @@ slew_out:
 #endif
 }
 
+static uint8 ra_pre_turn_guard_dir(void)
+{
+#if RA_PRE_TURN_STEER_GUARD_ENABLE
+    if (s_ra_state == RA_ST_NONE)
+    {
+        if (g_ra_flag == 0u &&
+            g_ra_pre_flag != 0u &&
+            (g_ra_pre_dir == 1u || g_ra_pre_dir == 2u) &&
+            route_next_flag_is((uint8)g_ra_pre_dir))
+        {
+            return g_ra_pre_dir;
+        }
+    }
+    else if (s_ra_orig_flag < 3u &&
+             (s_ra_phase == RA_PH_WAIT ||
+              s_ra_phase == RA_PH_SLOW ||
+              s_ra_phase == RA_PH_APPROACH) &&
+             (s_ra_dir == 1u || s_ra_dir == 2u))
+    {
+        return s_ra_dir;
+    }
+#endif
+
+    return 0u;
+}
+
+static float ra_pre_turn_steer_guard(float steer)
+{
+#if RA_PRE_TURN_STEER_GUARD_ENABLE
+    uint8 dir = ra_pre_turn_guard_dir();
+
+    if (dir != 0u)
+    {
+        uint8 ip_row = (s_ra_state == RA_ST_ACTIVE) ? s_ra_ip_row : g_ip_max_row;
+        int16 turn_row = (int16)ra_turn_trigger_row();
+        float row_t = range_ratio_i16((int16)ip_row,
+                                      (int16)RA_PRE_TURN_GUARD_START_ROW,
+                                      turn_row);
+        float target =
+            RA_PRE_TURN_GUARD_STEER_MIN +
+            (RA_PRE_TURN_GUARD_STEER_MAX -
+             RA_PRE_TURN_GUARD_STEER_MIN) * row_t;
+
+        if (ip_row < RA_PRE_TURN_GUARD_START_ROW ||
+            abs_i16(g_tf.error) > RA_PRE_TURN_GUARD_ERR_MAX ||
+            abs_i16(g_tf.lookahead_error) > RA_PRE_TURN_GUARD_LA_MAX)
+        {
+            return steer;
+        }
+
+        if (dir == 1u)
+            target = -target;
+
+        steer = target +
+                steer * ((float)RA_PRE_TURN_NORMAL_STEER_PCT * 0.01f);
+        if (dir == 1u)
+        {
+            if (steer > 0.0f)
+                steer = target;
+        }
+        else if (steer < 0.0f)
+        {
+            steer = target;
+        }
+        s_prev_steer_output = steer;
+        if (RA_PRE_TURN_NORMAL_STEER_PCT == 0)
+        {
+            s_steer_ff_filtered = 0.0f;
+        }
+    }
+#endif
+
+    return steer;
+}
+
 /* normalize_angle - 角度归一化到[-180, 180]范围
  * @angle: 输入角度（度�? * 返回: 归一化后的��?*/
 static float normalize_angle(float angle)   /* 角度归一化函�?*/
@@ -763,6 +860,104 @@ static float ra_hard_target_limit(float target)
     if (target > RA_HARD_YAW_MAX_DEG)
         target = RA_HARD_YAW_MAX_DEG;
     return target;
+}
+
+static float slew_to_f(float current, float target, float max_delta)
+{
+    float delta = target - current;
+
+    if (delta > max_delta)
+        target = current + max_delta;
+    else if (delta < -max_delta)
+        target = current - max_delta;
+
+    return target;
+}
+
+static float ra_hard_target_rate(uint8 direct_fast,
+                                 float hard_yaw_target,
+                                 float yaw_progress)
+{
+    float remain = hard_yaw_target - yaw_progress;
+    float max_rate = (float)ra_hard_rate;
+    float target_rate;
+
+    if (remain <= RA_HARD_RATE_STOP_REMAIN_DEG)
+        return 0.0f;
+
+    if (direct_fast != 0u)
+        max_rate += RA_FAST_HARD_RATE_BOOST;
+    if (s_ra_orig_flag >= 3u)
+        max_rate *= (float)RA_COMPLEX_HARD_RATE_PCT * 0.01f;
+
+    max_rate = clamp_f(max_rate, RA_HARD_RATE_MIN, RA_HARD_RATE_LIMIT);
+    target_rate = max_rate;
+
+    if (RA_HARD_RATE_TAPER_REMAIN_DEG > RA_HARD_RATE_STOP_REMAIN_DEG &&
+        remain < RA_HARD_RATE_TAPER_REMAIN_DEG)
+    {
+        float span = RA_HARD_RATE_TAPER_REMAIN_DEG -
+                     RA_HARD_RATE_STOP_REMAIN_DEG;
+        float t = (remain - RA_HARD_RATE_STOP_REMAIN_DEG) / span;
+
+        t = clamp_f(t, 0.0f, 1.0f);
+        target_rate = RA_HARD_RATE_MIN +
+                      (max_rate - RA_HARD_RATE_MIN) * t;
+    }
+
+    return target_rate;
+}
+
+static void ra_hard_apply_rate_control(uint8 direct_fast,
+                                       float hard_yaw_target,
+                                       float yaw_progress,
+                                       float yaw_progress_rate,
+                                       float *outer,
+                                       float *inner)
+{
+    float inner_floor = *inner;
+    float diff_base = *outer - inner_floor;
+    float max_diff;
+    float diff_cmd;
+    float target_rate;
+
+    if (diff_base < 0.0f)
+        diff_base = 0.0f;
+
+    if (!imu_ready || imu_error || hard_yaw_target <= 1.0f)
+    {
+        s_ra_hard_diff_ready = 0u;
+        return;
+    }
+
+    target_rate = ra_hard_target_rate(direct_fast,
+                                      hard_yaw_target,
+                                      yaw_progress);
+    diff_cmd = diff_base +
+               (target_rate - yaw_progress_rate) * RA_HARD_RATE_KP;
+
+    max_diff = diff_base * (float)RA_HARD_DIFF_MAX_PCT * 0.01f;
+    if (max_diff < diff_base)
+        max_diff = diff_base;
+
+    diff_cmd = clamp_f(diff_cmd, 0.0f, max_diff);
+
+    if (s_ra_hard_diff_ready == 0u)
+    {
+        s_ra_hard_diff_cmd = diff_base;
+        s_ra_hard_diff_ready = 1u;
+    }
+
+    s_ra_hard_diff_cmd = slew_to_f(s_ra_hard_diff_cmd,
+                                   diff_cmd,
+                                   RA_HARD_DIFF_SLEW_MAX * PID_DT_SCALE);
+
+    *inner = inner_floor;
+    *outer = inner_floor + s_ra_hard_diff_cmd;
+    if (*outer < 0.0f)
+        *outer = 0.0f;
+    if (*outer > MAX_DUTY)
+        *outer = MAX_DUTY;
 }
 
 static uint8 ra_curve_line_takeover_active(void);
@@ -921,6 +1116,8 @@ static void ra_reset(void)                  /* RA状�机全��?*/
     s_ra_post_recover_cnt = 0u;
     s_ra_hard_speed_seed = 0.0f;            /* 速度种子清零 */
     s_ra_hard_steer_seed = 0.0f;            /* �向�子清零 */
+    s_ra_hard_diff_cmd = 0.0f;
+    s_ra_hard_diff_ready = 0u;
     s_ra_exit_last_err = 0.0f;
     s_ra_exit_last_turn = 0.0f;
     s_ra_exit_pd_ready = 0u;
@@ -1463,6 +1660,8 @@ static void ra_start(uint8 dir, uint8 orig_flag, uint8 straight,
     s_ra_hard_yaw_target = 0.0f;
     s_ra_hard_speed_seed = 0.0f;            /* 速度种子清零 */
     s_ra_hard_steer_seed = 0.0f;            /* �向�子清零 */
+    s_ra_hard_diff_cmd = 0.0f;
+    s_ra_hard_diff_ready = 0u;
     s_ra_exit_last_err = 0.0f;
     s_ra_exit_last_turn = 0.0f;
     s_ra_exit_pd_ready = 0u;
@@ -1496,6 +1695,8 @@ static void ra_enter_hard(void)             /* 进入HARD���阶�?*/
     s_ra_exit_pd_ready = 0u;
     s_ra_yaw_lock_cnt = 0u;
     s_ra_hard_yaw_peak = 0.0f;
+    s_ra_hard_diff_cmd = 0.0f;
+    s_ra_hard_diff_ready = 0u;
     s_speed_integral *= 0.50f;
     s_ra_pre_turn_ff = 0.0f;
     line_pid_reset_derivative();            /* 重置�分状�?*/
@@ -2280,6 +2481,30 @@ static float limit_normal_steer(float steer, float speed_out)
 
     return clamp_f(steer, -limit, limit);
 }
+
+static float line_recenter_steer_boost(float steer)
+{
+    int16 signal = abs_i16(g_tf.error);
+    int16 la_abs = abs_i16(g_tf.lookahead_error);
+    int16 trend_abs = abs_i16(g_tf.error_trend);
+    float t;
+
+    if (g_tf.line_lost != 0u)
+        return steer;
+
+    if (la_abs > signal)
+        signal = la_abs;
+    if (trend_abs > signal)
+        signal = trend_abs;
+
+    t = range_ratio_i16(signal, STEER_RECENTER_T1, STEER_RECENTER_T2);
+    if (t <= 0.0f)
+        return steer;
+
+    return steer * lerp_f(1.0f,
+                          (float)STEER_RECENTER_MAX_PCT * 0.01f,
+                          t);
+}
 static float recover_steer_scale(void)
 {
     return (float)RA_RECOVER_STEER_PCT * 0.01f;
@@ -2305,6 +2530,7 @@ static float ra_yaw_guard_steer(float steer)
     float predicted;
     float over;
     float brake;
+    float brake_max;
     float sign;
 
     if (s_ra_state != RA_ST_ACTIVE ||
@@ -2336,8 +2562,15 @@ static float ra_yaw_guard_steer(float steer)
     if (over < 0.0f)
         over = 0.0f;
 
+    brake_max = RA_CURVE_YAW_BRAKE_MAX;
+    if (s_ra_phase == RA_PH_RECOVER &&
+        brake_max > RA_RECOVER_YAW_BRAKE_MAX)
+    {
+        brake_max = RA_RECOVER_YAW_BRAKE_MAX;
+    }
+
     brake = over * RA_CURVE_YAW_BRAKE_KP + rate * RA_CURVE_YAW_BRAKE_KD;
-    brake = clamp_f(brake, 0.0f, RA_CURVE_YAW_BRAKE_MAX);
+    brake = clamp_f(brake, 0.0f, brake_max);
     steer -= sign * brake;
 
     return steer;
@@ -2518,6 +2751,9 @@ static int16 plan_base_speed(int16 target, int16 pos_err_abs, uint8 pre_slow_act
 
     if (g_tf.valid_row_count >= SPEED_VALID_RUSH_ROWS &&
         g_tf.line_lost == 0u &&
+        pos_err_abs <= SPEED_VALID_RUSH_ERR_MAX &&
+        abs_i16(g_tf.lookahead_error) <= SPEED_VALID_RUSH_LA_MAX &&
+        abs_i16(g_tf.error_trend) <= SPEED_VALID_RUSH_TREND_MAX &&
         g_ra_pre_flag == 0u &&
         g_ra_flag == 0u)
     {
@@ -2536,6 +2772,9 @@ static int16 plan_base_speed(int16 target, int16 pos_err_abs, uint8 pre_slow_act
             reason = (curve_pct <= quality_pct) ? 5u : 7u;
 
         if (g_tf.valid_row_count >= SPEED_VALID_RUN_ROWS &&
+            pos_err_abs <= SPEED_VALID_RUN_ERR_MAX &&
+            abs_i16(g_tf.lookahead_error) <= SPEED_VALID_RUN_LA_MAX &&
+            abs_i16(g_tf.error_trend) <= SPEED_VALID_RUN_TREND_MAX &&
             normal_pct < SPEED_VALID_RUN_MIN_PCT)
         {
             normal_pct = SPEED_VALID_RUN_MIN_PCT;
@@ -3092,6 +3331,7 @@ static float ra_exit_visual_base_duty(void)
 {
     float base = (float)ra_speed_ref() *
                  ((float)RA_RECOVER_SPEED_PCT * 0.01f);
+    base *= ra_voltage_comp_scale();
     return clamp_f(base, RA_EXIT_VIS_DUTY_MIN, RA_EXIT_VIS_DUTY_MAX);
 }
 
@@ -3132,6 +3372,27 @@ static void ra_output_recover_visual_drive(void)
            STEER_KD * RA_EXIT_VIS_KD_SCALE * derr * PID_D_SCALE;
     turn = clamp_f(turn, -RA_EXIT_VIS_TURN_MAX, RA_EXIT_VIS_TURN_MAX);
 
+    if (s_ra_dir == 1u)
+    {
+        if ((s_ra_recover_cnt <= RA_RECOVER_NO_REVERSE_FRAMES ||
+             (imu_ready && !imu_error &&
+              ra_yaw_progress_rate() > RA_RECOVER_NO_REVERSE_RATE)) &&
+            turn > 0.0f)
+        {
+            turn = 0.0f;
+        }
+    }
+    else if (s_ra_dir == 2u)
+    {
+        if ((s_ra_recover_cnt <= RA_RECOVER_NO_REVERSE_FRAMES ||
+             (imu_ready && !imu_error &&
+              ra_yaw_progress_rate() > RA_RECOVER_NO_REVERSE_RATE)) &&
+            turn < 0.0f)
+        {
+            turn = 0.0f;
+        }
+    }
+
     delta = turn - s_ra_exit_last_turn;
     if (delta > RA_EXIT_VIS_SLEW_MAX)
         turn = s_ra_exit_last_turn + RA_EXIT_VIS_SLEW_MAX;
@@ -3169,6 +3430,12 @@ static void ra_output_recover_lost_drive(void)
         outer = MAX_DUTY;
     if (inner < 0.0f)
         inner = 0.0f;
+
+    {
+        float volt_scale = ra_voltage_comp_scale();
+        outer *= volt_scale;
+        inner *= volt_scale;
+    }
 
     if (s_ra_dir == 1u)
     {
@@ -3269,6 +3536,7 @@ static void ra_output_yaw_lock_drive(void)
     float out_l;
     float out_r;
 
+    base *= ra_voltage_comp_scale();
     base = clamp_f(base, RA_YAW_LOCK_DUTY_MIN, RA_YAW_LOCK_DUTY_MAX);
 
     if (imu_ready && !imu_error)
@@ -3429,6 +3697,8 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     float yaw_progress;
     float outer;
     float inner;
+    float inner_keep;
+    float inner_min;
     float out_l;
     float out_r;
     float yaw_progress_rate;
@@ -3465,15 +3735,33 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         if (exit_reason != RA_EXIT_NONE)
         {
             ra_dbg_exit_reason = exit_reason;
-            ra_enter_yaw_lock();
-            (void)ra_handle_yaw_lock_phase(r);
+            if (exit_reason == RA_EXIT_EMERGENCY ||
+                exit_reason == RA_EXIT_TIMEOUT ||
+                exit_reason == RA_EXIT_NO_IMU ||
+                exit_reason == RA_EXIT_RA_TO)
+            {
+                ra_enter_yaw_lock();
+                (void)ra_handle_yaw_lock_phase(r);
+            }
+            else
+            {
+                ra_enter_recover();
+                r->speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f;
+                ra_output_recover_lost_drive();
+                r->should_return = 1u;
+                ra_debug_update();
+            }
             return 1u;
         }
     }
 
     outer = (float)ra_hard_outer *
             (float)(direct_fast ? RA_FAST_HARD_OUTER_PCT : RA_HARD_OUTER_PCT) * 0.01f;
-    inner = RA_HARD_INNER_DUTY;
+    inner = (float)ra_hard_inner;
+    if (inner < 0.0f)
+        inner = 0.0f;
+    if (inner > MAX_DUTY)
+        inner = MAX_DUTY;
 
     if (s_ra_orig_flag >= 3u)
     {
@@ -3486,38 +3774,12 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         outer = RA_PIVOT_OUTER_MIN_DUTY;
     }
 
-    if (imu_ready && hard_yaw_target > 1.0f)
-    {
-        float remain = hard_yaw_target - yaw_progress;
-        float scale = 1.0f;
-
-        if (remain < 0.0f)
-            remain = 0.0f;
-        if (remain < RA_PIVOT_TAPER_REMAIN_DEG)
-        {
-            float min_scale = (float)RA_PIVOT_TAPER_MIN_PCT * 0.01f;
-            float t = remain / RA_PIVOT_TAPER_REMAIN_DEG;
-            if (t < 0.0f) t = 0.0f;
-            if (t > 1.0f) t = 1.0f;
-            scale = min_scale + (1.0f - min_scale) * t;
-        }
-
-        if (yaw_progress_rate > RA_PIVOT_YAW_RATE_SOFT_LIMIT)
-        {
-            float rate_scale =
-                1.0f - (yaw_progress_rate - RA_PIVOT_YAW_RATE_SOFT_LIMIT) /
-                RA_PIVOT_YAW_RATE_SOFT_LIMIT;
-            float rate_min = (float)RA_PIVOT_YAW_RATE_MIN_PCT * 0.01f;
-
-            if (rate_scale < rate_min)
-                rate_scale = rate_min;
-            if (rate_scale < scale)
-                scale = rate_scale;
-        }
-
-        outer *= scale;
-        inner *= scale;
-    }
+    ra_hard_apply_rate_control(direct_fast,
+                               hard_yaw_target,
+                               yaw_progress,
+                               yaw_progress_rate,
+                               &outer,
+                               &inner);
 
     if (outer > MAX_DUTY)
         outer = MAX_DUTY;
@@ -3526,11 +3788,13 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     {
         out_l = inner;
         out_r = outer;
+        inner_keep = inner;
     }
     else
     {
         out_l = outer;
         out_r = inner;
+        inner_keep = inner;
     }
 
 #if RA_HARD_LINE_TRIM_ENABLE
@@ -3548,6 +3812,14 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     }
 #endif
 
+    {
+        float volt_scale = ra_voltage_comp_scale();
+        out_l *= volt_scale;
+        out_r *= volt_scale;
+        inner_keep *= volt_scale;
+    }
+    inner_min = inner_keep;
+
     ramp_frames = direct_fast ? RA_FAST_HARD_RAMP_FRAMES : RA_HARD_RAMP_FRAMES;
     if (ramp_frames < 1u)
         ramp_frames = 1u;
@@ -3560,7 +3832,24 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
             ramp = ramp_min;
         out_l *= ramp;
         out_r *= ramp;
+        inner_min *= ramp;
     }
+
+    if (s_ra_dir == 1u)
+    {
+        if (out_l < inner_min)
+            out_l = inner_min;
+    }
+    else
+    {
+        if (out_r < inner_min)
+            out_r = inner_min;
+    }
+
+    if (out_l < 0.0f) out_l = 0.0f;
+    if (out_r < 0.0f) out_r = 0.0f;
+    if (out_l > MAX_DUTY) out_l = MAX_DUTY;
+    if (out_r > MAX_DUTY) out_r = MAX_DUTY;
 
     ra_dbg_outer_cmd = (s_ra_dir == 1u) ? clamp_duty(out_r) : clamp_duty(out_l);
     s_ra_hard_speed_seed = (out_l + out_r) * 0.5f;
@@ -3764,6 +4053,9 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
     uint8 valid_run_fast =
         (g_tf.line_lost == 0u &&
          g_tf.valid_row_count >= SPEED_VALID_RUN_ROWS &&
+         pos_err_abs <= SPEED_VALID_RUN_ERR_MAX &&
+         abs_i16(g_tf.lookahead_error) <= SPEED_VALID_RUN_LA_MAX &&
+         trend_abs <= SPEED_VALID_RUN_TREND_MAX &&
          g_ra_pre_flag == 0u &&
          g_ra_flag == 0u) ? 1u : 0u;
 
@@ -3818,6 +4110,8 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
     steer += ra_pre_turn_steer_ff();
     steer += ra_curve_steer_assist();
     steer = ra_yaw_guard_steer(steer);
+    steer = ra_pre_turn_steer_guard(steer);
+    steer = line_recenter_steer_boost(steer);
 
     /* 直道时转向缩�?*/
     if (s_straight_active)                  /* 直道加�模�?*/
