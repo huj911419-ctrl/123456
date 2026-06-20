@@ -15,8 +15,8 @@
  * Params/telemetry stay every vision frame; image/edges are throttled to cut
  * serial load while still giving enough pictures for offline diagnosis. */
 #define UART0_DEBUG_ENABLE      1u
-#define UART0_IMAGE_DIV         8u
-#define UART0_EDGES_DIV         8u
+#define UART0_IMAGE_DIV         5u
+#define UART0_EDGES_DIV         5u
 #define UART0_PARAMS_DIV        1u
 #define UART0_TELEMETRY_DIV     1u
 
@@ -33,8 +33,8 @@
 #define VACUUM_PREARM_ENABLE   1u
 
 /* Otsu threshold update interval. Larger values reduce CPU cost. */
-#define TF_OTSU_INTERVAL_DEBUG 2u
-#define TF_OTSU_INTERVAL_RACE  4u
+#define TF_OTSU_INTERVAL_DEBUG 6u
+#define TF_OTSU_INTERVAL_RACE  8u
 
 /* Optional fastest mode for stable lighting: 1 uses fixed threshold only. */
 #define TF_FIXED_THRESHOLD_ENABLE 0

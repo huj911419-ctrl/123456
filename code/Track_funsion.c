@@ -30,7 +30,7 @@ uint8 image_0[COMP_H][COMP_W];
 uint16 Image_Threshold = (uint16)TF_OTSU_MIN_THRESHOLD;
 
 /* 阈值偏移量，通过菜单调节，正值提高阈值（更少白色），负值降低阈值（更多白色�?*/
-int16 threshold_bias = 0;
+int16 threshold_bias = 30;
 
 /* TFT图像诊断：判断是否真的处理到新帧，以及二值图里是否有白色像素 */
 volatile uint8 g_tf_image_ready = 0u;
@@ -104,6 +104,9 @@ static uint8 inter_side_branch_has_road(int16 row,
 static uint8 inter_side_branch_strong_has_road(int16 row,
                                                int16 center_col,
                                                uint8 side);
+static uint8 inter_side_edge_reach_has_road(int16 row,
+                                            int16 center_col,
+                                            uint8 side);
 
 static uint8 inter_side_crossing_has_road(int16 top,
                                           int16 bottom,
@@ -116,14 +119,21 @@ static uint8 inter_vertical_band_has_road(int16 center_col,
                                           int16 row_end,
                                           uint8 min_white,
                                           uint8 min_streak);
+static uint8 row_white_count(int16 row, int16 col_start, int16 col_end);
+static uint8 max_white_streak_on_row(int16 row, int16 col_start, int16 col_end);
+static uint8 glare_pre_guard_row(int16 row);
 
 static void build_inter_box(int16 cx, int16 cy,
                             int16 *top, int16 *bottom,
                             int16 *left, int16 *right);
 
 static uint8 inline_fast_pass_view(void);
+static uint8 inline_component_pre_guard(int16 far_center_span);
+static uint8 straight_inline_view(void);
 static uint8 s_fast_pass_cache = 0u;
 static uint8 s_fast_pass_cache_ok = 0u;
+static uint8 s_straight_inline_cache = 0u;
+static uint8 s_straight_inline_cache_ok = 0u;
 static uint8 inline_fast_pass_view_cached(void)
 {
     if (!s_fast_pass_cache_ok)
@@ -134,11 +144,24 @@ static uint8 inline_fast_pass_view_cached(void)
     return s_fast_pass_cache;
 }
 
+static uint8 straight_inline_view_cached(void)
+{
+    if (!s_straight_inline_cache_ok)
+    {
+        s_straight_inline_cache = straight_inline_view();
+        s_straight_inline_cache_ok = 1u;
+    }
+    return s_straight_inline_cache;
+}
+
 static uint8 single_edge_route_ra_dir(void);
 
 static uint8 valid_rows_in_range(int16 row_start, int16 row_end);
 
 static void update_image_diagnostics(void);
+static uint8 fast_vision_mode(void);
+static uint8 fast_aux_row_allowed(int16 row);
+static void copy_binary_image(void);
 
 static uint8 corner_real_line_takeover_ready(int16 jrow, int16 end_row);
 static void corner_fill_apply(int16 jrow, int16 end_row);
@@ -172,6 +195,29 @@ static void reset_track_error_filter(void)
     s_tf_error_filtered = 0;
     s_tf_lookahead_filtered = 0;
     s_tf_error_filter_valid = 0u;
+}
+
+static uint8 fast_vision_mode(void)
+{
+    if (base_speed < (int16)TF_FAST_VISION_SPEED)
+        return 0u;
+    if (g_post_edge_side != EDGE_BOTH)
+        return 0u;
+    if (g_ra_flag != 0u)
+        return 0u;
+    return 1u;
+}
+
+static uint8 fast_aux_row_allowed(int16 row)
+{
+    if (!fast_vision_mode())
+        return 1u;
+#if TF_FAST_AUX_ROW_STEP <= 1u
+    (void)row;
+    return 1u;
+#else
+    return (((uint16)row % (uint16)TF_FAST_AUX_ROW_STEP) == 0u) ? 1u : 0u;
+#endif
 }
 
 static int16 filter_track_signal(int16 raw, int16 *state, int16 max_step)
@@ -415,6 +461,26 @@ static void denoise_binary_image(void)
         dst[COMP_W - 1u] = src[COMP_W - 1u];
         if (dst[COMP_W - 1u] == Image_WHITE)
             white_count++;
+    }
+
+    g_tf_white_count = white_count;
+}
+
+static void copy_binary_image(void)
+{
+    uint16 white_count = 0u;
+
+    for (uint8 i = 0u; i < COMP_H; i++)
+    {
+        const uint8 *src = s_bin_tmp[i];
+        uint8 *dst = Image_Binarize[i];
+        for (uint8 j = 0u; j < COMP_W; j++)
+        {
+            uint8 v = src[j];
+            dst[j] = v;
+            if (v == Image_WHITE)
+                white_count++;
+        }
     }
 
     g_tf_white_count = white_count;
@@ -1059,6 +1125,14 @@ static uint8 find_jidian_at_row(int16 row, int16 *out_lb, int16 *out_rb)
     }
 
     /* 根据单边/双边模式归一化边缘对（可能推算缺失边缘或更新半宽度） */
+    if (g_post_edge_side != EDGE_BOTH)
+    {
+        if (lb == TF_INVALID)
+            lb = scan_left_edge_right(row, 1, TF_IMG_W - 2);
+        if (rb == TF_INVALID)
+            rb = scan_right_edge_left(row, TF_IMG_W - 2, 1);
+    }
+
     if (!normalize_edges_for_mode(&lb, &rb)) return 0u;
 
     /* 输出找到的边缘对 */
@@ -1097,6 +1171,19 @@ static uint8 find_jidian1(void)
     }
 
     /* 所有候选行均未找到有效边缘对，判定丢线 */
+    if (g_post_edge_side != EDGE_BOTH)
+    {
+        for (int16 row = (int16)(TF_JIDIAN_MIN_ROW - 1);
+             row >= (int16)TF_SINGLE_EDGE_JIDIAN_MIN_ROW; row--)
+        {
+            if (find_jidian_at_row(row, &lb, &rb))
+            {
+                set_jidian_row_data(row, lb, rb);
+                return 1u;
+            }
+        }
+    }
+
     return 0u;
 }
 
@@ -1315,7 +1402,10 @@ static int16 calc_weighted_center(int16 start_row, int16 end_row, uint8 top_heav
  */
 void track_fusion_update(void)
 {
+    uint8 fast_mode = fast_vision_mode();
+
     s_fast_pass_cache_ok = 0u;
+    s_straight_inline_cache_ok = 0u;
     /* ---- 步骤1：清除上一帧的逐行数据 ---- */
     for (uint8 i = 0; i < TF_IMG_H; i++)
     {
@@ -1381,7 +1471,16 @@ void track_fusion_update(void)
     binarize_image();
 
     /* ---- 步骤5�?x3 邻域降噪（消除孤立噪点） ---- */
-    denoise_binary_image();
+    if (fast_mode &&
+        TF_FAST_DENOISE_DIV > 1u &&
+        ((g_tf_frame_count % TF_FAST_DENOISE_DIV) != 0u))
+    {
+        copy_binary_image();
+    }
+    else
+    {
+        denoise_binary_image();
+    }
     update_image_diagnostics();
 
     /* ---- 步骤6：在底部行搜索赛道基准（基点�?---- */
@@ -1453,12 +1552,23 @@ void track_fusion_update(void)
 
             /* 分支检测：检查图像左右边缘附近是否有白色延伸（路口分支） */
             /* 条件：行�?>= INTER_MIN_MISS_ROW(28) �?左或右探针有白色 �?不是对称分量 */
-            if (row >= (int16)INTER_MIN_MISS_ROW)
+            if (row >= (int16)INTER_MIN_MISS_ROW &&
+                (!fast_mode ||
+                 row >= (int16)INTER_BOX_START_ROW ||
+                 fast_aux_row_allowed(row)))
             {
-                left_branch_near = inter_side_branch_has_road(row, raw_center, 2u);
-                right_branch_near = inter_side_branch_has_road(row, raw_center, 1u);
                 left_probe_near = side_probe_has_white(row, ip_left_col);
                 right_probe_near = side_probe_has_white(row, ip_right_col);
+
+                if (!fast_mode ||
+                    left_probe_near ||
+                    right_probe_near ||
+                    g_ra_pre_flag != 0u)
+                {
+                    left_branch_near = inter_side_branch_has_road(row, raw_center, 2u);
+                    right_branch_near = inter_side_branch_has_road(row, raw_center, 1u);
+                }
+
                 y_branch_row = (left_branch_near && right_branch_near) ? 1u : 0u;
                 side_pair_near = ((left_probe_near && right_probe_near) || y_branch_row) ? 1u : 0u;
 
@@ -1684,19 +1794,88 @@ static uint8 single_edge_side_evidence(uint8 side)
     return 0u;
 }
 
+static uint8 s_single_edge_startup = 0u;  /* 单边启动冷却：只在刚进单边时用一次 */
+static uint16 s_single_edge_ra_gap = 0u;  /* 单边触发RA后的冷却：每次RA后独立 */
+static uint8 s_se_gap_tick = 0u;          /* 帧内去重：每帧只减一次 */
+static uint32 s_single_edge_dir_cache_frame = 0u;
+static uint8 s_single_edge_dir_cache_side = EDGE_BOTH;
+static uint8 s_single_edge_dir_cache_valid = 0u;
+static uint8 s_single_edge_dir_cache_value = 0u;
+
+#define SINGLE_EDGE_STARTUP_FRAMES 8u     /* 刚进单边：8帧冷却 */
+#define SINGLE_EDGE_RA_GAP_FRAMES 24u     /* 单边触发RA后冷却帧数 */
+
+static uint8 cache_single_edge_route_dir(uint8 value)
+{
+    s_single_edge_dir_cache_frame = g_tf_frame_count;
+    s_single_edge_dir_cache_side = g_post_edge_side;
+    s_single_edge_dir_cache_valid = 1u;
+    s_single_edge_dir_cache_value = value;
+    return value;
+}
+
 static uint8 single_edge_route_ra_dir(void)
 {
+    if (s_single_edge_dir_cache_valid &&
+        s_single_edge_dir_cache_frame == g_tf_frame_count &&
+        s_single_edge_dir_cache_side == g_post_edge_side)
+    {
+        return s_single_edge_dir_cache_value;
+    }
+
     if (g_post_edge_side == EDGE_BOTH)
-        return 0u;
+    {
+        s_single_edge_startup = 0u;
+        s_single_edge_ra_gap = 0u;
+        s_se_gap_tick = 0u;
+        s_single_edge_dir_cache_valid = 0u;
+        return cache_single_edge_route_dir(0u);
+    }
+
+    /* 帧内去重：每帧只减一次gap计数器 */
+    if (s_se_gap_tick != g_tf_frame_count)
+    {
+        s_se_gap_tick = g_tf_frame_count;
+        if (s_single_edge_startup < SINGLE_EDGE_STARTUP_FRAMES)
+            s_single_edge_startup++;
+        else if (s_single_edge_ra_gap > 0u)
+            s_single_edge_ra_gap--;
+    }
+
+    /* 刚进单边：8帧冷却，只这一次 */
+    if (s_single_edge_startup < SINGLE_EDGE_STARTUP_FRAMES)
+        return cache_single_edge_route_dir(0u);
+
+    /* 触发RA后：10帧冷却，和启动8帧无关 */
+    if (s_single_edge_ra_gap > 0u)
+        return cache_single_edge_route_dir(0u);
 
     s_single_edge_ra_row = INTER_BOX_START_ROW;
 
     if (route_next_flag_is(1u) && single_edge_side_evidence(1u))
-        return 1u;
+    {
+        if (g_sym_component_flag != 0u &&
+            ((uint16)s_single_edge_ra_row * 2u) <
+            (uint16)INTER_SINGLE_EDGE_COMPONENT_ARM_IP_ROW)
+        {
+            return cache_single_edge_route_dir(0u);
+        }
+        s_single_edge_ra_gap = SINGLE_EDGE_RA_GAP_FRAMES;
+        return cache_single_edge_route_dir(1u);
+    }
     if (route_next_flag_is(2u) && single_edge_side_evidence(2u))
-        return 2u;
+    {
+        if (g_sym_component_flag != 0u &&
+            ((uint16)s_single_edge_ra_row * 2u) <
+            (uint16)INTER_SINGLE_EDGE_COMPONENT_ARM_IP_ROW)
+        {
+            return cache_single_edge_route_dir(0u);
+        }
+        s_single_edge_ra_gap = SINGLE_EDGE_RA_GAP_FRAMES;
+        return cache_single_edge_route_dir(2u);
+    }
 
-    return 0u;
+    return cache_single_edge_route_dir(0u);
 }
 
 /**
@@ -1750,13 +1929,19 @@ void right_angle_pre_detect(void)
         /* 跳过无效行（无有效边缘对的行�?*/
         if (!g_tf.row_valid[i])
             continue;
+        if (glare_pre_guard_row(i))
+        {
+            g_sym_component_flag = 1u;
+            continue;
+        }
         if (s_inter_post_turn_suppress_cnt >
             (INTER_POST_TURN_SUPPRESS_FRAMES - INTER_POST_TURN_FAR_BLOCK_FRAMES) &&
             i <= (int16)RA_PRE_FAR_START_ROW)
             continue;
 
         /* 检查该行是否为对称分量（三极管干扰等） */
-        if (symmetric_component_at_row(i, g_tf.center_line[i]))
+        if (fast_aux_row_allowed(i) &&
+            symmetric_component_at_row(i, g_tf.center_line[i]))
         {
             /* 对称分量行计数递增 */
             sym_component_rows++;
@@ -1812,9 +1997,15 @@ void right_angle_pre_detect(void)
          far_center_span >= (int16)RA_PRE_COMPONENT_CENTER_SPAN &&
          g_tf.valid_row_count >= RA_PRE_COMPONENT_VALID_ROWS) ? 1u : 0u;
     uint8 route_direct_has_geom =
-        (far_open_rows > 0u ||
-         far_center_span >= (int16)RA_PRE_CENTER_SPAN_MIN ||
-         g_tf.valid_row_count <= RA_PRE_ROUTE_GEOM_ROWS) ? 1u : 0u;
+        (far_open_rows >= RA_PRE_FAR_OPEN_ROWS ||
+         far_center_span >= (int16)RA_PRE_CENTER_SPAN_MIN) ? 1u : 0u;
+    uint8 route_direct_straight_guard =
+        (g_tf.line_lost == 0u &&
+         g_tf.valid_row_count >= RA_PRE_ROUTE_VALID_ROWS_MIN &&
+         far_open_rows == 0u &&
+         far_center_span < (int16)RA_PRE_CENTER_SPAN_MIN &&
+         abs_i16(g_tf.error) <= RA_PRE_ROUTE_STRAIGHT_ERR_MAX &&
+         abs_i16(g_tf.lookahead_error) <= RA_PRE_ROUTE_STRAIGHT_LA_MAX) ? 1u : 0u;
 
 
 
@@ -1829,6 +2020,13 @@ void right_angle_pre_detect(void)
     else if (route_next_flag_is(2u))
         route_direct_dir = 2u;
 
+    if (single_edge_ra_dir == 0u &&
+        route_direct_straight_guard != 0u)
+    {
+        detected = 0u;
+        far_slow_detected = 0u;
+    }
+
     if (single_edge_ra_dir != 0u)
     {
         detected = 1u;
@@ -1842,6 +2040,7 @@ void right_angle_pre_detect(void)
              abs_i16(g_tf.error) <= RA_PRE_ROUTE_ERR_MAX &&
              abs_i16(g_tf.lookahead_error) <= RA_PRE_ROUTE_LA_MAX &&
              far_component_like == 0u &&
+             route_direct_straight_guard == 0u &&
              route_direct_has_geom != 0u)
     {
         detected = 1u;
@@ -1867,12 +2066,14 @@ void right_angle_pre_detect(void)
     if (single_edge_ra_dir == 0u)
     {
         if (right_lost >= RA_PRE_LOST_THRESH &&
-            right_lost > left_lost)
+            right_lost > left_lost &&
+            route_direct_straight_guard == 0u)
         {
             pre_dir = 1u;
         }
         else if (left_lost >= RA_PRE_LOST_THRESH &&
-                 left_lost > right_lost)
+                 left_lost > right_lost &&
+                 route_direct_straight_guard == 0u)
         {
             pre_dir = 2u;
         }
@@ -1903,6 +2104,25 @@ void right_angle_pre_detect(void)
         detected = 0u;
         far_slow_detected = 0u;
     }
+
+#if INTER_COMPONENT_PRE_GUARD_ENABLE
+    if ((detected || far_slow_detected) &&
+        single_edge_ra_dir == 0u &&
+        (pre_dir == 0u || !route_next_flag_is((uint8)pre_dir)) &&
+        inline_component_pre_guard(far_center_span))
+    {
+        detected = 0u;
+        far_slow_detected = 0u;
+        s_on_cnt = 0u;
+        s_off_cnt = 0u;
+        s_slow_off_cnt = RA_PRE_SLOW_OFF_FRAMES;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        g_sym_component_flag = 1u;
+        return;
+    }
+#endif
 
     /* 若对称分量行数足够多(>=2)，判定为干扰（如三极管），清除标志并返回 */
     if (single_edge_ra_dir == 0u &&
@@ -2065,6 +2285,24 @@ static uint8 side_probe_has_white(int16 row, int16 center_col)
     return (white_cnt >= 3u) ? 1u : 0u;
 }
 
+static uint8 row_white_count(int16 row, int16 col_start, int16 col_end)
+{
+    uint8 white_count = 0u;
+
+    if (row < 0 || row >= TF_IMG_H) return 0u;
+    if (col_start < 0) col_start = 0;
+    if (col_end >= TF_IMG_W) col_end = TF_IMG_W - 1;
+    if (col_start > col_end) return 0u;
+
+    for (int16 col = col_start; col <= col_end; col++)
+    {
+        if (Image_Binarize[row][col] == Image_WHITE)
+            white_count++;
+    }
+
+    return white_count;
+}
+
 /**
  * @brief 计算指定行指定列范围内最长连续白色像素段长度
  *
@@ -2113,6 +2351,23 @@ static uint8 max_white_streak_on_row(int16 row, int16 col_start, int16 col_end)
 
     /* 返回找到的最长连续白色段长度 */
     return max_streak;
+}
+
+static uint8 glare_pre_guard_row(int16 row)
+{
+#if TF_GLARE_PRE_GUARD_ENABLE
+    uint8 white_count = row_white_count(row, 0, TF_IMG_W - 1);
+    uint8 max_streak = max_white_streak_on_row(row, 0, TF_IMG_W - 1);
+
+    if (white_count >= TF_GLARE_PRE_ROW_WHITE_MIN &&
+        max_streak >= TF_GLARE_PRE_ROW_STREAK_MIN)
+    {
+        return 1u;
+    }
+#else
+    (void)row;
+#endif
+    return 0u;
 }
 
 /**
@@ -3219,6 +3474,91 @@ static uint8 inter_side_branch_strong_has_road(int16 row,
     return 0u;
 }
 
+static uint8 inter_side_edge_reach_has_road(int16 row,
+                                            int16 center_col,
+                                            uint8 side)
+{
+    int16 row_start = row - (int16)INTER_BRANCH_AREA_HALF_ROWS;
+    int16 row_end = row + (int16)INTER_BRANCH_AREA_HALF_ROWS;
+    int16 gap = active_track_half_width() + 2;
+    uint8 hit_rows = 0u;
+
+    if (row_start < 0) row_start = 0;
+    if (row_end >= TF_IMG_H) row_end = TF_IMG_H - 1;
+    if (gap < (int16)(TF_MIN_TRACK_WIDTH + 2))
+        gap = (int16)(TF_MIN_TRACK_WIDTH + 2);
+
+    for (int16 r = row_start; r <= row_end; r++)
+    {
+        uint8 streak = 0u;
+        int16 seed = -1;
+
+        if (side == 1u)
+        {
+            int16 min_col = center_col + gap;
+            int16 edge_limit = (int16)(TF_IMG_W - 1 - INTER_EDGE_TOUCH_MARGIN);
+
+            if (min_col < 0) min_col = 0;
+            if (edge_limit < min_col) edge_limit = min_col;
+
+            for (int16 c = TF_IMG_W - 1; c >= edge_limit; c--)
+            {
+                if (is_white(r, c))
+                {
+                    seed = c;
+                    break;
+                }
+            }
+
+            if (seed >= 0)
+            {
+                for (int16 c = seed; c >= min_col; c--)
+                {
+                    if (!is_white(r, c))
+                        break;
+                    streak++;
+                }
+            }
+        }
+        else
+        {
+            int16 max_col = center_col - gap;
+            int16 edge_limit = (int16)INTER_EDGE_TOUCH_MARGIN;
+
+            if (max_col >= TF_IMG_W) max_col = TF_IMG_W - 1;
+            if (edge_limit > max_col) edge_limit = max_col;
+
+            for (int16 c = 0; c <= edge_limit; c++)
+            {
+                if (is_white(r, c))
+                {
+                    seed = c;
+                    break;
+                }
+            }
+
+            if (seed >= 0)
+            {
+                for (int16 c = seed; c <= max_col; c++)
+                {
+                    if (!is_white(r, c))
+                        break;
+                    streak++;
+                }
+            }
+        }
+
+        if (streak >= INTER_EDGE_CONNECT_MIN_STREAK)
+        {
+            hit_rows++;
+            if (hit_rows >= INTER_EDGE_CONNECT_HIT_ROWS)
+                return 1u;
+        }
+    }
+
+    return 0u;
+}
+
 /* Pick a stable inflection-point column from the recent center buffer. */
 static void apply_ip_col_from_buffer(InflectionPoint_t *ip, uint8 found_side)
 {
@@ -3351,6 +3691,32 @@ static uint8 valid_rows_in_range(int16 row_start, int16 row_end)
     }
 
     return count;
+}
+
+static uint8 inline_component_pre_guard(int16 far_center_span)
+{
+    if (g_tf.line_lost != 0u)
+        return 0u;
+    if (g_tf.valid_row_count < INTER_COMPONENT_PRE_VALID_ROWS)
+        return 0u;
+    if (valid_rows_in_range((int16)INTER_BOX_START_ROW,
+                            (int16)RA_PRE_START_ROW) <
+        INTER_COMPONENT_PRE_LOWER_ROWS)
+        return 0u;
+    if (valid_rows_in_range((int16)INTER_FAST_PASS_TOP_START_ROW,
+                            (int16)INTER_FAST_PASS_TOP_END_ROW) <
+        INTER_COMPONENT_PRE_TOP_ROWS)
+        return 0u;
+    if (abs_i16(g_tf.error) > INTER_COMPONENT_PRE_ERR_LIMIT)
+        return 0u;
+    if (abs_i16(g_tf.lookahead_error) > INTER_COMPONENT_PRE_LA_LIMIT)
+        return 0u;
+    if (abs_i16(g_tf.error_trend) > INTER_COMPONENT_PRE_TREND_LIMIT)
+        return 0u;
+    if (far_center_span > (int16)INTER_COMPONENT_PRE_CENTER_SPAN_MAX)
+        return 0u;
+
+    return 1u;
 }
 
 static uint8 inline_fast_pass_view(void)
@@ -3698,7 +4064,7 @@ static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok,
     /* 类型 1/2：纯直角证据成立且不是稳定直线时快速确�?*/
     if ((detected == 1u || detected == 2u) &&
         pure_ra_ok &&
-        !straight_inline_view())
+        !straight_inline_view_cached())
     {
         uint16 late_row = (ra_turn_row > 0) ? (uint16)ra_turn_row : 0u;
         late_row = (uint16)(late_row + (uint16)INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN);
@@ -4059,12 +4425,22 @@ void detect_intersection(void)
     uint8 right_box_edge_has = (right_has && right_box_has) ? 1u : 0u;
     uint8 left_box_road = (left_cross_has || left_box_edge_has) ? 1u : 0u;
     uint8 right_box_road = (right_cross_has || right_box_edge_has) ? 1u : 0u;
+    uint8 left_edge_reach_has =
+        (left_box_road || left_branch_has) ?
+        inter_side_edge_reach_has_road(ip.row, ip.col, 2u) : 0u;
+    uint8 right_edge_reach_has =
+        (right_box_road || right_branch_has) ?
+        inter_side_edge_reach_has_road(ip.row, ip.col, 1u) : 0u;
+    uint8 left_continuous_side_has =
+        (left_cross_has || left_edge_reach_has) ? 1u : 0u;
+    uint8 right_continuous_side_has =
+        (right_cross_has || right_edge_reach_has) ? 1u : 0u;
     uint8 left_strong_dir_has =
-        (left_cross_has ||
-         (left_box_edge_has && left_branch_has)) ? 1u : 0u;
+        (left_continuous_side_has ||
+         (left_box_edge_has && left_branch_has && left_edge_reach_has)) ? 1u : 0u;
     uint8 right_strong_dir_has =
-        (right_cross_has ||
-         (right_box_edge_has && right_branch_has)) ? 1u : 0u;
+        (right_continuous_side_has ||
+         (right_box_edge_has && right_branch_has && right_edge_reach_has)) ? 1u : 0u;
     uint16 direct_fast_row =
         (uint16)((ra_turn_row > 0) ? (uint16)ra_turn_row : 0u) +
         (uint16)INTER_DIRECT_FAST_CONFIRM_ROW_MARGIN;
@@ -4081,10 +4457,20 @@ void detect_intersection(void)
         (left_strong_dir_has ||
          (direct_fast_late &&
           (ra_dir_hint == 2u || found_side == 2u || single_edge_ra_dir == 2u) &&
-          left_box_edge_has &&
-          left_branch_has)) ? 1u : 0u;
-    uint8 left_t_dir_has = (left_box_road && (left_has || left_cross_has)) ? 1u : 0u;
-    uint8 right_t_dir_has = (right_box_road && (right_has || right_cross_has)) ? 1u : 0u;
+           left_box_edge_has &&
+           left_branch_has)) ? 1u : 0u;
+    uint8 right_direct_evidence =
+        (!top_road_has &&
+         !center_forward_has &&
+         pure_ra_ok &&
+         (right_strong_dir_has ||
+          (single_edge_ra_dir == 1u && right_fast_dir_has))) ? 1u : 0u;
+    uint8 left_direct_evidence =
+        (!top_road_has &&
+         !center_forward_has &&
+         pure_ra_ok &&
+         (left_strong_dir_has ||
+          (single_edge_ra_dir == 2u && left_fast_dir_has))) ? 1u : 0u;
     uint8 top_valid_rows = valid_rows_in_range(
         (int16)INTER_FAST_PASS_TOP_START_ROW,
         (int16)INTER_FAST_PASS_TOP_END_ROW);
@@ -4102,14 +4488,74 @@ void detect_intersection(void)
         (g_sym_component_flag != 0u &&
          left_box_road && right_box_road &&
          side_cross_ok &&
-         !straight_inline_view() &&
+         !straight_inline_view_cached() &&
          (g_tf.valid_row_count <= INTER_TRI_CROSS_VALID_ROWS_MAX ||
           top_valid_rows <= INTER_TRI_CROSS_TOP_VALID_MAX)) ? 1u : 0u;
     uint8 type5_side_ok =
         (left_box_road && right_box_road && side_cross_ok) ? 1u : 0u;
+    uint8 route_expected_type = route_next_expected_flag();
+    uint8 route_expected_complex =
+        (g_post_edge_side == EDGE_BOTH &&
+         route_expected_type >= 3u && route_expected_type <= 5u) ? 1u : 0u;
+    uint8 top_complex_evidence =
+        (top_road_has && center_forward_has) ? 1u : 0u;
+    uint8 left_complex_evidence =
+        (top_complex_evidence && left_strong_dir_has) ? 1u : 0u;
+    uint8 right_complex_evidence =
+        (top_complex_evidence && right_strong_dir_has) ? 1u : 0u;
+    uint8 cross_complex_evidence =
+        (top_complex_evidence &&
+         (side_cross_ok ||
+          (left_strong_dir_has && right_strong_dir_has))) ? 1u : 0u;
+    uint8 route_type5_soft_ok =
+        (route_expected_complex != 0u &&
+         route_expected_type == 5u &&
+         g_tf.line_lost == 0u &&
+         g_tf.valid_row_count >= INTER_MIN_VALID_ROWS &&
+         top_complex_evidence &&
+         !inline_component_candidate &&
+         !straight_inline_view_cached() &&
+         (left_complex_evidence ||
+          right_complex_evidence ||
+          cross_complex_evidence)) ? 1u : 0u;
+    uint8 route_expected_side_evidence = 0u;
+    uint8 route_expected_cutoff_evidence = 0u;
+    uint8 route_expected_complex_evidence = 0u;
+    uint8 route_expected_cutoff =
+        (g_tf.line_lost != 0u ||
+         g_tf.valid_row_count < RA_INTER_COMPLEX_ROUTE_VALID_ROWS ||
+         g_ip_max_row >= RA_INTER_COMPLEX_LOST_IP_ROW) ? 1u : 0u;
+    if (route_expected_complex != 0u)
+    {
+        if (route_expected_type == 3u)
+        {
+            route_expected_complex_evidence = left_complex_evidence;
+            route_expected_side_evidence = left_strong_dir_has;
+        }
+        else if (route_expected_type == 4u)
+        {
+            route_expected_complex_evidence = right_complex_evidence;
+            route_expected_side_evidence = right_strong_dir_has;
+        }
+        else if (route_expected_type == 5u)
+        {
+            route_expected_complex_evidence =
+                (cross_complex_evidence || route_type5_soft_ok) ? 1u : 0u;
+            route_expected_side_evidence =
+                (left_strong_dir_has || right_strong_dir_has ||
+                 cross_complex_evidence) ? 1u : 0u;
+        }
+    }
+    if (route_expected_complex != 0u &&
+        route_expected_cutoff != 0u &&
+        route_expected_side_evidence != 0u)
+    {
+        route_expected_cutoff_evidence = 1u;
+    }
     uint8 inline_straight_guard =
         (g_tf.line_lost == 0u &&
          single_edge_ra_dir == 0u &&
+         g_ra_pre_flag == 0u &&
          center_forward_has &&
          abs_i16(g_tf.error) <= INTER_INLINE_STRAIGHT_ERR_LIMIT &&
          abs_i16(g_tf.lookahead_error) <= INTER_INLINE_STRAIGHT_LA_LIMIT &&
@@ -4147,7 +4593,7 @@ void detect_intersection(void)
         center_forward_has &&
         !left_has && !right_has &&
         !left_box_has && !right_box_has &&
-        straight_inline_view())
+        straight_inline_view_cached())
     {
         g_sym_component_flag = 1u;
         reset_box_lock();
@@ -4157,28 +4603,105 @@ void detect_intersection(void)
 
     /* ---- 路口类型分类逻辑 ---- */
     /* Final RA classification must use box-edge / crossing evidence. */
-    if (single_edge_ra_dir == 1u && !top_road_has && pure_ra_ok && right_fast_dir_has)
+    if (single_edge_ra_dir == 1u && right_direct_evidence &&
+        !(abs_i16(g_tf.error) < 12 && abs_i16(g_tf.lookahead_error) < 12))
         detected = 1u;
-    else if (single_edge_ra_dir == 2u && !top_road_has && pure_ra_ok && left_fast_dir_has)
+    else if (single_edge_ra_dir == 2u && left_direct_evidence &&
+        !(abs_i16(g_tf.error) < 12 && abs_i16(g_tf.lookahead_error) < 12))
         detected = 2u;
-    else if (type5_side_ok || tri_cross_candidate)
+    else if ((type5_side_ok && cross_complex_evidence) ||
+             (tri_cross_candidate && cross_complex_evidence) ||
+             route_type5_soft_ok)
         detected = 5u;
-    else if (top_road_has && left_t_dir_has)
+    else if (left_complex_evidence)
         detected = 3u;
-    else if (top_road_has && right_t_dir_has)
+    else if (right_complex_evidence)
         detected = 4u;
-    else if (!top_road_has && pure_ra_ok && ra_dir_hint == 1u &&
-             right_fast_dir_has)
+    else if (ra_dir_hint == 1u && right_direct_evidence)
         detected = 1u;
-    else if (!top_road_has && pure_ra_ok && ra_dir_hint == 2u &&
-             left_fast_dir_has)
+    else if (ra_dir_hint == 2u && left_direct_evidence)
         detected = 2u;
-    else if (!top_road_has && pure_ra_ok && found_side == 1u &&
-             right_fast_dir_has)
+    else if (found_side == 1u && right_direct_evidence)
         detected = 1u;
-    else if (!top_road_has && pure_ra_ok && found_side == 2u &&
-             left_fast_dir_has)
+    else if (found_side == 2u && left_direct_evidence)
         detected = 2u;
+
+    if (g_post_edge_side != EDGE_BOTH &&
+        detected >= 3u && detected <= 5u)
+    {
+        g_ra_flag = 0u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        reset_box_lock();
+        clear_inter_result();
+        return;
+    }
+
+#if INTER_COMPONENT_GUARD_ENABLE
+    if (detected >= 3u && detected <= 5u)
+    {
+        uint8 real_complex_side =
+            ((detected == 3u && left_complex_evidence) ||
+             (detected == 4u && right_complex_evidence) ||
+             (detected == 5u &&
+              (cross_complex_evidence || route_type5_soft_ok))) ? 1u : 0u;
+        uint8 route_match_complex = route_next_flag_is(detected);
+        uint8 route_remap_window =
+            (route_expected_complex != 0u &&
+             (g_ip_max_row >= INTER_ROUTE_REMAP_IP_ROW ||
+              g_tf.valid_row_count < INTER_ROUTE_REMAP_VALID_ROWS ||
+              g_tf.line_lost != 0u)) ? 1u : 0u;
+        uint8 strong_straight_component =
+            (g_tf.valid_row_count >= INTER_COMPONENT_GUARD_STRONG_VALID_ROWS &&
+             top_valid_rows >= INTER_COMPONENT_GUARD_TOP_ROWS &&
+             abs_i16(g_tf.error) <= INTER_FAST_PASS_ERR_LIMIT &&
+             abs_i16(g_tf.lookahead_error) <= INTER_FAST_PASS_LA_ERR_LIMIT &&
+             abs_i16(g_tf.error_trend) <= INTER_FAST_PASS_TREND_LIMIT) ? 1u : 0u;
+        uint8 stable_inline_component =
+            (g_tf.line_lost == 0u &&
+             center_forward_has &&
+             lower_valid_rows >= INTER_COMPONENT_GUARD_LOWER_ROWS &&
+             g_tf.valid_row_count >= INTER_COMPONENT_GUARD_VALID_ROWS &&
+             abs_i16(g_tf.error) <= INTER_COMPONENT_GUARD_ERR_LIMIT &&
+             abs_i16(g_tf.lookahead_error) <= INTER_COMPONENT_GUARD_LA_LIMIT &&
+             abs_i16(g_tf.error_trend) <= INTER_COMPONENT_GUARD_TREND_LIMIT &&
+             route_match_complex == 0u &&
+             route_remap_window == 0u &&
+             real_complex_side == 0u &&
+             (g_sym_component_flag != 0u ||
+              inline_component_candidate != 0u ||
+              inline_straight_guard != 0u ||
+              strong_straight_component != 0u)) ? 1u : 0u;
+
+        if (stable_inline_component)
+        {
+            g_sym_component_flag = 1u;
+            g_ra_pre_flag = 0u;
+            g_ra_pre_dir = 0u;
+            g_ra_pre_slow_flag = 0u;
+            reset_box_lock();
+            clear_inter_result();
+            return;
+        }
+    }
+#endif
+
+    uint8 route_expected_fast_ok = 0u;
+    if (route_expected_complex &&
+        (g_ip_max_row >= INTER_ROUTE_REMAP_IP_ROW ||
+         (g_ip_max_row >= RA_INTER_COMPLEX_LAST_CHANCE_ROW &&
+          g_tf.valid_row_count < INTER_ROUTE_REMAP_VALID_ROWS) ||
+         g_tf.line_lost != 0u) &&
+        !inline_component_candidate &&
+        (detected == 0u || !route_next_flag_is(detected) ||
+         detected == route_expected_type) &&
+        (route_expected_complex_evidence != 0u ||
+         route_expected_cutoff_evidence != 0u))
+    {
+        detected = route_expected_type;
+        route_expected_fast_ok = 1u;
+    }
 
     /* 记录原始检测类型到结果结构�?*/
     g_inter_result.detected_type = detected;
@@ -4188,25 +4711,71 @@ void detect_intersection(void)
     uint8 type5_fast_ok =
         (detected == 5u &&
          left_frame_has && right_frame_has &&
-         side_cross_ok &&
+         cross_complex_evidence &&
          !inline_component_candidate &&
-         !straight_inline_view()) ? 1u : 0u;
+         !straight_inline_view_cached()) ? 1u : 0u;
     uint8 type34_fast_ok =
-        (top_road_has &&
-         !inline_component_candidate &&
-         !straight_inline_view() &&
-         ((detected == 3u && left_t_dir_has) ||
-          (detected == 4u && right_t_dir_has))) ? 1u : 0u;
+        (!inline_component_candidate &&
+         !straight_inline_view_cached() &&
+         ((detected == 3u && left_complex_evidence) ||
+          (detected == 4u && right_complex_evidence))) ? 1u : 0u;
     uint8 voted_type = fast_confirm_inter_type(detected, pure_ra_ok,
                                                type5_fast_ok,
                                                type34_fast_ok);
     /* 快速确认未通过，走投票确认流程 */
+    if (voted_type == 0u && route_expected_fast_ok)
+        voted_type = detected;
     if (voted_type == 0u)
         voted_type = vote_inter_type(detected);
 
+    if (voted_type != 0u && !route_next_flag_is(voted_type))
+    {
+        uint8 complex_alias =
+            (voted_type >= 3u && voted_type <= 5u) ? 1u : 0u;
+        uint8 direct_to_cross_alias =
+            (route_expected_complex != 0u &&
+             (voted_type == 1u || voted_type == 2u)) ? 1u : 0u;
+        if (route_expected_complex != 0u &&
+            (complex_alias || direct_to_cross_alias) &&
+            (g_ip_max_row >= INTER_ROUTE_REMAP_IP_ROW ||
+             g_tf.valid_row_count < INTER_ROUTE_REMAP_VALID_ROWS) &&
+            (route_expected_complex_evidence != 0u ||
+             route_expected_cutoff_evidence != 0u))
+        {
+            voted_type = route_expected_type;
+        }
+    }
+
+    if (voted_type >= 3u && voted_type <= 5u &&
+        g_ip_max_row < (uint8)INTER_COMPLEX_ARM_IP_ROW)
+    {
+        g_ra_flag = 0u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        reset_box_lock();
+        clear_inter_result();
+        return;
+    }
+
     if (g_post_edge_side != EDGE_BOTH &&
-        voted_type >= 3u && voted_type <= 5u &&
-        !route_next_flag_is(voted_type))
+        voted_type >= 3u && voted_type <= 5u)
+    {
+        g_ra_flag = 0u;
+        g_ra_pre_flag = 0u;
+        g_ra_pre_dir = 0u;
+        g_ra_pre_slow_flag = 0u;
+        reset_box_lock();
+        clear_inter_result();
+        return;
+    }
+
+    if (voted_type >= 3u && voted_type <= 5u &&
+        (g_tf.line_lost != 0u ||
+         g_tf.valid_row_count < RA_INTER_COMPLEX_ROUTE_VALID_ROWS) &&
+        !(route_next_flag_is(voted_type) &&
+          (g_ip_max_row >= RA_INTER_COMPLEX_LOST_IP_ROW ||
+           g_tf.line_lost != 0u)))
     {
         g_ra_flag = 0u;
         g_ra_pre_flag = 0u;

@@ -10,6 +10,12 @@
 #define AT_HEADER_2 0x55u
 #define AT_SUMMARY_SIZE 22u
 #define AT_DUMP_PAYLOAD_SIZE (AUTO_TUNE_RECORD_SIZE * AUTO_TUNE_DUMP_PER_PKT)
+#define AT_TURN_MARK_HARD_ENTER      0x01u
+#define AT_TURN_MARK_YAW_START       0x02u
+#define AT_TURN_MARK_DUTY_START      0x04u
+#define AT_TURN_MARK_RECOVER_BLOCK   0x08u
+#define AT_YAW_START_RATE_DPS        140
+#define AT_DUTY_START_DIFF           650
 
 extern volatile uint32 prof_tf_us;
 extern volatile uint32 prof_inter_us;
@@ -61,6 +67,10 @@ typedef struct
     uint8 box_left;
     uint8 box_right;
     uint8 pre_detail;
+    uint8 turn_mark;
+    uint8 hard_enter_ip;
+    uint16 hard_enter_tick;
+    uint8 pre_seen_frames;
 } AutoTuneRecord;
 
 #if AUTO_TUNE_LOG_ENABLE
@@ -73,6 +83,13 @@ static volatile uint16 s_at_pid_tick = 0u;
 static volatile uint8 s_at_div = 0u;
 static volatile uint8 s_at_overflow = 0u;
 static volatile uint8 s_at_capture_active = 0u;
+static uint8 s_at_prev_phase = 0u;
+static uint8 s_at_yaw_start_seen = 0u;
+static uint8 s_at_duty_start_seen = 0u;
+static uint8 s_at_hard_enter_ip = 0u;
+static uint8 s_at_hard_pre_seen_frames = 0u;
+static uint8 s_at_pre_seen_frames = 0u;
+static uint16 s_at_hard_enter_tick = 0u;
 
 static uint8 s_at_dump_pending = 0u;
 static uint8 s_at_summary_sent = 0u;
@@ -179,6 +196,10 @@ static void at_pack_record(uint8 *p, const AutoTuneRecord *r)
     p[idx++] = r->box_left;
     p[idx++] = r->box_right;
     p[idx++] = r->pre_detail;
+    at_put_u16(p, &idx, r->hard_enter_tick);
+    p[idx++] = r->turn_mark;
+    p[idx++] = r->hard_enter_ip;
+    p[idx++] = r->pre_seen_frames;
 }
 
 static void at_pack_live(uint8 *p, const AutoTuneRecord *r)
@@ -247,6 +268,13 @@ static void at_reset_capture(void)
     s_at_dump_sent = 0u;
     s_at_dump_total = 0u;
     s_at_live_last_seq = 0xFFFFu;
+    s_at_prev_phase = 0u;
+    s_at_yaw_start_seen = 0u;
+    s_at_duty_start_seen = 0u;
+    s_at_hard_enter_ip = 0u;
+    s_at_hard_pre_seen_frames = 0u;
+    s_at_pre_seen_frames = 0u;
+    s_at_hard_enter_tick = 0u;
 }
 
 uint8 auto_tune_log_busy(void)
@@ -259,7 +287,8 @@ static uint8 at_force_pid_sample(void)
     return (ra_dbg_state != 0u ||
             g_ra_flag != 0u ||
             g_ra_pre_flag != 0u ||
-            g_ra_pre_slow_flag != 0u) ? 1u : 0u;
+            g_ra_pre_slow_flag != 0u ||
+            g_tf.line_lost != 0u) ? 1u : 0u;
 }
 
 static uint8 at_record_div(void)
@@ -276,6 +305,10 @@ void auto_tune_log_pid_tick(void)
 {
     AutoTuneRecord *r;
     uint8 div;
+    uint8 turn_mark;
+    uint8 pre_seen;
+    int16 progress_rate;
+    int16 duty_diff;
 
     if (motor_enable == 0)
         return;
@@ -349,6 +382,75 @@ void auto_tune_log_pid_tick(void)
     r->pre_detail = (uint8)((g_ra_pre_flag ? 0x01u : 0u) |
                             (g_ra_pre_slow_flag ? 0x02u : 0u) |
                             ((g_ra_pre_dir & 0x03u) << 2));
+
+    pre_seen = (uint8)((g_ra_pre_flag || g_ra_pre_slow_flag) ? 1u : 0u);
+    if (r->ra_phase != 3u)
+    {
+        if (pre_seen != 0u)
+        {
+            if (s_at_pre_seen_frames < 255u)
+                s_at_pre_seen_frames++;
+        }
+        else if (r->ra_phase == 0u && r->ra_flag == 0u)
+        {
+            s_at_pre_seen_frames = 0u;
+        }
+    }
+
+    turn_mark = 0u;
+    if (r->ra_phase == 3u && s_at_prev_phase != 3u)
+    {
+        turn_mark |= AT_TURN_MARK_HARD_ENTER;
+        s_at_yaw_start_seen = 0u;
+        s_at_duty_start_seen = 0u;
+        s_at_hard_enter_ip = r->ra_ip_row;
+        s_at_hard_enter_tick = r->pid_tick;
+        s_at_hard_pre_seen_frames = s_at_pre_seen_frames;
+        s_at_pre_seen_frames = 0u;
+    }
+
+    if (r->ra_phase == 3u)
+    {
+        progress_rate = r->yaw_rate_dps;
+        duty_diff = 0;
+        if (r->ra_dir == 1u)
+        {
+            progress_rate = (int16)(-progress_rate);
+            duty_diff = (int16)(r->duty_right - r->duty_left);
+        }
+        else if (r->ra_dir == 2u)
+        {
+            duty_diff = (int16)(r->duty_left - r->duty_right);
+        }
+
+        if (s_at_yaw_start_seen == 0u &&
+            progress_rate >= (int16)AT_YAW_START_RATE_DPS)
+        {
+            turn_mark |= AT_TURN_MARK_YAW_START;
+            s_at_yaw_start_seen = 1u;
+        }
+        if (s_at_duty_start_seen == 0u &&
+            duty_diff >= (int16)AT_DUTY_START_DIFF)
+        {
+            turn_mark |= AT_TURN_MARK_DUTY_START;
+            s_at_duty_start_seen = 1u;
+        }
+    }
+    else if (r->ra_phase == 5u &&
+             (r->ra_flag != 0u ||
+              pre_seen != 0u ||
+              r->ip_max_row >= RA_FIXED_HARD_ROW))
+    {
+        turn_mark |= AT_TURN_MARK_RECOVER_BLOCK;
+    }
+
+    r->turn_mark = turn_mark;
+    r->hard_enter_ip = s_at_hard_enter_ip;
+    r->hard_enter_tick = s_at_hard_enter_tick;
+    r->pre_seen_frames = (r->ra_phase == 3u) ?
+                         s_at_hard_pre_seen_frames :
+                         s_at_pre_seen_frames;
+
     if (r->ra_phase == 3u &&
         r->ra_hard_cnt >= 4u &&
         at_abs_i16(r->ra_outer_cmd) >= 1800 &&
@@ -361,6 +463,7 @@ void auto_tune_log_pid_tick(void)
             r->pre_detail |= 0x80u;
         }
     }
+    s_at_prev_phase = r->ra_phase;
 
     s_at_write = at_next_index(s_at_write);
     if (s_at_count < (uint16)AUTO_TUNE_LOG_CAPACITY)
