@@ -60,19 +60,11 @@
  *   div=0：不发送
  */
 
-#define UART0_DEBUG_ENABLE      0u          /* UART0调试总开关：1=开启，0=关闭 */
+#define UART0_DEBUG_ENABLE      1u          /* UART0调试总开关：1=开启，0=关闭 */
 #define UART0_IMAGE_DIV         5u          /* 二值化图像发送分频：每5帧发1帧（降低带宽） */
 #define UART0_EDGES_DIV         5u          /* 边线坐标发送分频：每5帧发1帧 */
 #define UART0_PARAMS_DIV        1u          /* TFT参数发送分频：每帧都发（数据量小） */
 #define UART0_TELEMETRY_DIV     1u          /* 遥测数据发送分频：每帧都发 */
-
-/* Runtime UART logging: keep lightweight packets while the car is running.
- * UART0 writes are blocking at 115200bps, so keep these dividers sparse. */
-#define UART0_RUN_ENABLE        1u
-#define UART0_RUN_IMAGE_DIV     0u
-#define UART0_RUN_EDGES_DIV     0u
-#define UART0_RUN_PARAMS_DIV    6u
-#define UART0_RUN_TELEMETRY_DIV 6u
 
 /* ========================================================================
  * 自动调参日志（AutoTune Log）配置
@@ -81,9 +73,9 @@
  * 用于离线分析PID参数效果，优化控制性能。
  */
 
-#define AUTO_TUNE_LOG_ENABLE    1          /* 自动调参日志开关：1=开启 */
-#define AUTO_TUNE_LOG_PID_DIV   8          /* 记录分频：每6个PID周期记录1次（约48ms） */
-#define AUTO_TUNE_LOG_CAPACITY  128        /* 环形缓冲区容量：512条记录（约24秒数据） */
+#define AUTO_TUNE_LOG_ENABLE    1u          /* 自动调参日志开关：1=开启 */
+#define AUTO_TUNE_LOG_PID_DIV   6u          /* 记录分频：每6个PID周期记录1次（约48ms） */
+#define AUTO_TUNE_LOG_CAPACITY  512u        /* 环形缓冲区容量：512条记录（约24秒数据） */
 #define AUTO_TUNE_DUMP_PER_PKT  4u          /* 每个UART包包含4条记录 */
 #define AUTO_TUNE_LIVE_ENABLE   0u          /* 实时发送开关：1=运行时也发送最新记录 */
 #define AUTO_TUNE_LIVE_DIV      32u         /* 实时发送分频：每32条记录发1条 */
