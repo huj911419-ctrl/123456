@@ -4255,15 +4255,6 @@ static void ra_output_recover_lost_drive(void)
     if (inner < 0.0f)
         inner = 0.0f;
 
-    if (s_ra_orig_flag < 3u &&
-        g_tf.valid_row_count <= 8u &&
-        yaw_progress >= 30.0f &&
-        yaw_progress < hard_yaw_target - 15.0f)
-    {
-        inner = -220.0f;
-        outer = 1500.0f;
-    }
-
     {
         float volt_scale = ra_voltage_comp_scale();
         outer *= volt_scale;
@@ -4731,6 +4722,7 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     }
 #endif
 
+    {
     if (s_ra_orig_flag < 3u &&
         g_tf.valid_row_count <= 8u &&
         yaw_progress >= 30.0f &&
@@ -4738,9 +4730,18 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     {
         inner = -220.0f;
         outer = 1500.0f;
+        if (s_ra_dir == 1u)
+        {
+            out_l = inner;
+            out_r = outer;
+        }
+        else
+        {
+            out_l = outer;
+            out_r = inner;
+        }
     }
 
-    {
         float volt_scale = ra_voltage_comp_scale();
         out_l *= volt_scale;
         out_r *= volt_scale;
