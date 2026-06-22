@@ -414,6 +414,8 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_SLOW_BEFORE_TURN_ROWS 38u        /* 转弯前行数 */
 #define RA_FAST_SLOW_MENU_MAX_ROW 38u       /* 高速时菜单SlwRow上限 */
 #define RA_SLOW_TO_HARD_FALLBACK_FRAMES 1u  /* SLOW到HARD回退帧数 */
+#define RA_SLOW_TO_APPROACH_FALLBACK_FRAMES 2u
+#define RA_COMPLEX_SLOW_TO_APPROACH_FALLBACK_FRAMES 3u
 #define RA_CURVE_SLOW_TO_APPROACH_FALLBACK_FRAMES 8u
 #define RA_CURVE_FALLBACK_VALID_ROWS 44u    /* 弯道回退有效行数 */
 #define RA_APPROACH_SPEED_PCT    55         /* APPROACH速度百分比 */
@@ -450,20 +452,20 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_COMPLEX_INNER_REVERSE_MAX_DUTY 320.0f /* 复杂内侧反转最大duty */
 #define RA_COMPLEX_PIVOT_OUTER_MAX_DUTY 1850.0f /* 复杂枢轴外侧最大duty */
 #define RA_FIXED_HARD_ROW_ENABLE 1u         /* 固定HARD行开关 */
-#define RA_FIXED_HARD_ROW        64u        /* 固定HARD行（直角） */
+#define RA_FIXED_HARD_ROW        58u        /* 固定HARD行（直角） */
 #define RA_FIXED_COMPLEX_HARD_ROW 68u       /* 固定复杂HARD行 */
 #define RA_DIRECT_TURN_ROW_OFFSET 0u        /* 直接转弯行偏移 */
 #define RA_COMPLEX_TURN_ROW_OFFSET 12u      /* 复杂转弯行偏移 */
-#define RA_FAST_TURN_ROW_ADVANCE 48u        /* 高速转弯行提前 */
-#define RA_FAST_TURN_ROW_ADVANCE_MAX 65u    /* 高速转弯行提前最大值 */
+#define RA_FAST_TURN_ROW_ADVANCE 0u        /* 高速转弯行提前 */
+#define RA_FAST_TURN_ROW_ADVANCE_MAX 0u    /* 高速转弯行提前最大值 */
 #define RA_FAST_TURN_ROW_ADVANCE_SPEED_END 1700
 #define RA_TURN_ROW_MIN         18u         /* 转弯行最小值 */
-#define RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX 3000 /* 高速预识别直角不立刻HARD */
+#define RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX 0 /* 高速预识别直角不立刻HARD */
 #define RA_ROUTE_PRE_HARD_ENABLE 0u         /* 路线预HARD开关 */
 #define RA_ROUTE_PRE_HARD_VALID_ROWS 35u    /* 路线预HARD有效行数 */
 #define RA_ROUTE_PRE_HARD_LOOKAHEAD_MIN 18  /* 路线预HARD最小前瞻误差 */
 #define RA_ROUTE_PRE_HARD_IP_ROW 55u        /* 路线预HARD拐点行 */
-#define RA_ROUTE_DIRECT_EARLY_ENABLE 1u
+#define RA_ROUTE_DIRECT_EARLY_ENABLE 0u
 #define RA_ROUTE_DIRECT_EARLY_FIRST_ONLY 1u
 #define RA_ROUTE_DIRECT_EARLY_VALID_ROWS_MIN 28u
 #define RA_ROUTE_DIRECT_EARLY_VALID_ROWS_MAX 44u
@@ -473,7 +475,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_ROUTE_DIRECT_EARLY_MIN_TICKS PID_MS_TO_TICKS(500u)
 #define RA_PRE_DIRECT_HARD_IP_ROW 24u       /* 预直接HARD最小拐点行 */
 #define RA_PRE_DIRECT_HARD_FRAMES 1u        /* 预直接HARD帧数 */
-#define RA_PRE_DIRECT_NO_IP_ENABLE 1u       /* allow strong pre-turn without IP row */
+#define RA_PRE_DIRECT_NO_IP_ENABLE 0u       /* allow strong pre-turn without IP row */
 #define RA_PRE_DIRECT_NO_IP_ROW 58u         /* equivalent row for no-IP pre-turn */
 #define RA_PRE_DIRECT_NO_IP_VALID_ROWS 38u  /* no-IP pre-turn max valid rows */
 #define RA_PRE_DIRECT_NO_IP_LA_MIN 2        /* no-IP pre-turn min lookahead */
@@ -494,11 +496,6 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_PRE_TURN_SPEED_END    2200       /* 预转弯速度终点 */
 #define RA_PRE_TURN_STEER_MAX    2200.0f    /* 预转弯最大转向 */
 #define RA_PRE_TURN_SLEW_MAX     900.0f     /* 预转弯最大变化率 */
-
-#define RA_LATE_APPROACH_SKIP_ROW_MARGIN 2u
-#define RA_SLOW_TO_APPROACH_FALLBACK_FRAMES 2u
-#define RA_COMPLEX_SLOW_TO_APPROACH_FALLBACK_FRAMES 3u
-#define RA_APPROACH_SPEED_PCT 55
 #define RA_PRE_TURN_ENABLE       1          /* 预转弯开关 */
 #define RA_PRE_TURN_STEER_GUARD_ENABLE 1u   /* 预转弯转向保护开关 */
 #define RA_PRE_TURN_NORMAL_STEER_PCT 100    /* 预转弯正常转向百分比 */

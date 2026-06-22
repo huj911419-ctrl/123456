@@ -684,12 +684,9 @@ static uint16 ra_slow_limit_for_speed(void)
 }
 static uint16 ra_approach_frames_for_speed(uint8 turn_row)
 {
-    uint16 frames = (ra_approach_frames <= 0) ? 0u : (uint16)ra_approach_frames;
+    uint16 frames = (ra_approach_frames < 1) ? 1u : (uint16)ra_approach_frames;
 
     (void)turn_row;
-
-    if (frames == 0u)
-        return 0u;
 
 #if defined(RA_FAST_SPEED_START) && defined(RA_FAST_APPROACH_FRAMES)
     if (s_ra_orig_flag < 3u && ra_speed_ref() >= RA_FAST_SPEED_START)
@@ -2933,7 +2930,7 @@ static uint8 ra_hard_exit_reason(uint8 direct_fast,
 
     if (line_ok &&
         s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES &&
-        yaw_progress >= RA_EXIT_FIND_YAW_DEG)
+        yaw_progress >= hard_yaw_target - 8.0f)
         return RA_EXIT_LINE;
 
     if (yaw_progress >= RA_EXIT_FORCE_YAW_DEG)
@@ -4493,8 +4490,7 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
                                 RA_COMPLEX_SLOW_TO_APPROACH_FALLBACK_FRAMES :
                                 RA_SLOW_TO_APPROACH_FALLBACK_FRAMES;
 
-        if (s_ra_ip_row >= turn_row ||
-            (s_ra_phase_cnt >= fallback_frames && s_ra_ip_row >= slow_row))
+        if (s_ra_ip_row >= turn_row)
         {
             s_ra_phase = RA_PH_APPROACH;
             s_ra_approach_cnt = 0u;
@@ -4506,12 +4502,6 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
     {
         uint16 approach_frames =
             ra_approach_frames_for_speed(ra_turn_row_for_speed());
-
-        if (approach_frames == 0u)
-        {
-            ra_enter_hard();
-            return 0u;
-        }
 
         if (s_ra_approach_cnt < approach_frames)
         {
