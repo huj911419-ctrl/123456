@@ -1043,6 +1043,13 @@ static float ra_curve_steer_assist(void)
 
     assist = RA_CURVE_ASSIST_MIN +
              (RA_CURVE_ASSIST_MAX - RA_CURVE_ASSIST_MIN) * speed_t;
+    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_ENTRY_REVERSE_FRAMES)
+    {
+        inner = -RA_DIRECT_ENTRY_REVERSE_DUTY;
+        if (outer > RA_DIRECT_ENTRY_OUTER_DUTY_MAX)
+            outer = RA_DIRECT_ENTRY_OUTER_DUTY_MAX;
+    }
+
     if (s_ra_orig_flag >= 3u)
     {
         float min_taper = (float)RA_COMPLEX_CURVE_ASSIST_LATE_MIN_PCT * 0.01f;
@@ -4254,6 +4261,15 @@ static void ra_output_recover_lost_drive(void)
         inner *= volt_scale;
     }
 
+    if (s_ra_orig_flag < 3u &&
+        g_tf.valid_row_count <= 8u &&
+        yaw_progress >= 30.0f &&
+        yaw_progress < hard_yaw_target - 15.0f)
+    {
+        inner = -220.0f;
+        outer = 1500.0f;
+    }
+
     if (s_ra_dir == 1u)
     {
         out_l = inner;
@@ -4649,6 +4665,13 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     if (inner > MAX_DUTY)
         inner = MAX_DUTY;
 
+    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_ENTRY_REVERSE_FRAMES)
+    {
+        inner = -RA_DIRECT_ENTRY_REVERSE_DUTY;
+        if (outer > RA_DIRECT_ENTRY_OUTER_DUTY_MAX)
+            outer = RA_DIRECT_ENTRY_OUTER_DUTY_MAX;
+    }
+
     if (s_ra_orig_flag >= 3u)
     {
         float inner_reverse = (float)ra_hard_inner *
@@ -4679,6 +4702,15 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
 
     if (outer > MAX_DUTY)
         outer = MAX_DUTY;
+
+    if (s_ra_orig_flag < 3u &&
+        g_tf.valid_row_count <= 8u &&
+        yaw_progress >= 30.0f &&
+        yaw_progress < hard_yaw_target - 15.0f)
+    {
+        inner = -220.0f;
+        outer = 1500.0f;
+    }
 
     if (s_ra_dir == 1u)
     {
@@ -4742,6 +4774,13 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
             out_r = inner_min;
     }
 
+    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_ENTRY_REVERSE_FRAMES)
+    {
+        inner = -RA_DIRECT_ENTRY_REVERSE_DUTY;
+        if (outer > RA_DIRECT_ENTRY_OUTER_DUTY_MAX)
+            outer = RA_DIRECT_ENTRY_OUTER_DUTY_MAX;
+    }
+
     if (s_ra_orig_flag >= 3u)
     {
         if (s_ra_dir == 1u)
@@ -4762,6 +4801,13 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         if (out_l < 0.0f) out_l = 0.0f;
         if (out_r < 0.0f) out_r = 0.0f;
     }
+    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_ENTRY_REVERSE_FRAMES)
+    {
+        inner = -RA_DIRECT_ENTRY_REVERSE_DUTY;
+        if (outer > RA_DIRECT_ENTRY_OUTER_DUTY_MAX)
+            outer = RA_DIRECT_ENTRY_OUTER_DUTY_MAX;
+    }
+
     if (s_ra_orig_flag >= 3u)
     {
         if (s_ra_dir == 1u)
