@@ -112,9 +112,12 @@ static void put_u16_be(uint8 *data, uint16 *idx, uint16 value)
 }
 
 /**
- * send_image_uart0 - 发送压缩图像 + 边线坐标 + TFT参数到电脑
+ * send_image_uart0_impl - 发送压缩图像 + 边线坐标 + TFT参数到电脑
  */
-void send_image_uart0(void)
+static void send_image_uart0_impl(uint16 image_div,
+                                  uint16 edges_div,
+                                  uint16 params_div,
+                                  uint16 telemetry_div)
 {
     uint8 param_data[PARAM_DATA_SIZE];
     uint8 telemetry_data[TELEMETRY_DATA_SIZE];
@@ -123,10 +126,10 @@ void send_image_uart0(void)
     uint8 byte_val = 0;
     static uint16 s_uart0_frame_count = 0u;
     uint16 frame_count = s_uart0_frame_count++;
-    uint8 send_image = uart0_div_hit(frame_count, (uint16)UART0_IMAGE_DIV);
-    uint8 send_edges = uart0_div_hit(frame_count, (uint16)UART0_EDGES_DIV);
-    uint8 send_params = uart0_div_hit(frame_count, (uint16)UART0_PARAMS_DIV);
-    uint8 send_telemetry = uart0_div_hit(frame_count, (uint16)UART0_TELEMETRY_DIV);
+    uint8 send_image = uart0_div_hit(frame_count, image_div);
+    uint8 send_edges = uart0_div_hit(frame_count, edges_div);
+    uint8 send_params = uart0_div_hit(frame_count, params_div);
+    uint8 send_telemetry = uart0_div_hit(frame_count, telemetry_div);
 
 #if !UART0_DEBUG_ENABLE
     return;
@@ -306,4 +309,22 @@ void send_image_uart0(void)
 
     send_uart_packet(FRAME_TYPE_TELEMETRY, telemetry_data, TELEMETRY_DATA_SIZE);
     }
+}
+
+void send_image_uart0(void)
+{
+    send_image_uart0_impl((uint16)UART0_IMAGE_DIV,
+                          (uint16)UART0_EDGES_DIV,
+                          (uint16)UART0_PARAMS_DIV,
+                          (uint16)UART0_TELEMETRY_DIV);
+}
+
+void send_image_uart0_runtime(void)
+{
+#if UART0_RUN_ENABLE
+    send_image_uart0_impl((uint16)UART0_RUN_IMAGE_DIV,
+                          (uint16)UART0_RUN_EDGES_DIV,
+                          (uint16)UART0_RUN_PARAMS_DIV,
+                          (uint16)UART0_RUN_TELEMETRY_DIV);
+#endif
 }

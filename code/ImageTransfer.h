@@ -18,8 +18,9 @@
  *   包4 - 遥测数据（60字节：PID状态、RA状态、路线信息、电压等）
  *
  * 分频系数由 App_Config.h 中的 UART0_*_DIV 宏控制。
- * 仅在 RACE_MODE=0 且静默模式关闭时有效。
+ * send_image_uart0_runtime() uses UART0_RUN_*_DIV during motor run.
  */
 void send_image_uart0(void);
+void send_image_uart0_runtime(void);
 
 #endif

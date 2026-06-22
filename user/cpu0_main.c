@@ -110,6 +110,7 @@ int core0_main(void)
         {
             race_control_process();
 #if !RACE_MODE
+            auto_tune_log_task();
             if (motor_enable == 0 || !run_quiet_active())
             {
                 ui_process_keys();
@@ -155,9 +156,12 @@ int core0_main(void)
 
         /* ---- 调试数据传输（非比赛模式） ---- */
 #if !RACE_MODE
-        /* 通过UART0发送图像、边线坐标、参数到PC调试软件 */
-        /* 静默模式或自动调参正在dump时跳过，避免串口冲突 */
-        if (motor_enable == 0 && !run_quiet_active() && !auto_tune_log_busy())
+        /* Runtime keeps lightweight UART logs; stopped debug can send full packets. */
+        if (motor_enable != 0)
+        {
+           send_image_uart0_runtime();
+        }
+        else if (!run_quiet_active() && !auto_tune_log_busy())
         {
            send_image_uart0();               /* 只有停车调试才发图传 */
         }

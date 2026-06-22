@@ -66,6 +66,14 @@
 #define UART0_PARAMS_DIV        1u          /* TFT参数发送分频：每帧都发（数据量小） */
 #define UART0_TELEMETRY_DIV     1u          /* 遥测数据发送分频：每帧都发 */
 
+/* Runtime UART logging: keep lightweight packets while the car is running.
+ * UART0 writes are blocking at 115200bps, so keep these dividers sparse. */
+#define UART0_RUN_ENABLE        1u
+#define UART0_RUN_IMAGE_DIV     0u
+#define UART0_RUN_EDGES_DIV     0u
+#define UART0_RUN_PARAMS_DIV    6u
+#define UART0_RUN_TELEMETRY_DIV 6u
+
 /* ========================================================================
  * 自动调参日志（AutoTune Log）配置
  * ========================================================================
