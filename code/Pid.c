@@ -4466,6 +4466,17 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
 
         if (s_ra_straight == 0u &&
             (s_ra_dir == 1u || s_ra_dir == 2u) &&
+            g_ra_pre_flag != 0u &&
+            g_ra_pre_dir == s_ra_dir &&
+            ra_speed_ref() <= RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX)
+        {
+            s_ra_phase = RA_PH_APPROACH;
+            s_ra_approach_cnt = 0u;
+            s_ra_phase_cnt = 0u;
+            s_speed_integral = 0.0f;
+        }
+        else if (s_ra_straight == 0u &&
+            (s_ra_dir == 1u || s_ra_dir == 2u) &&
             (uint16)s_ra_ip_row >= late_row)
         {
             s_ra_phase = RA_PH_APPROACH;
