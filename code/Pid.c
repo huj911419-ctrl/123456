@@ -3770,19 +3770,14 @@ static uint8 ra_intersection_start_ready(void)
             ra_pending_complex_clear();
             return 0u;
         }
-        if (#if RA_FIXED_HARD_ROW_ENABLE
+#if RA_FIXED_HARD_ROW_ENABLE
         if (ra_complex_predict_ready(ra_complex_row_now()) == 0u)
         {
             s_ra_complex_lost_match_cnt = 0u;
             return 0u;
         }
-        if (ra_complex_confidence_ready(0u))
-        {
-            s_ra_complex_lost_match_cnt = 0u;
-            return 1u;
-        }
 #endif
-        ra_pending_complex_start_ok((uint8)g_ra_flag))
+        if (ra_pending_complex_start_ok((uint8)g_ra_flag))
         {
             s_ra_complex_lost_match_cnt = 0u;
             return 1u;
