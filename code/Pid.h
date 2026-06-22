@@ -453,7 +453,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_COMPLEX_PIVOT_OUTER_MAX_DUTY 1850.0f /* 复杂枢轴外侧最大duty */
 #define RA_FIXED_HARD_ROW_ENABLE 1u         /* 固定HARD行开关 */
 #define RA_FIXED_HARD_ROW        28u        /* 固定HARD行（直角） */
-#define RA_FIXED_COMPLEX_HARD_ROW 68u       /* 固定复杂HARD行 */
+#define RA_FIXED_COMPLEX_HARD_ROW        58u       /* 固定复杂HARD行 */
 #define RA_DIRECT_TURN_ROW_OFFSET 0u        /* 直接转弯行偏移 */
 #define RA_COMPLEX_TURN_ROW_OFFSET 12u      /* 复杂转弯行偏移 */
 #define RA_FAST_TURN_ROW_ADVANCE 0u        /* 高速转弯行提前 */
@@ -556,7 +556,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_ROUTE_COMPLEX_PRE_IP_ROW 52u
 #define RA_PENDING_COMPLEX_HOLD_FRAMES 20u  /* 待定复杂保持帧数 */
 #define RA_PENDING_COMPLEX_BRIDGE_RECOVER_FRAMES 1u
-#define RA_PENDING_COMPLEX_IP_ROW 60u       /* 待定复杂拐点行 */
+#define RA_PENDING_COMPLEX_IP_ROW        56u       /* 待定复杂拐点行 */
 #define RA_PENDING_COMPLEX_VALID_ROWS 18u   /* 待定复杂有效行数 */
 #define RA_PENDING_COMPLEX_ERR_MAX 56       /* 待定复杂最大误差 */
 #define RA_PENDING_COMPLEX_LA_MAX 70        /* 待定复杂最大前瞻误差 */

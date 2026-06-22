@@ -292,13 +292,13 @@ extern volatile uint16 g_tf_white_count;    /* 白色像素计数 */
 #define INTER_COMPONENT_PRE_ERR_LIMIT 32          /* 组件预防护误差限制 */
 #define INTER_COMPONENT_PRE_LA_LIMIT 36           /* 组件预防护前瞻限制 */
 #define INTER_COMPONENT_PRE_TREND_LIMIT 36        /* 组件预防护趋势限制 */
-#define INTER_ROUTE_REMAP_IP_ROW 70u              /* 路线重映射拐点行 */
+#define INTER_ROUTE_REMAP_IP_ROW 60uu              /* 路线重映射拐点行 */
 #define INTER_ROUTE_REMAP_VALID_ROWS 30u          /* 路线重映射有效行数 */
-#define INTER_ROUTE_EARLY_IP_ROW 72u              /* 路线早期复杂拐点行 */
-#define INTER_ROUTE_EARLY_VALID_ROWS 34u          /* 路线早期有效行上限 */
-#define INTER_ROUTE_EARLY_LA_MIN 20               /* 路线早期前瞻最小变化 */
-#define INTER_ROUTE_EARLY_TREND_MIN 20            /* 路线早期趋势最小变化 */
-#define INTER_COMPLEX_ARM_IP_ROW 68u              /* 复杂臂拐点行 */
+#define INTER_ROUTE_EARLY_IP_ROW 60uu              /* 路线早期复杂拐点行 */
+#define INTER_ROUTE_EARLY_VALID_ROWS 48uu          /* 路线早期有效行上限 */
+#define INTER_ROUTE_EARLY_LA_MIN 12               /* 路线早期前瞻最小变化 */
+#define INTER_ROUTE_EARLY_TREND_MIN 12            /* 路线早期趋势最小变化 */
+#define INTER_COMPLEX_ARM_IP_ROW 58uu              /* 复杂臂拐点行 */
 #define INTER_SINGLE_EDGE_COMPONENT_ARM_IP_ROW 88u /* 单边组件臂拐点行 */
 
 /* ========================================================================
