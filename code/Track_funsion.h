@@ -376,7 +376,11 @@ typedef struct
 #define RA_PRE_ROUTE_STRAIGHT_ERR_MAX 16    /* 路线直行最大误差 */
 #define RA_PRE_ROUTE_STRAIGHT_LA_MAX 20     /* 路线直行最大前瞻误差 */
 #define RA_PRE_ROUTE_IP_ROW 30u             /* 路线拐点行 */
-#define RA_PRE_CONFIRM_FRAMES 1             /* 预检测确认帧数 */
+#if RACE_MODE
+#define RA_PRE_CONFIRM_FRAMES 1             /* race: 1 frame confirm */
+#else
+#define RA_PRE_CONFIRM_FRAMES 2             /* debug: 2 frame confirm */
+#endif             /* 预检测确认帧数 */
 #define RA_PRE_SLOW_OFF_FRAMES 4            /* 预减速关闭帧数 */
 
 /* ========================================================================

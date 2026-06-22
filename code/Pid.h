@@ -416,7 +416,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_SLOW_TO_HARD_FALLBACK_FRAMES 1u  /* SLOW到HARD回退帧数 */
 #define RA_CURVE_SLOW_TO_APPROACH_FALLBACK_FRAMES 8u
 #define RA_CURVE_FALLBACK_VALID_ROWS 44u    /* 弯道回退有效行数 */
-#define RA_APPROACH_SPEED_PCT    85         /* APPROACH速度百分比 */
+#define RA_APPROACH_SPEED_PCT    55         /* APPROACH速度百分比 */
 #define RA_HARD_INNER_DUTY       -60.0f     /* HARD内侧duty（反转） */
 #define RA_VOLT_COMP_ENABLE      1u         /* 电压补偿开关 */
 #define RA_VOLT_REF_X10          120u       /* 电压参考x10：12.0V */
@@ -484,7 +484,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_PRE_DIRECT_LEFT_STRAIGHT_ERR_MAX 18
 #define RA_PRE_DIRECT_LEFT_STRAIGHT_LA_MAX 22
 #define RA_LOW_TURN_ROW_DELAY    0u         /* 低速转弯行延迟 */
-#define RA_LATE_APPROACH_SKIP_ROW_MARGIN 6u
+#define RA_LATE_APPROACH_SKIP_ROW_MARGIN 2u
 #define RA_FAST_APPROACH_FRAMES  1u         /* 高速APPROACH帧数 */
 #define RA_LOW_APPROACH_FRAMES   1u         /* 低速APPROACH帧数 */
 #define RA_PRE_TURN_VALID_ROWS   12u        /* 预转弯有效行数 */
@@ -494,6 +494,11 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_PRE_TURN_SPEED_END    2200       /* 预转弯速度终点 */
 #define RA_PRE_TURN_STEER_MAX    2200.0f    /* 预转弯最大转向 */
 #define RA_PRE_TURN_SLEW_MAX     900.0f     /* 预转弯最大变化率 */
+
+#define RA_LATE_APPROACH_SKIP_ROW_MARGIN 2u
+#define RA_SLOW_TO_APPROACH_FALLBACK_FRAMES 2u
+#define RA_COMPLEX_SLOW_TO_APPROACH_FALLBACK_FRAMES 3u
+#define RA_APPROACH_SPEED_PCT 55
 #define RA_PRE_TURN_ENABLE       1          /* 预转弯开关 */
 #define RA_PRE_TURN_STEER_GUARD_ENABLE 1u   /* 预转弯转向保护开关 */
 #define RA_PRE_TURN_NORMAL_STEER_PCT 100    /* 预转弯正常转向百分比 */
