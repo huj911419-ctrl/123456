@@ -28,7 +28,7 @@
  *       - 菜单按键不响应（仅保留比赛按键）
  */
 #ifndef RACE_MODE
-#define RACE_MODE 1
+#define RACE_MODE 0
 #endif
 
 /* ========================================================================
@@ -82,7 +82,7 @@
  */
 
 #define AUTO_TUNE_LOG_ENABLE    1u          /* 自动调参日志开关：1=开启 */
-#define AUTO_TUNE_LOG_PID_DIV   1u          /* 记录分频：每6个PID周期记录1次（约48ms） */
+#define AUTO_TUNE_LOG_PID_DIV   4uu          /* 记录分频：每6个PID周期记录1次（约48ms） */
 #define AUTO_TUNE_LOG_CAPACITY  128u        /* 环形缓冲区容量：512条记录（约24秒数据） */
 #define AUTO_TUNE_DUMP_PER_PKT  4u          /* 每个UART包包含4条记录 */
 #define AUTO_TUNE_LIVE_ENABLE   0u          /* 实时发送开关：1=运行时也发送最新记录 */
