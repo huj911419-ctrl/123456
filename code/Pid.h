@@ -456,8 +456,8 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_FIXED_COMPLEX_HARD_ROW        58u       /* 固定复杂HARD行 */
 
 #define RA_COMPLEX_PREDICT_ENABLE 1u
-#define RA_COMPLEX_COMMIT_ROW 72u
-#define RA_COMPLEX_LEAD_FRAMES 4.0f
+#define RA_COMPLEX_COMMIT_ROW 78u
+#define RA_COMPLEX_LEAD_FRAMES 2.5f
 #define RA_COMPLEX_IP_V_MAX 14.0f
 #define RA_COMPLEX_FORCE_ROW 92u
 #define RA_COMPLEX_PREDICT_MIN_ROW 40u
@@ -468,10 +468,10 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_FAST_TURN_ROW_ADVANCE_SPEED_END 1500
 #define RA_TURN_ROW_MIN         18u         /* 转弯行最小值 */
 #define RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX 3000 /* 高速预识别直角不立刻HARD */
-#define RA_ROUTE_PRE_HARD_ENABLE 0u         /* 路线预HARD开关 */
-#define RA_ROUTE_PRE_HARD_VALID_ROWS 35u    /* 路线预HARD有效行数 */
-#define RA_ROUTE_PRE_HARD_LOOKAHEAD_MIN 18  /* 路线预HARD最小前瞻误差 */
-#define RA_ROUTE_PRE_HARD_IP_ROW 55u        /* 路线预HARD拐点行 */
+#define RA_ROUTE_PRE_HARD_ENABLE 1u         /* 路线预HARD开关 */
+#define RA_ROUTE_PRE_HARD_VALID_ROWS 52u    /* 路线预HARD有效行数 */
+#define RA_ROUTE_PRE_HARD_LOOKAHEAD_MIN 2  /* 路线预HARD最小前瞻误差 */
+#define RA_ROUTE_PRE_HARD_IP_ROW 10u        /* 路线预HARD拐点行 */
 #define RA_ROUTE_DIRECT_EARLY_ENABLE 0u
 #define RA_ROUTE_DIRECT_EARLY_FIRST_ONLY 1u
 #define RA_ROUTE_DIRECT_EARLY_VALID_ROWS_MIN 28u
@@ -522,7 +522,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_POST_RECOVER_COMPLEX_SPEED_PCT 76 /* 复杂后恢复速度百分比 */
 #define RA_POST_RECOVER_SPEED_PCT 95        /* 后恢复速度百分比 */
 #define RA_POST_RECOVER_STEER_PCT 100       /* 后恢复转向百分比 */
-#define RA_RECOVER_CHAIN_COMPLEX_MIN_FRAMES 1u /* 连续复杂路口最小恢复帧 */
+#define RA_RECOVER_CHAIN_COMPLEX_MIN_FRAMES 4u /* 连续复杂路口最小恢复帧 */
 #define RA_LOST_GUARD_FRAMES 16u            /* 丢线保护帧数 */
 #define RA_INTER_START_VALID_ROWS 35u       /* 路口起始有效行数 */
 #define RA_INTER_ROUTE_VALID_ROWS 16u       /* 路口路线有效行数 */
@@ -562,8 +562,8 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_ROUTE_COMPLEX_PRE_TREND_MIN 12
 #define RA_ROUTE_COMPLEX_PRE_IP_ROW 52u
 #define RA_PENDING_COMPLEX_HOLD_FRAMES 20u  /* 待定复杂保持帧数 */
-#define RA_PENDING_COMPLEX_BRIDGE_RECOVER_FRAMES 1u
-#define RA_PENDING_COMPLEX_IP_ROW        56u       /* 待定复杂拐点行 */
+#define RA_PENDING_COMPLEX_BRIDGE_RECOVER_FRAMES 4u
+#define RA_PENDING_COMPLEX_IP_ROW 64u       /* 待定复杂拐点行 */
 #define RA_PENDING_COMPLEX_VALID_ROWS 18u   /* 待定复杂有效行数 */
 #define RA_PENDING_COMPLEX_ERR_MAX 56       /* 待定复杂最大误差 */
 #define RA_PENDING_COMPLEX_LA_MAX 70        /* 待定复杂最大前瞻误差 */

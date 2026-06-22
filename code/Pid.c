@@ -3399,13 +3399,11 @@ static uint8 ra_try_start_route_pre_hard_flag(void)
 {
 #if RA_ROUTE_PRE_HARD_ENABLE
     uint8 flag = 0u;
-    uint8 consumed;
     uint8 dir_ok = 0u;
+    uint8 slow_ok = 0u;
     uint8 row_ok = 0u;
 
     if (s_ra_state != RA_ST_NONE || g_ra_flag != 0u)
-        return 0u;
-    if (ra_speed_ref() < RA_FAST_SPEED_START)
         return 0u;
     if (g_sym_component_flag != 0u)
         return 0u;
@@ -3417,37 +3415,38 @@ static uint8 ra_try_start_route_pre_hard_flag(void)
     else
         return 0u;
 
-    if (g_ra_pre_slow_flag == 0u && g_ra_pre_flag == 0u)
+    if (g_tf.line_lost != 0u)
         return 0u;
 
-    if (g_ra_pre_flag != 0u && g_ra_pre_dir != 0u)
-    {
-        if (g_ra_pre_dir != flag)
-            return 0u;
-        dir_ok = 1u;
-    }
-
-    if (g_ip_max_row >= RA_ROUTE_PRE_HARD_IP_ROW)
-        row_ok = 1u;
-
-    if (dir_ok == 0u && row_ok == 0u)
+    if (g_ra_pre_dir != 0u && g_ra_pre_dir != flag)
         return 0u;
 
-    if (g_tf.valid_row_count > RA_ROUTE_PRE_HARD_VALID_ROWS &&
-        row_ok == 0u &&
+    dir_ok = (g_ra_pre_flag != 0u && g_ra_pre_dir == flag) ? 1u : 0u;
+    slow_ok = (g_ra_pre_slow_flag != 0u &&
+               (g_ra_pre_dir == 0u || g_ra_pre_dir == flag)) ? 1u : 0u;
+    row_ok = (g_ip_max_row >= RA_ROUTE_PRE_HARD_IP_ROW) ? 1u : 0u;
+
+    if (dir_ok == 0u && slow_ok == 0u && row_ok == 0u)
+        return 0u;
+
+    if (row_ok == 0u &&
+        g_tf.valid_row_count > RA_ROUTE_PRE_HARD_VALID_ROWS &&
         abs_i16(g_tf.lookahead_error) < RA_ROUTE_PRE_HARD_LOOKAHEAD_MIN)
         return 0u;
 
     g_ra_flag = flag;
-    consumed = ra_try_start_direct_flag();
-    if (consumed)
-        return consumed;
+    (void)ra_try_start_direct_flag();
+
     if (s_ra_state == RA_ST_ACTIVE && s_ra_straight == 0u)
     {
-        s_ra_ip_row = ra_direct_fixed_turn_trigger_row();
+        s_ra_ip_row = (g_ip_max_row == 0u) ?
+                      RA_PRE_DIRECT_NO_IP_ROW :
+                      ra_direct_fixed_turn_trigger_row();
         ra_enter_hard();
         s_speed_integral = 0.0f;
     }
+
+    ra_pending_complex_clear();
     return 0u;
 #else
     return 0u;
@@ -3771,17 +3770,7 @@ static uint8 ra_intersection_start_ready(void)
             ra_pending_complex_clear();
             return 0u;
         }
-        if (ra_pending_complex_start_ok((uint8)g_ra_flag))
-        {
-            s_ra_complex_lost_match_cnt = 0u;
-            return 1u;
-        }
-        if (ra_complex_one_frame_ready())
-        {
-            s_ra_complex_lost_match_cnt = 0u;
-            return 1u;
-        }
-#if RA_FIXED_HARD_ROW_ENABLE
+        if (#if RA_FIXED_HARD_ROW_ENABLE
         if (ra_complex_predict_ready(ra_complex_row_now()) == 0u)
         {
             s_ra_complex_lost_match_cnt = 0u;
@@ -3793,6 +3782,17 @@ static uint8 ra_intersection_start_ready(void)
             return 1u;
         }
 #endif
+        ra_pending_complex_start_ok((uint8)g_ra_flag))
+        {
+            s_ra_complex_lost_match_cnt = 0u;
+            return 1u;
+        }
+        if (ra_complex_one_frame_ready())
+        {
+            s_ra_complex_lost_match_cnt = 0u;
+            return 1u;
+        }
+
         if (ra_complex_center_ready() &&
             ra_complex_confidence_ready(0u))
         {
@@ -4323,7 +4323,7 @@ static uint8 ra_handle_recover_phase(RaResult *r)
     if (keep_flag == 0u &&
         s_ra_pending_complex_cnt > 0u &&
         s_ra_recover_cnt >= ((s_ra_pending_complex_bridge != 0u) ?
-                             1u :
+                             RA_PENDING_COMPLEX_BRIDGE_RECOVER_FRAMES :
                              RA_RECOVER_CHAIN_COMPLEX_MIN_FRAMES) &&
         route_next_flag_is(s_ra_pending_complex_flag) &&
         (s_ra_pending_complex_bridge != 0u || recover_seen != 0u))
@@ -4470,6 +4470,13 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
             g_ra_pre_dir == s_ra_dir &&
             ra_speed_ref() <= RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX)
         {
+            if (s_ra_orig_flag < 3u)
+            {
+                s_ra_ip_row = ra_direct_fixed_turn_trigger_row();
+                ra_enter_hard();
+                s_speed_integral = 0.0f;
+                return 0u;
+            }
             s_ra_phase = RA_PH_APPROACH;
             s_ra_approach_cnt = 0u;
             s_ra_phase_cnt = 0u;
@@ -4501,6 +4508,13 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
 
         if (s_ra_ip_row >= turn_row)
         {
+            if (s_ra_orig_flag < 3u)
+            {
+                s_ra_ip_row = ra_direct_fixed_turn_trigger_row();
+                ra_enter_hard();
+                s_speed_integral = 0.0f;
+                return 0u;
+            }
             s_ra_phase = RA_PH_APPROACH;
             s_ra_approach_cnt = 0u;
             s_ra_phase_cnt = 0u;
@@ -4511,6 +4525,14 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
     {
         uint16 approach_frames =
             ra_approach_frames_for_speed(ra_turn_row_for_speed());
+
+        if (s_ra_orig_flag < 3u)
+        {
+            s_ra_ip_row = ra_direct_fixed_turn_trigger_row();
+            ra_enter_hard();
+            s_speed_integral = 0.0f;
+            return 0u;
+        }
 
         if (s_ra_approach_cnt < approach_frames)
         {
@@ -4831,6 +4853,16 @@ static void ra_apply_slow_scale(RaResult *r)
 static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状�机主�辑 */
 {
     RaResult r = { 0u, 0u, 1.0f };          /* 初�化：需要PID，不跳过，�度缩放100% */
+
+    if (s_ra_state == RA_ST_ACTIVE &&
+        s_ra_orig_flag >= 1u &&
+        s_ra_orig_flag <= 2u &&
+        s_ra_phase != RA_PH_RECOVER &&
+        g_ra_flag >= 3u &&
+        g_ra_flag <= 5u)
+    {
+        g_ra_flag = 0u;
+    }
 
     ra_pending_complex_update();
 
