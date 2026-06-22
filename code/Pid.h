@@ -452,7 +452,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_COMPLEX_INNER_REVERSE_MAX_DUTY 320.0f /* 复杂内侧反转最大duty */
 #define RA_COMPLEX_PIVOT_OUTER_MAX_DUTY 1850.0f /* 复杂枢轴外侧最大duty */
 #define RA_FIXED_HARD_ROW_ENABLE 1u         /* 固定HARD行开关 */
-#define RA_FIXED_HARD_ROW        24u        /* 固定HARD行（直角） */
+#define RA_FIXED_HARD_ROW        20u        /* 固定HARD行（直角） */
 #define RA_FIXED_COMPLEX_HARD_ROW        58u       /* 固定复杂HARD行 */
 
 #define RA_COMPLEX_PREDICT_ENABLE 1u
@@ -480,7 +480,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_ROUTE_DIRECT_EARLY_LA_MIN 2
 #define RA_ROUTE_DIRECT_EARLY_IP_ROW 56u
 #define RA_ROUTE_DIRECT_EARLY_MIN_TICKS PID_MS_TO_TICKS(500u)
-#define RA_PRE_DIRECT_HARD_IP_ROW 22u       /* 预直接HARD最小拐点行 */
+#define RA_PRE_DIRECT_HARD_IP_ROW 18u       /* 预直接HARD最小拐点行 */
 #define RA_PRE_DIRECT_HARD_FRAMES 1u        /* 预直接HARD帧数 */
 #define RA_PRE_DIRECT_NO_IP_ENABLE 1u       /* allow strong pre-turn without IP row */
 #define RA_PRE_DIRECT_NO_IP_ROW 28u         /* equivalent row for no-IP pre-turn */
