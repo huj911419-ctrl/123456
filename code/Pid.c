@@ -1945,7 +1945,8 @@ static void ra_enter_hard(void)             /* 进入HARD���阶�?*/
     if (s_ra_phase == RA_PH_HARD)           /* 已经在HARD阶� */
         return;                             /* 避免重�进� */
 
-    s_ra_phase = RA_PH_HARD;                /* 切换到HARD阶� */
+    s_ra_phase = RA_PH_HARD;
+    s_ra_yaw_base = normalize_angle(yaw_angle);                /* 切换到HARD阶� */
     s_ra_phase_cnt = 0u;                    /* 阶��数清零 */
     s_ra_hard_cnt = 0u;                     /* HARD帧�数清�?*/
     s_ra_exit_good_cnt = 0u;                /* �出确认�数清�?*/
@@ -3335,7 +3336,7 @@ static uint8 ra_try_start_expected_after_recover(void)
         return 0u;
 
     expected = route_next_expected_flag();
-    return ra_start_expected_route_now(expected, 1u);
+    return ra_start_expected_route_now(expected, 0u);
 }
 
 static uint8 ra_try_start_direct_flag(void);

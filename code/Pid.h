@@ -496,7 +496,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_PRE_TURN_SPEED_END    2200       /* 预转弯速度终点 */
 #define RA_PRE_TURN_STEER_MAX    2200.0f    /* 预转弯最大转向 */
 #define RA_PRE_TURN_SLEW_MAX     900.0f     /* 预转弯最大变化率 */
-#define RA_PRE_TURN_ENABLE       1          /* 预转弯开关 */
+#define RA_PRE_TURN_ENABLE       0          /* 预转弯开关 */
 #define RA_PRE_TURN_STEER_GUARD_ENABLE 1u   /* 预转弯转向保护开关 */
 #define RA_PRE_TURN_NORMAL_STEER_PCT 100    /* 预转弯正常转向百分比 */
 #define RA_PRE_TURN_GUARD_STEER_MIN 0.0f    /* 预转弯保护最小转向 */
