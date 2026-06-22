@@ -1,0 +1,32 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 262,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 19,
+    "ra_hard_outer": 1500,
+    "ra_hard_yaw": 70
+  },
+  "analysis": [
+    "records=262 duration=3000ms overflow=0 dt_min/max=8/32ms",
+    "err avg/max=17.6/82 lookahead avg/max=30.9/84 valid_rows min=0",
+    "time max: tf=9444us inter=4261us, avg_speed_lag=1001.9",
+    "line_lost samples=33, ra_pre samples=78, pre_dir=78, pre_slow=78, sym_component samples=22",
+    "turn_segments=2",
+    "turn#1 R t=664->1448ms route=0 ip=66 slow/turn=12/18 ra_yaw_max=125.8 hard=37 lock=0 rec=60 target=70.0 outer=1680 yaw_rate_max=483 exit=coast stall=0/0",
+    "  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#2 R t=2160->3032ms route=1 ip=60 slow/turn=12/18 ra_yaw_max=3.0 hard=55 lock=0 rec=53 target=70.0 outer=1620 yaw_rate_max=134 exit=emergency stall=0/0",
+    "  WARN turn#2: yaw too small, likely exits early or turn force is not enough.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 262
+}

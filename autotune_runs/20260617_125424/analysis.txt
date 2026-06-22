@@ -1,0 +1,17 @@
+records=508 duration=5904ms overflow=1 dt_min/max=8/40ms
+err avg/max=22.1/88 lookahead avg/max=8.7/64 valid_rows min=0
+time max: tf=10200us inter=4173us, avg_speed_lag=1111.5
+line_lost samples=177, ra_pre samples=287, pre_dir=287, pre_slow=153, sym_component samples=36
+turn_segments=4
+turn#1 R t=1232->1288ms route=0 ip=102 slow/turn=70/70 ra_yaw_max=65.9 hard=7 lock=0 rec=1 target=80.0 outer=1453 yaw_rate_max=442 exit=coast stall=0/0
+  WARN turn#1: yaw too small, likely exits early or turn force is not enough.
+turn#2 R t=1400->1760ms route=1 ip=64 slow/turn=70/70 ra_yaw_max=74.6 hard=31 lock=0 rec=7 target=80.0 outer=1500 yaw_rate_max=407 exit=coast stall=0/0
+turn#3 L t=2456->3016ms route=2 ip=74 slow/turn=70/70 ra_yaw_max=62.3 hard=45 lock=0 rec=19 target=80.0 outer=1494 yaw_rate_max=310 exit=emergency stall=0/0
+  WARN turn#3: hard phase still logged coarser than PID tick.
+  WARN turn#3: yaw too small, likely exits early or turn force is not enough.
+turn#4 L t=3400->3912ms route=3 ip=40 slow/turn=70/70 ra_yaw_max=74.0 hard=40 lock=0 rec=19 target=80.0 outer=1500 yaw_rate_max=336 exit=coast stall=0/0
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.
+WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run.

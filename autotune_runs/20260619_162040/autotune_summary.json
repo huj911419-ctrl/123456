@@ -1,0 +1,34 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 768,
+    "overflow": 1,
+    "pid_period_ms": 8,
+    "sample_period_ms": 8,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 80
+  },
+  "analysis": [
+    "records=768 duration=6136ms overflow=1 dt_min/max=8/8ms",
+    "err avg/max=11.4/80 lookahead avg/max=4.8/74 valid_rows min=0",
+    "time max: tf=10004us inter=3859us, avg_speed_lag=1078.1",
+    "line_lost samples=311, ra_pre samples=143, pre_dir=143, pre_slow=113, sym_component samples=61",
+    "turn_segments=4",
+    "turn#1 R t=760->1080ms route=0 ip=70 slow/turn=70/82 ra_yaw_max=98.9 hard=30 lock=0 rec=8 target=80.0 outer=2741 yaw_rate_max=414 exit=yaw stall=0/0",
+    "  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#2 R t=1096->1344ms route=1 ip=70 slow/turn=70/94 ra_yaw_max=80.7 hard=28 lock=0 rec=1 target=80.0 outer=2651 yaw_rate_max=409 exit=line stall=0/0",
+    "turn#3 L t=1800->2032ms route=2 ip=72 slow/turn=70/82 ra_yaw_max=82.1 hard=26 lock=0 rec=1 target=80.0 outer=2741 yaw_rate_max=476 exit=line stall=0/0",
+    "turn#4 L t=2200->2464ms route=3 ip=66 slow/turn=70/94 ra_yaw_max=78.9 hard=27 lock=0 rec=1 target=80.0 outer=2574 yaw_rate_max=412 exit=line stall=0/0",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more.",
+    "WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run."
+  ],
+  "record_count": 768
+}

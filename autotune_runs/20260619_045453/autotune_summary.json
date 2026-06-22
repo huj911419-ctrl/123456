@@ -1,0 +1,38 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 768,
+    "overflow": 1,
+    "pid_period_ms": 8,
+    "sample_period_ms": 8,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 80
+  },
+  "analysis": [
+    "records=768 duration=6136ms overflow=1 dt_min/max=8/8ms",
+    "err avg/max=8.5/84 lookahead avg/max=6.4/60 valid_rows min=0",
+    "time max: tf=10659us inter=4295us, avg_speed_lag=693.9",
+    "line_lost samples=335, ra_pre samples=119, pre_dir=117, pre_slow=99, sym_component samples=76",
+    "turn_stall samples=4, wheel_stall samples=0",
+    "turn_segments=4",
+    "turn#1 L t=2000->2288ms route=2 ip=74 slow/turn=70/12 ra_yaw_max=98.6 hard=27 lock=0 rec=8 target=80.0 outer=2860 yaw_rate_max=463 exit=yaw stall=0/0",
+    "  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#2 L t=2440->2704ms route=3 ip=68 slow/turn=70/24 ra_yaw_max=80.3 hard=31 lock=0 rec=1 target=80.0 outer=2686 yaw_rate_max=387 exit=line stall=0/0",
+    "turn#3 R t=3120->3416ms route=4 ip=56 slow/turn=70/24 ra_yaw_max=78.3 hard=35 lock=0 rec=1 target=80.0 outer=2686 yaw_rate_max=377 exit=line stall=2/0",
+    "  WARN turn#3: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "turn#4 R t=3624->3976ms route=5 ip=68 slow/turn=70/24 ra_yaw_max=97.1 hard=35 lock=0 rec=8 target=80.0 outer=2686 yaw_rate_max=381 exit=yaw stall=2/0",
+    "  WARN turn#4: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "  WARN turn#4: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more.",
+    "WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run."
+  ],
+  "record_count": 768
+}

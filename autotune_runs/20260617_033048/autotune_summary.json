@@ -1,0 +1,38 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 378,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 280,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1660,
+    "ra_hard_yaw": 80
+  },
+  "analysis": [
+    "records=378 duration=4936ms overflow=0 dt_min/max=8/32ms",
+    "err avg/max=29.7/88 lookahead avg/max=18.3/84 valid_rows min=0",
+    "time max: tf=10062us inter=4590us, avg_speed_lag=844.6",
+    "line_lost samples=45, ra_pre samples=213, pre_dir=213, pre_slow=188, sym_component samples=44",
+    "turn_stall samples=4, wheel_stall samples=0",
+    "turn_segments=5",
+    "turn#1 R t=832->1104ms route=0 ip=70 slow/turn=70/80 ra_yaw_max=73.9 hard=31 lock=0 rec=1 target=80.0 outer=1859 yaw_rate_max=594 exit=coast stall=4/0",
+    "  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "turn#2 R t=1296->1640ms route=1 ip=68 slow/turn=70/80 ra_yaw_max=98.4 hard=26 lock=0 rec=11 target=80.0 outer=1660 yaw_rate_max=494 exit=coast stall=0/0",
+    "  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#3 L t=1976->2248ms route=2 ip=74 slow/turn=70/80 ra_yaw_max=93.6 hard=23 lock=0 rec=9 target=80.0 outer=1859 yaw_rate_max=540 exit=coast stall=0/0",
+    "  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#4 L t=2512->3088ms route=3 ip=62 slow/turn=70/80 ra_yaw_max=73.2 hard=55 lock=0 rec=11 target=80.0 outer=1660 yaw_rate_max=402 exit=emergency stall=0/0",
+    "turn#5 R t=3312->3720ms route=4 ip=76 slow/turn=70/80 ra_yaw_max=93.7 hard=36 lock=0 rec=11 target=80.0 outer=1660 yaw_rate_max=572 exit=coast stall=0/0",
+    "  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 378
+}

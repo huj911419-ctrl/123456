@@ -1,0 +1,34 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 241,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 84
+  },
+  "analysis": [
+    "records=241 duration=4808ms overflow=0 dt_min/max=8/32ms",
+    "err avg/max=11.1/78 lookahead avg/max=7.8/74 valid_rows min=0",
+    "time max: tf=10021us inter=4282us, avg_speed_lag=812.6",
+    "line_lost samples=131, ra_pre samples=65, pre_dir=65, pre_slow=59, sym_component samples=12",
+    "turn_stall samples=15, wheel_stall samples=7",
+    "turn_segments=2",
+    "turn#1 R t=568->856ms route=0 ip=80 slow/turn=80/112 ra_yaw_max=103.2 hard=26 lock=0 rec=8 target=84.0 outer=3129 yaw_rate_max=453 exit=yaw stall=0/0",
+    "  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#2 R t=1864->2312ms route=1 ip=88 slow/turn=92/124 ra_yaw_max=46.4 hard=41 lock=2 rec=8 target=84.0 outer=3019 yaw_rate_max=373 exit=emergency stall=15/7",
+    "  WARN turn#2: yaw too small, likely exits early or turn force is not enough.",
+    "  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 241
+}

@@ -1,0 +1,14 @@
+records=314 duration=4224ms overflow=0 dt_min/max=8/32ms
+err avg/max=16.4/82 lookahead avg/max=11.2/60 valid_rows min=0
+time max: tf=10086us inter=3748us, avg_speed_lag=1151.1
+line_lost samples=140, ra_pre samples=110, pre_dir=98, pre_slow=109, sym_component samples=12
+turn_segments=4
+turn#1 R t=912->1176ms route=0 ip=74 slow/turn=70/80 ra_yaw_max=84.4 hard=26 lock=0 rec=5 target=80.0 outer=1660 yaw_rate_max=423 exit=coast stall=0/0
+turn#2 R t=1432->1752ms route=1 ip=100 slow/turn=70/80 ra_yaw_max=92.5 hard=26 lock=0 rec=11 target=80.0 outer=1577 yaw_rate_max=422 exit=coast stall=0/0
+  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#3 L t=2464->2776ms route=2 ip=84 slow/turn=70/80 ra_yaw_max=85.5 hard=26 lock=0 rec=11 target=80.0 outer=1660 yaw_rate_max=423 exit=coast stall=0/0
+turn#4 L t=3528->4256ms route=3 ip=60 slow/turn=70/80 ra_yaw_max=0.0 hard=0 lock=0 rec=0 target=0.0 outer=0 yaw_rate_max=51 exit=none stall=0/0
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

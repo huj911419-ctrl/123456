@@ -1,0 +1,36 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 512,
+    "overflow": 1,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 80
+  },
+  "analysis": [
+    "records=512 duration=5552ms overflow=1 dt_min/max=8/32ms",
+    "err avg/max=8.9/76 lookahead avg/max=5.6/74 valid_rows min=0",
+    "time max: tf=9765us inter=3701us, avg_speed_lag=741.9",
+    "line_lost samples=307, ra_pre samples=85, pre_dir=85, pre_slow=81, sym_component samples=34",
+    "turn_segments=4",
+    "turn#1 R t=792->1096ms route=0 ip=78 slow/turn=70/82 ra_yaw_max=99.4 hard=28 lock=0 rec=8 target=80.0 outer=2525 yaw_rate_max=418 exit=yaw stall=0/0",
+    "  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#2 R t=1112->1376ms route=1 ip=70 slow/turn=70/94 ra_yaw_max=90.6 hard=27 lock=0 rec=4 target=80.0 outer=2622 yaw_rate_max=430 exit=yaw stall=0/0",
+    "  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#3 L t=1768->2048ms route=2 ip=78 slow/turn=70/82 ra_yaw_max=102.5 hard=25 lock=0 rec=8 target=80.0 outer=2525 yaw_rate_max=461 exit=yaw stall=0/0",
+    "  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#4 L t=2072->2392ms route=3 ip=44 slow/turn=70/94 ra_yaw_max=79.5 hard=25 lock=0 rec=1 target=80.0 outer=2528 yaw_rate_max=423 exit=line stall=0/0",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more.",
+    "WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run."
+  ],
+  "record_count": 512
+}

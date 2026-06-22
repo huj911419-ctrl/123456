@@ -1,0 +1,31 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 512,
+    "overflow": 1,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 80
+  },
+  "analysis": [
+    "records=512 duration=5264ms overflow=1 dt_min/max=8/32ms",
+    "err avg/max=4.9/76 lookahead avg/max=3.9/80 valid_rows min=0",
+    "time max: tf=9490us inter=3871us, avg_speed_lag=486.7",
+    "line_lost samples=410, ra_pre samples=30, pre_dir=30, pre_slow=25, sym_component samples=18",
+    "turn_segments=2",
+    "turn#1 L t=1992->2096ms route=2 ip=106 slow/turn=70/82 ra_yaw_max=102.7 hard=6 lock=0 rec=8 target=80.0 outer=1994 yaw_rate_max=441 exit=yaw stall=0/0",
+    "  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#2 L t=2136->2464ms route=3 ip=50 slow/turn=70/94 ra_yaw_max=78.3 hard=23 lock=0 rec=1 target=80.0 outer=2528 yaw_rate_max=405 exit=line stall=0/0",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more.",
+    "WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run."
+  ],
+  "record_count": 512
+}

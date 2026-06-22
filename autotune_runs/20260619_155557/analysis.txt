@@ -1,0 +1,25 @@
+records=768 duration=6136ms overflow=1 dt_min/max=8/8ms
+err avg/max=19.7/90 lookahead avg/max=11.6/80 valid_rows min=0
+time max: tf=9894us inter=4991us, avg_speed_lag=928.2
+line_lost samples=25, ra_pre samples=216, pre_dir=214, pre_slow=203, sym_component samples=100
+turn_stall samples=3, wheel_stall samples=0
+turn_segments=6
+turn#1 L t=5600->5672ms route=8 ip=96 slow/turn=70/14 ra_yaw_max=88.4 hard=6 lock=0 rec=4 target=80.0 outer=1914 yaw_rate_max=404 exit=yaw stall=0/0
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 L t=5880->6232ms route=9 ip=70 slow/turn=70/14 ra_yaw_max=92.7 hard=36 lock=2 rec=5 target=80.0 outer=2511 yaw_rate_max=435 exit=timeout stall=2/0
+  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#3 R t=7280->7616ms route=11 ip=66 slow/turn=70/14 ra_yaw_max=93.7 hard=33 lock=0 rec=8 target=80.0 outer=2511 yaw_rate_max=381 exit=yaw stall=1/0
+  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#3: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#4 R t=7880->8152ms route=12 ip=108 slow/turn=70/2 ra_yaw_max=96.0 hard=25 lock=0 rec=8 target=80.0 outer=2674 yaw_rate_max=456 exit=yaw stall=0/0
+  WARN turn#4: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#5 R t=9512->9784ms route=13 ip=86 slow/turn=70/2 ra_yaw_max=89.7 hard=28 lock=0 rec=5 target=80.0 outer=2674 yaw_rate_max=431 exit=line stall=0/0
+  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#6 R t=10384->10648ms route=14 ip=94 slow/turn=70/2 ra_yaw_max=92.6 hard=26 lock=0 rec=6 target=80.0 outer=2603 yaw_rate_max=448 exit=line stall=0/0
+  WARN turn#6: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.
+WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run.

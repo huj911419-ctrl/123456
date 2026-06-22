@@ -1,0 +1,29 @@
+records=512 duration=7384ms overflow=1 dt_min/max=8/32ms
+err avg/max=28.3/86 lookahead avg/max=16.2/86 valid_rows min=0
+time max: tf=10172us inter=5529us, avg_speed_lag=1117.6
+line_lost samples=97, ra_pre samples=238, pre_dir=220, pre_slow=202, sym_component samples=48
+turn_stall samples=53, wheel_stall samples=43
+turn_segments=8
+turn#1 R t=5840->6168ms route=6 ip=76 slow/turn=70/84 ra_yaw_max=96.7 hard=31 lock=0 rec=8 target=80.0 outer=3099 yaw_rate_max=407 exit=yaw stall=0/0
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 L t=6344->6592ms route=7 ip=60 slow/turn=70/84 ra_yaw_max=91.1 hard=23 lock=0 rec=4 target=80.0 outer=2965 yaw_rate_max=556 exit=line stall=0/0
+  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#3 L t=7376->7664ms route=8 ip=70 slow/turn=70/84 ra_yaw_max=99.6 hard=26 lock=0 rec=8 target=80.0 outer=3099 yaw_rate_max=463 exit=yaw stall=0/0
+  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#4 L t=7936->8192ms route=9 ip=66 slow/turn=70/84 ra_yaw_max=86.1 hard=25 lock=0 rec=2 target=80.0 outer=3080 yaw_rate_max=473 exit=line stall=0/0
+turn#5 R t=9800->10144ms route=11 ip=68 slow/turn=70/84 ra_yaw_max=97.2 hard=31 lock=0 rec=8 target=80.0 outer=3099 yaw_rate_max=414 exit=yaw stall=1/0
+  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#5: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#6 R t=10216->10464ms route=12 ip=110 slow/turn=70/72 ra_yaw_max=97.1 hard=22 lock=0 rec=8 target=80.0 outer=3394 yaw_rate_max=523 exit=yaw stall=0/0
+  WARN turn#6: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#7 R t=12320->12736ms route=13 ip=78 slow/turn=70/72 ra_yaw_max=8.2 hard=41 lock=2 rec=8 target=80.0 outer=3267 yaw_rate_max=276 exit=emergency stall=37/28
+  WARN turn#7: yaw too small, likely exits early or turn force is not enough.
+  WARN turn#7: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#8 R t=12784->12936ms route=14 ip=84 slow/turn=70/72 ra_yaw_max=1.9 hard=18 lock=0 rec=0 target=80.0 outer=3267 yaw_rate_max=23 exit=none stall=15/15
+  WARN turn#8: yaw too small, likely exits early or turn force is not enough.
+  WARN turn#8: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.
+WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run.

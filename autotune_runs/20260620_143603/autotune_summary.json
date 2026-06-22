@@ -1,0 +1,38 @@
+{
+  "summary": {
+    "version": 3,
+    "record_size": 72,
+    "count": 512,
+    "overflow": 1,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 90
+  },
+  "analysis": [
+    "records=512 duration=5488ms overflow=1 dt_min/max=8/32ms",
+    "err avg/max=15.9/82 lookahead avg/max=11.0/84 valid_rows min=0",
+    "time max: tf=9785us inter=4749us, avg_speed_lag=557.1",
+    "line_lost samples=223, ra_pre samples=162, pre_dir=160, pre_slow=156, sym_component samples=34",
+    "turn_stall samples=3, wheel_stall samples=0",
+    "turn_segments=5",
+    "turn#1 L t=5480->5696ms route=9 ip=78 slow/turn=70/70 ra_yaw_max=84.5 hard=27 lock=0 rec=1 target=90.0 outer=1850 yaw_rate_max=502 exit=line stall=0/0 hard_ip/t=78/5480 yaw_start=5512 duty_start=5480 pre_frames=5 rec_block=1",
+    "turn#2 R t=6752->7064ms route=11 ip=80 slow/turn=70/70 ra_yaw_max=109.7 hard=33 lock=0 rec=7 target=90.0 outer=1850 yaw_rate_max=464 exit=yaw stall=1/0 hard_ip/t=80/6752 yaw_start=6800 duty_start=6752 pre_frames=0 rec_block=2",
+    "  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "turn#3 R t=7240->7624ms route=12 ip=70 slow/turn=70/70 ra_yaw_max=98.0 hard=36 lock=5 rec=8 target=90.0 outer=1991 yaw_rate_max=396 exit=timeout stall=0/0 hard_ip/t=70/7240 yaw_start=7280 duty_start=7240 pre_frames=4 rec_block=0",
+    "turn#4 R t=9232->9528ms route=13 ip=70 slow/turn=70/70 ra_yaw_max=91.7 hard=30 lock=0 rec=8 target=90.0 outer=1991 yaw_rate_max=403 exit=line stall=0/0 hard_ip/t=70/9232 yaw_start=9264 duty_start=9232 pre_frames=5 rec_block=0",
+    "turn#5 R t=9744->10176ms route=14 ip=70 slow/turn=70/70 ra_yaw_max=88.2 hard=38 lock=11 rec=6 target=90.0 outer=1991 yaw_rate_max=388 exit=timeout stall=2/0 hard_ip/t=70/9744 yaw_start=9800 duty_start=9744 pre_frames=4 rec_block=0",
+    "  WARN turn#5: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more.",
+    "WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run."
+  ],
+  "record_count": 512
+}

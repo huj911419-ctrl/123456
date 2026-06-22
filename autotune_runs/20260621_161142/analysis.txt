@@ -1,0 +1,11 @@
+records=512 duration=4088ms overflow=1 dt_min/max=8/8ms
+err avg/max=4.2/48 lookahead avg/max=3.8/54 valid_rows min=0
+time max: tf=9765us inter=4691us, avg_speed_lag=688.7
+battery_x10 min/max=115/116 (11.5V..11.6V)
+line_lost samples=364, ra_pre samples=33, pre_dir=33, pre_slow=0, sym_component samples=2
+turn_segments=0
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.
+WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run.

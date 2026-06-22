@@ -1,0 +1,36 @@
+{
+  "summary": {
+    "version": 3,
+    "record_size": 72,
+    "count": 353,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 90
+  },
+  "analysis": [
+    "records=353 duration=4144ms overflow=0 dt_min/max=8/32ms",
+    "err avg/max=8.3/76 lookahead avg/max=10.0/80 valid_rows min=0",
+    "time max: tf=9976us inter=6076us, avg_speed_lag=512.2",
+    "line_lost samples=187, ra_pre samples=87, pre_dir=87, pre_slow=83, sym_component samples=26",
+    "turn_stall samples=1, wheel_stall samples=0",
+    "turn_segments=4",
+    "turn#1 R t=664->928ms route=0 ip=70 slow/turn=70/70 ra_yaw_max=78.7 hard=33 lock=0 rec=1 target=90.0 outer=1951 yaw_rate_max=400 exit=line stall=0/0 hard_ip/t=70/664 yaw_start=704 duty_start=664 pre_frames=4 rec_block=0",
+    "  WARN turn#1: yaw too small, likely exits early or turn force is not enough.",
+    "turn#2 R t=1376->1640ms route=1 ip=78 slow/turn=70/70 ra_yaw_max=99.2 hard=31 lock=0 rec=3 target=90.0 outer=1850 yaw_rate_max=495 exit=yaw stall=0/0 hard_ip/t=78/1376 yaw_start=1408 duty_start=1376 pre_frames=0 rec_block=1",
+    "  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#3 L t=2048->2312ms route=2 ip=52 slow/turn=70/70 ra_yaw_max=80.3 hard=30 lock=0 rec=1 target=90.0 outer=1990 yaw_rate_max=408 exit=line stall=0/0 hard_ip/t=106/2072 yaw_start=2104 duty_start=2072 pre_frames=0 rec_block=1",
+    "turn#4 L t=2632->2952ms route=3 ip=72 slow/turn=70/70 ra_yaw_max=109.8 hard=33 lock=0 rec=8 target=90.0 outer=1850 yaw_rate_max=470 exit=yaw stall=1/0 hard_ip/t=72/2632 yaw_start=2688 duty_start=2632 pre_frames=0 rec_block=1",
+    "  WARN turn#4: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "  WARN turn#4: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 353
+}

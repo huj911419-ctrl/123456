@@ -1,0 +1,42 @@
+{
+  "summary": {
+    "version": 3,
+    "record_size": 72,
+    "count": 512,
+    "overflow": 1,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 90
+  },
+  "analysis": [
+    "records=496 duration=4632ms overflow=1 dt_min/max=8/1160ms",
+    "err avg/max=8.3/80 lookahead avg/max=7.0/66 valid_rows min=0",
+    "time max: tf=65520us inter=65520us, avg_speed_lag=429.9",
+    "line_lost samples=365, ra_pre samples=102, pre_dir=90, pre_slow=91, sym_component samples=23",
+    "turn_stall samples=1, wheel_stall samples=0",
+    "turn_segments=6",
+    "turn#1 R t=744->816ms route=0 ip=70 slow/turn=70/70 ra_yaw_max=50.1 hard=10 lock=0 rec=0 target=90.0 outer=1924 yaw_rate_max=367 exit=none stall=0/0 hard_ip/t=70/640 yaw_start=-1 duty_start=-1 pre_frames=4 rec_block=0",
+    "  WARN turn#1: yaw too small, likely exits early or turn force is not enough.",
+    "turn#2 R t=1352->1656ms route=1 ip=92 slow/turn=70/70 ra_yaw_max=110.1 hard=32 lock=0 rec=7 target=90.0 outer=1850 yaw_rate_max=461 exit=yaw stall=0/0 hard_ip/t=92/1352 yaw_start=1392 duty_start=1352 pre_frames=0 rec_block=2",
+    "  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#3 L t=1904->2272ms route=2 ip=70 slow/turn=70/70 ra_yaw_max=103.6 hard=33 lock=6 rec=8 target=90.0 outer=2004 yaw_rate_max=410 exit=timeout stall=0/0 hard_ip/t=70/1904 yaw_start=1936 duty_start=1904 pre_frames=7 rec_block=0",
+    "  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#4 L t=2408->2688ms route=3 ip=78 slow/turn=70/70 ra_yaw_max=107.8 hard=28 lock=0 rec=8 target=90.0 outer=1850 yaw_rate_max=520 exit=yaw stall=0/0 hard_ip/t=78/2408 yaw_start=2440 duty_start=2408 pre_frames=0 rec_block=5",
+    "  WARN turn#4: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#5 R t=2752->3024ms route=4 ip=90 slow/turn=70/70 ra_yaw_max=109.8 hard=27 lock=0 rec=8 target=90.0 outer=1850 yaw_rate_max=494 exit=yaw stall=0/0 hard_ip/t=90/2752 yaw_start=2752 duty_start=2752 pre_frames=0 rec_block=2",
+    "  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#6 R t=4024->4312ms route=5 ip=70 slow/turn=70/70 ra_yaw_max=107.8 hard=29 lock=0 rec=8 target=90.0 outer=1850 yaw_rate_max=499 exit=yaw stall=1/0 hard_ip/t=70/4024 yaw_start=4064 duty_start=4024 pre_frames=0 rec_block=1",
+    "  WARN turn#6: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "  WARN turn#6: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more.",
+    "WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run."
+  ],
+  "record_count": 496
+}

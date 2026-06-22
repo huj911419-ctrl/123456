@@ -1,0 +1,37 @@
+{
+  "summary": {
+    "version": 4,
+    "record_size": 74,
+    "count": 426,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 48,
+    "motor_speed": 340,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 90
+  },
+  "analysis": [
+    "records=314 duration=3840ms overflow=0 dt_min/max=0/56728ms",
+    "err avg/max=342.7/24832 lookahead avg/max=95.0/15616 valid_rows min=0",
+    "time max: tf=28172us inter=12314us, avg_speed_lag=989.8",
+    "battery_x10 min/max=102/22080 (10.2V..2208.0V)",
+    "line_lost samples=282, ra_pre samples=10, pre_dir=7, pre_slow=7, sym_component samples=10",
+    "turn_stall samples=24, wheel_stall samples=0",
+    "turn_segments=3",
+    "turn#1 R t=576->616ms route=0 ip=20 slow/turn=50/20 ra_yaw_max=0.2 hard=6 lock=0 rec=0 target=90.0 outer=1820 yaw_rate_max=13 exit=none stall=2/0 hard_ip/t=20/576 yaw_start=-1 duty_start=576 pre_frames=0 rec_block=0",
+    "  WARN turn#1: yaw too small, likely exits early or turn force is not enough.",
+    "  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "turn#2 R t=776->944ms route=0 ip=102 slow/turn=50/20 ra_yaw_max=0.0 hard=22 lock=0 rec=0 target=90.0 outer=1820 yaw_rate_max=78 exit=none stall=22/0 hard_ip/t=20/576 yaw_start=-1 duty_start=-1 pre_frames=0 rec_block=0",
+    "  WARN turn#2: yaw too small, likely exits early or turn force is not enough.",
+    "  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "turn#3 R t=1096->1240ms route=0 ip=110 slow/turn=50/20 ra_yaw_max=0.0 hard=0 lock=11 rec=8 target=90.0 outer=1820 yaw_rate_max=123 exit=emergency stall=0/0 hard_ip/t=110/1096 yaw_start=-1 duty_start=-1 pre_frames=0 rec_block=0",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 314
+}

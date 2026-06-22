@@ -1,0 +1,17 @@
+records=292 duration=3792ms overflow=0 dt_min/max=0/3688ms
+err avg/max=154.3/24064 lookahead avg/max=41.6/10240 valid_rows min=0
+time max: tf=23560us inter=11289us, avg_speed_lag=917.1
+battery_x10 min/max=92/21824 (9.2V..2182.4V)
+line_lost samples=249, ra_pre samples=28, pre_dir=27, pre_slow=22, sym_component samples=12
+turn_stall samples=44, wheel_stall samples=0
+turn_segments=2
+turn#1 R t=584->784ms route=0 ip=44 slow/turn=30/0 ra_yaw_max=0.0 hard=26 lock=0 rec=0 target=90.0 outer=2596 yaw_rate_max=15 exit=none stall=23/0 hard_ip/t=44/584 yaw_start=-1 duty_start=584 pre_frames=0 rec_block=0
+  WARN turn#1: yaw too small, likely exits early or turn force is not enough.
+  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#2 R t=936->1168ms route=0 ip=92 slow/turn=30/0 ra_yaw_max=0.0 hard=21 lock=9 rec=0 target=90.0 outer=2596 yaw_rate_max=42 exit=emergency stall=21/0 hard_ip/t=44/584 yaw_start=-1 duty_start=-1 pre_frames=0 rec_block=0
+  WARN turn#2: yaw too small, likely exits early or turn force is not enough.
+  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

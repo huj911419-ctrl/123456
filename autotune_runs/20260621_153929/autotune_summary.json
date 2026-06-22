@@ -1,0 +1,30 @@
+{
+  "summary": {
+    "version": 4,
+    "record_size": 74,
+    "count": 488,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 48,
+    "motor_speed": 340,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 90
+  },
+  "analysis": [
+    "records=488 duration=4328ms overflow=0 dt_min/max=8/48ms",
+    "err avg/max=0.2/16 lookahead avg/max=0.1/8 valid_rows min=0",
+    "time max: tf=6716us inter=2807us, avg_speed_lag=412.1",
+    "battery_x10 min/max=120/121 (12.0V..12.1V)",
+    "line_lost samples=457, ra_pre samples=17, pre_dir=17, pre_slow=14, sym_component samples=4",
+    "turn_stall samples=1, wheel_stall samples=0",
+    "turn_segments=1",
+    "turn#1 R t=600->984ms route=0 ip=70 slow/turn=50/70 ra_yaw_max=97.6 hard=36 lock=5 rec=8 target=90.0 outer=1892 yaw_rate_max=378 exit=timeout stall=1/0 hard_ip/t=70/600 yaw_start=632 duty_start=600 pre_frames=4 rec_block=0",
+    "  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition."
+  ],
+  "record_count": 488
+}

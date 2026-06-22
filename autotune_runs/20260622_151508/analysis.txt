@@ -1,0 +1,8 @@
+records=306 duration=2872ms overflow=0 dt_min/max=8/48ms
+err avg/max=0.4/8 lookahead avg/max=1.0/24 valid_rows min=0
+time max: tf=8008us inter=2530us, avg_speed_lag=382.2
+battery_x10 min/max=119/120 (11.9V..12.0V)
+line_lost samples=285, ra_pre samples=14, pre_dir=14, pre_slow=12, sym_component samples=0
+turn_segments=0
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.

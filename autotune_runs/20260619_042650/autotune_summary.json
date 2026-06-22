@@ -1,0 +1,40 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 768,
+    "overflow": 1,
+    "pid_period_ms": 8,
+    "sample_period_ms": 8,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 80
+  },
+  "analysis": [
+    "records=768 duration=6136ms overflow=1 dt_min/max=8/8ms",
+    "err avg/max=16.0/82 lookahead avg/max=9.4/64 valid_rows min=0",
+    "time max: tf=10399us inter=7542us, avg_speed_lag=900.0",
+    "line_lost samples=177, ra_pre samples=146, pre_dir=146, pre_slow=131, sym_component samples=90",
+    "turn_stall samples=2, wheel_stall samples=0",
+    "turn_segments=5",
+    "turn#1 L t=6232->6504ms route=9 ip=72 slow/turn=70/52 ra_yaw_max=86.7 hard=30 lock=0 rec=3 target=80.0 outer=2444 yaw_rate_max=414 exit=yaw stall=1/0",
+    "  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "turn#2 R t=7576->7928ms route=11 ip=74 slow/turn=70/52 ra_yaw_max=93.9 hard=33 lock=2 rec=8 target=80.0 outer=2444 yaw_rate_max=376 exit=timeout stall=1/0",
+    "  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "turn#3 R t=8176->8472ms route=12 ip=106 slow/turn=70/40 ra_yaw_max=95.3 hard=28 lock=0 rec=8 target=80.0 outer=2441 yaw_rate_max=402 exit=yaw stall=0/0",
+    "  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#4 R t=9832->10120ms route=13 ip=110 slow/turn=70/40 ra_yaw_max=94.2 hard=27 lock=0 rec=8 target=80.0 outer=2601 yaw_rate_max=439 exit=yaw stall=0/0",
+    "  WARN turn#4: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#5 R t=11008->11240ms route=14 ip=110 slow/turn=70/40 ra_yaw_max=78.4 hard=27 lock=0 rec=1 target=80.0 outer=2441 yaw_rate_max=438 exit=line stall=0/0",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more.",
+    "WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run."
+  ],
+  "record_count": 768
+}

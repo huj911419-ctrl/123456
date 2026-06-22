@@ -1,0 +1,13 @@
+records=228 duration=3104ms overflow=0 dt_min/max=8/32ms
+err avg/max=36.8/86 lookahead avg/max=13.2/66 valid_rows min=0
+time max: tf=10644us inter=3755us, avg_speed_lag=1090.4
+line_lost samples=32, ra_pre samples=114, pre_dir=114, pre_slow=114, sym_component samples=27
+turn_segments=2
+turn#1 R t=864->1256ms route=0 ip=72 slow/turn=70/80 ra_yaw_max=90.3 hard=36 lock=0 rec=11 target=80.0 outer=1859 yaw_rate_max=487 exit=coast stall=0/0
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 R t=2160->2912ms route=1 ip=44 slow/turn=70/80 ra_yaw_max=20.0 hard=55 lock=0 rec=11 target=80.0 outer=1792 yaw_rate_max=472 exit=emergency stall=0/0
+  WARN turn#2: yaw too small, likely exits early or turn force is not enough.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

@@ -1,0 +1,20 @@
+records=419 duration=3960ms overflow=0 dt_min/max=8/32ms
+err avg/max=25.7/88 lookahead avg/max=18.6/80 valid_rows min=0
+time max: tf=9578us inter=3822us, avg_speed_lag=812.4
+line_lost samples=61, ra_pre samples=151, pre_dir=148, pre_slow=147, sym_component samples=77
+turn_segments=5
+turn#1 R t=784->1088ms route=0 ip=60 slow/turn=12/18 ra_yaw_max=81.4 hard=27 lock=0 rec=10 target=70.0 outer=1680 yaw_rate_max=426 exit=coast stall=0/0
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 R t=1200->1568ms route=1 ip=88 slow/turn=12/18 ra_yaw_max=107.7 hard=22 lock=0 rec=23 target=70.0 outer=1620 yaw_rate_max=476 exit=coast stall=0/0
+  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#3 L t=1632->2688ms route=2 ip=108 slow/turn=12/18 ra_yaw_max=116.9 hard=46 lock=0 rec=80 target=70.0 outer=1680 yaw_rate_max=483 exit=coast stall=0/0
+  WARN turn#3: hard phase still logged coarser than PID tick.
+  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#4 R t=3016->3504ms route=4 ip=64 slow/turn=12/18 ra_yaw_max=122.3 hard=33 lock=0 rec=27 target=70.0 outer=1620 yaw_rate_max=402 exit=coast stall=0/0
+  WARN turn#4: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#5 R t=3520->3992ms route=5 ip=108 slow/turn=12/18 ra_yaw_max=127.7 hard=20 lock=0 rec=38 target=70.0 outer=1620 yaw_rate_max=476 exit=coast stall=0/0
+  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

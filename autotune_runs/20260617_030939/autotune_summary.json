@@ -1,0 +1,36 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 339,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 280,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1660,
+    "ra_hard_yaw": 80
+  },
+  "analysis": [
+    "records=339 duration=4944ms overflow=0 dt_min/max=8/32ms",
+    "err avg/max=25.8/82 lookahead avg/max=15.9/76 valid_rows min=0",
+    "time max: tf=10072us inter=4492us, avg_speed_lag=823.5",
+    "line_lost samples=64, ra_pre samples=177, pre_dir=177, pre_slow=165, sym_component samples=32",
+    "turn_segments=5",
+    "turn#1 R t=824->1104ms route=0 ip=70 slow/turn=70/80 ra_yaw_max=105.8 hard=22 lock=0 rec=11 target=80.0 outer=1859 yaw_rate_max=525 exit=coast stall=0/0",
+    "  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#2 R t=1232->1552ms route=1 ip=68 slow/turn=70/80 ra_yaw_max=101.4 hard=23 lock=0 rec=11 target=80.0 outer=1792 yaw_rate_max=517 exit=coast stall=0/0",
+    "  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#3 L t=1984->2208ms route=2 ip=72 slow/turn=70/80 ra_yaw_max=83.3 hard=20 lock=0 rec=6 target=80.0 outer=1859 yaw_rate_max=541 exit=coast stall=0/0",
+    "turn#4 L t=2600->2920ms route=3 ip=66 slow/turn=70/80 ra_yaw_max=84.9 hard=24 lock=0 rec=11 target=80.0 outer=1792 yaw_rate_max=566 exit=coast stall=0/0",
+    "turn#5 R t=3584->3888ms route=4 ip=88 slow/turn=70/80 ra_yaw_max=98.4 hard=24 lock=0 rec=11 target=80.0 outer=1792 yaw_rate_max=502 exit=coast stall=0/0",
+    "  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 339
+}

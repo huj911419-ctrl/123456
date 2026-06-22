@@ -1,0 +1,21 @@
+records=328 duration=4072ms overflow=0 dt_min/max=8/468992ms
+err avg/max=193.0/30720 lookahead avg/max=56.1/6400 valid_rows min=0
+time max: tf=28172us inter=12296us, avg_speed_lag=685.0
+battery_x10 min/max=110/17415 (11.0V..1741.5V)
+line_lost samples=132, ra_pre samples=80, pre_dir=74, pre_slow=76, sym_component samples=45
+turn_stall samples=2, wheel_stall samples=0
+turn_segments=5
+turn#1 R t=512->880ms route=0 ip=56 slow/turn=38/0 ra_yaw_max=85.9 hard=35 lock=11 rec=1 target=90.0 outer=1987 yaw_rate_max=387 exit=line stall=1/0 hard_ip/t=56/512 yaw_start=560 duty_start=520 pre_frames=0 rec_block=0
+  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#2 R t=1192->1592ms route=1 ip=92 slow/turn=50/68 ra_yaw_max=115.0 hard=33 lock=10 rec=8 target=90.0 outer=1835 yaw_rate_max=446 exit=yaw stall=1/0 hard_ip/t=92/1192 yaw_start=1224 duty_start=1192 pre_frames=0 rec_block=7
+  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#3 L t=2040->2104ms route=2 ip=60 slow/turn=38/0 ra_yaw_max=14.6 hard=9 lock=0 rec=0 target=90.0 outer=1927 yaw_rate_max=303 exit=none stall=0/0 hard_ip/t=60/2040 yaw_start=2072 duty_start=2040 pre_frames=6 rec_block=0
+  WARN turn#3: yaw too small, likely exits early or turn force is not enough.
+turn#4 L t=2272->2416ms route=2 ip=110 slow/turn=38/0 ra_yaw_max=100.3 hard=5 lock=6 rec=8 target=90.0 outer=1744 yaw_rate_max=411 exit=yaw stall=0/0 hard_ip/t=60/2040 yaw_start=-1 duty_start=-1 pre_frames=6 rec_block=0
+  WARN turn#4: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#5 L t=2472->2776ms route=3 ip=70 slow/turn=50/68 ra_yaw_max=129.2 hard=24 lock=11 rec=4 target=90.0 outer=1834 yaw_rate_max=497 exit=line stall=0/0 hard_ip/t=70/2472 yaw_start=2472 duty_start=2472 pre_frames=0 rec_block=1
+  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

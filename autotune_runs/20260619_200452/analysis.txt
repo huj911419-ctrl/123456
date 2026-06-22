@@ -1,0 +1,21 @@
+records=505 duration=7024ms overflow=0 dt_min/max=8/32ms
+err avg/max=17.7/86 lookahead avg/max=8.0/82 valid_rows min=0
+time max: tf=9745us inter=4513us, avg_speed_lag=860.5
+line_lost samples=99, ra_pre samples=225, pre_dir=225, pre_slow=218, sym_component samples=55
+turn_stall samples=7, wheel_stall samples=7
+turn_segments=6
+turn#1 R t=784->1096ms route=0 ip=72 slow/turn=70/32 ra_yaw_max=99.4 hard=30 lock=0 rec=8 target=80.0 outer=2110 yaw_rate_max=423 exit=yaw stall=0/0
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 R t=1112->1352ms route=1 ip=66 slow/turn=70/44 ra_yaw_max=79.6 hard=28 lock=0 rec=1 target=80.0 outer=2531 yaw_rate_max=407 exit=line stall=0/0
+turn#3 L t=1784->2096ms route=2 ip=74 slow/turn=70/32 ra_yaw_max=97.9 hard=30 lock=0 rec=8 target=80.0 outer=2110 yaw_rate_max=428 exit=yaw stall=0/0
+  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#4 L t=2200->2448ms route=3 ip=66 slow/turn=70/44 ra_yaw_max=80.6 hard=29 lock=0 rec=1 target=80.0 outer=2485 yaw_rate_max=417 exit=line stall=0/0
+turn#5 R t=2824->3152ms route=4 ip=82 slow/turn=70/44 ra_yaw_max=97.5 hard=32 lock=0 rec=8 target=80.0 outer=2485 yaw_rate_max=375 exit=yaw stall=0/0
+  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#6 R t=4440->5136ms route=5 ip=40 slow/turn=70/44 ra_yaw_max=60.9 hard=41 lock=11 rec=1 target=80.0 outer=2485 yaw_rate_max=191 exit=emergency stall=7/7
+  WARN turn#6: yaw too small, likely exits early or turn force is not enough.
+  WARN turn#6: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

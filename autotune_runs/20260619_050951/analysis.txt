@@ -1,0 +1,22 @@
+records=768 duration=6136ms overflow=1 dt_min/max=8/8ms
+err avg/max=14.5/86 lookahead avg/max=8.5/68 valid_rows min=0
+time max: tf=10454us inter=4916us, avg_speed_lag=745.5
+line_lost samples=386, ra_pre samples=145, pre_dir=137, pre_slow=136, sym_component samples=80
+turn_stall samples=7, wheel_stall samples=0
+turn_segments=5
+turn#1 R t=3216->3368ms route=4 ip=110 slow/turn=70/14 ra_yaw_max=94.0 hard=10 lock=2 rec=8 target=80.0 outer=1859 yaw_rate_max=388 exit=timeout stall=0/0
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 R t=3400->3728ms route=5 ip=32 slow/turn=70/14 ra_yaw_max=93.6 hard=32 lock=0 rec=8 target=80.0 outer=2674 yaw_rate_max=388 exit=yaw stall=0/0
+  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#3 R t=4464->4840ms route=6 ip=36 slow/turn=70/14 ra_yaw_max=92.5 hard=38 lock=0 rec=8 target=80.0 outer=2609 yaw_rate_max=399 exit=line stall=4/0
+  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#3: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#4 L t=4960->5208ms route=7 ip=106 slow/turn=70/14 ra_yaw_max=85.3 hard=27 lock=0 rec=3 target=80.0 outer=2415 yaw_rate_max=421 exit=yaw stall=0/0
+turn#5 L t=6096->6440ms route=8 ip=68 slow/turn=70/14 ra_yaw_max=99.6 hard=34 lock=0 rec=8 target=80.0 outer=2596 yaw_rate_max=406 exit=yaw stall=3/0
+  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#5: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.
+WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run.

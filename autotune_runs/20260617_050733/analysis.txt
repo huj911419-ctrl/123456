@@ -1,0 +1,10 @@
+records=158 duration=3160ms overflow=0 dt_min/max=8/32ms
+err avg/max=8.3/82 lookahead avg/max=4.9/42 valid_rows min=0
+time max: tf=10009us inter=3917us, avg_speed_lag=993.1
+line_lost samples=45, ra_pre samples=52, pre_dir=52, pre_slow=52, sym_component samples=3
+turn_segments=1
+turn#1 R t=832->1272ms route=0 ip=70 slow/turn=70/60 ra_yaw_max=84.9 hard=43 lock=0 rec=11 target=80.0 outer=1660 yaw_rate_max=577 exit=emergency stall=0/0
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

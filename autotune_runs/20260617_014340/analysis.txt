@@ -1,0 +1,15 @@
+records=369 duration=4944ms overflow=0 dt_min/max=8/32ms
+err avg/max=25.7/86 lookahead avg/max=15.9/82 valid_rows min=0
+time max: tf=9759us inter=4710us, avg_speed_lag=1007.3
+line_lost samples=43, ra_pre samples=209, pre_dir=209, pre_slow=145, sym_component samples=67
+turn_stall samples=1, wheel_stall samples=0
+turn_segments=4
+turn#1 R t=680->920ms route=0 ip=78 slow/turn=70/59 ra_yaw_max=53.7 hard=18 lock=0 rec=11 target=54.0 outer=1859 yaw_rate_max=486 exit=coast stall=0/0
+turn#2 R t=944->1304ms route=1 ip=62 slow/turn=70/71 ra_yaw_max=57.6 hard=20 lock=0 rec=11 target=54.0 outer=1792 yaw_rate_max=442 exit=coast stall=0/0
+turn#3 L t=1720->2096ms route=2 ip=86 slow/turn=70/59 ra_yaw_max=57.4 hard=35 lock=0 rec=11 target=54.0 outer=1859 yaw_rate_max=409 exit=coast stall=1/0
+  WARN turn#3: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#4 L t=2280->2672ms route=3 ip=78 slow/turn=70/71 ra_yaw_max=58.1 hard=35 lock=0 rec=11 target=54.0 outer=1792 yaw_rate_max=353 exit=coast stall=0/0
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

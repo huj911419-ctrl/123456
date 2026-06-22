@@ -1,0 +1,21 @@
+records=702 duration=5608ms overflow=0 dt_min/max=8/8ms
+err avg/max=22.2/86 lookahead avg/max=11.2/88 valid_rows min=0
+time max: tf=9762us inter=4000us, avg_speed_lag=857.1
+line_lost samples=159, ra_pre samples=196, pre_dir=171, pre_slow=191, sym_component samples=68
+turn_stall samples=23, wheel_stall samples=0
+turn_segments=5
+turn#1 R t=768->1056ms route=0 ip=78 slow/turn=70/2 ra_yaw_max=98.9 hard=27 lock=0 rec=8 target=80.0 outer=2696 yaw_rate_max=447 exit=yaw stall=0/0
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 R t=1072->1336ms route=1 ip=60 slow/turn=70/14 ra_yaw_max=81.4 hard=30 lock=0 rec=2 target=80.0 outer=2599 yaw_rate_max=417 exit=line stall=1/0
+  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#3 L t=1728->2040ms route=2 ip=76 slow/turn=70/2 ra_yaw_max=88.8 hard=33 lock=0 rec=5 target=80.0 outer=2748 yaw_rate_max=452 exit=timeout stall=0/0
+  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#4 L t=2904->3200ms route=3 ip=60 slow/turn=70/14 ra_yaw_max=83.4 hard=34 lock=0 rec=2 target=80.0 outer=2532 yaw_rate_max=441 exit=line stall=1/0
+  WARN turn#4: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#5 R t=4392->4808ms route=4 ip=70 slow/turn=70/14 ra_yaw_max=18.7 hard=41 lock=2 rec=8 target=80.0 outer=2532 yaw_rate_max=219 exit=emergency stall=21/0
+  WARN turn#5: yaw too small, likely exits early or turn force is not enough.
+  WARN turn#5: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

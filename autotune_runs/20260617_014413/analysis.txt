@@ -1,0 +1,20 @@
+records=487 duration=4960ms overflow=0 dt_min/max=8/32ms
+err avg/max=26.7/84 lookahead avg/max=17.4/88 valid_rows min=0
+time max: tf=9771us inter=4008us, avg_speed_lag=953.0
+line_lost samples=67, ra_pre samples=289, pre_dir=289, pre_slow=267, sym_component samples=74
+turn_stall samples=8, wheel_stall samples=0
+turn_segments=7
+turn#1 R t=872->1232ms route=0 ip=72 slow/turn=70/59 ra_yaw_max=54.9 hard=33 lock=0 rec=11 target=54.0 outer=1859 yaw_rate_max=454 exit=coast stall=8/0
+  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#2 R t=1688->2032ms route=1 ip=64 slow/turn=70/71 ra_yaw_max=58.7 hard=23 lock=0 rec=11 target=54.0 outer=1792 yaw_rate_max=465 exit=coast stall=0/0
+turn#3 L t=2080->2368ms route=2 ip=74 slow/turn=70/59 ra_yaw_max=60.2 hard=25 lock=0 rec=10 target=54.0 outer=1859 yaw_rate_max=480 exit=coast stall=0/0
+turn#4 L t=2552->2952ms route=3 ip=64 slow/turn=70/71 ra_yaw_max=61.3 hard=34 lock=0 rec=10 target=54.0 outer=1792 yaw_rate_max=349 exit=coast stall=0/0
+turn#5 R t=3488->4048ms route=4 ip=62 slow/turn=70/71 ra_yaw_max=62.7 hard=52 lock=0 rec=11 target=54.0 outer=1792 yaw_rate_max=366 exit=coast stall=0/0
+  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#6 R t=4088->4640ms route=5 ip=88 slow/turn=70/71 ra_yaw_max=51.2 hard=55 lock=0 rec=11 target=54.0 outer=1792 yaw_rate_max=175 exit=emergency stall=0/0
+turn#7 R t=4888->4992ms route=6 ip=78 slow/turn=70/71 ra_yaw_max=7.5 hard=10 lock=0 rec=0 target=54.0 outer=1792 yaw_rate_max=182 exit=none stall=0/0
+  WARN turn#7: yaw too small, likely exits early or turn force is not enough.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

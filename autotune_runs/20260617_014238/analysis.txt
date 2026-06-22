@@ -1,0 +1,17 @@
+records=493 duration=4960ms overflow=0 dt_min/max=8/32ms
+err avg/max=12.9/80 lookahead avg/max=8.1/82 valid_rows min=0
+time max: tf=9581us inter=3706us, avg_speed_lag=1021.7
+line_lost samples=201, ra_pre samples=196, pre_dir=196, pre_slow=159, sym_component samples=43
+turn_stall samples=9, wheel_stall samples=0
+turn_segments=4
+turn#1 R t=736->1056ms route=0 ip=72 slow/turn=70/59 ra_yaw_max=58.5 hard=28 lock=0 rec=11 target=54.0 outer=1859 yaw_rate_max=444 exit=coast stall=2/0
+  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#2 R t=1072->1400ms route=1 ip=64 slow/turn=70/71 ra_yaw_max=58.0 hard=26 lock=0 rec=8 target=54.0 outer=1792 yaw_rate_max=452 exit=coast stall=0/0
+turn#3 L t=1736->2160ms route=2 ip=70 slow/turn=70/59 ra_yaw_max=54.1 hard=41 lock=0 rec=11 target=54.0 outer=1859 yaw_rate_max=304 exit=coast stall=7/0
+  WARN turn#3: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#4 L t=4696->4992ms route=3 ip=80 slow/turn=70/71 ra_yaw_max=23.4 hard=34 lock=0 rec=0 target=54.0 outer=1792 yaw_rate_max=156 exit=none stall=0/0
+  WARN turn#4: yaw too small, likely exits early or turn force is not enough.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

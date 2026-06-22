@@ -1,0 +1,9 @@
+records=476 duration=4240ms overflow=0 dt_min/max=8/48ms
+err avg/max=0.5/30 lookahead avg/max=0.3/20 valid_rows min=0
+time max: tf=7591us inter=2825us, avg_speed_lag=339.0
+battery_x10 min/max=117/118 (11.7V..11.8V)
+line_lost samples=449, ra_pre samples=22, pre_dir=22, pre_slow=20, sym_component samples=0
+turn_segments=1
+turn#1 R t=584->1008ms route=0 ip=0 slow/turn=38/18 ra_yaw_max=91.0 hard=33 lock=5 rec=8 target=85.0 outer=1947 yaw_rate_max=376 exit=yaw stall=0/0 hard_ip/t=86/648 yaw_start=664 duty_start=648 pre_frames=5 rec_block=2
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.

@@ -1,0 +1,35 @@
+{
+  "summary": {
+    "version": 3,
+    "record_size": 72,
+    "count": 211,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 300,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 90
+  },
+  "analysis": [
+    "records=211 duration=3056ms overflow=0 dt_min/max=8/32ms",
+    "err avg/max=30.3/78 lookahead avg/max=26.7/74 valid_rows min=0",
+    "time max: tf=10019us inter=4709us, avg_speed_lag=692.4",
+    "line_lost samples=32, ra_pre samples=82, pre_dir=80, pre_slow=78, sym_component samples=40",
+    "turn_stall samples=24, wheel_stall samples=22",
+    "turn_segments=3",
+    "turn#1 R t=240->640ms route=0 ip=70 slow/turn=50/70 ra_yaw_max=94.9 hard=38 lock=5 rec=8 target=90.0 outer=1900 yaw_rate_max=366 exit=timeout stall=1/0 hard_ip/t=70/240 yaw_start=288 duty_start=240 pre_frames=4 rec_block=0",
+    "  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "turn#2 R t=1152->1384ms route=1 ip=70 slow/turn=50/70 ra_yaw_max=81.9 hard=29 lock=0 rec=1 target=90.0 outer=1850 yaw_rate_max=426 exit=line stall=0/0 hard_ip/t=70/1152 yaw_start=1184 duty_start=1152 pre_frames=0 rec_block=1",
+    "turn#3 L t=1816->2288ms route=2 ip=70 slow/turn=50/70 ra_yaw_max=29.6 hard=41 lock=11 rec=8 target=90.0 outer=1877 yaw_rate_max=264 exit=emergency stall=23/22 hard_ip/t=70/1816 yaw_start=1848 duty_start=1816 pre_frames=4 rec_block=3",
+    "  WARN turn#3: yaw too small, likely exits early or turn force is not enough.",
+    "  WARN turn#3: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 211
+}

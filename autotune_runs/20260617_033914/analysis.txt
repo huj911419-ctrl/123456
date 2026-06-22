@@ -1,0 +1,21 @@
+records=419 duration=4960ms overflow=0 dt_min/max=8/32ms
+err avg/max=22.7/82 lookahead avg/max=11.8/74 valid_rows min=0
+time max: tf=10145us inter=4835us, avg_speed_lag=860.2
+line_lost samples=36, ra_pre samples=188, pre_dir=188, pre_slow=164, sym_component samples=43
+turn_segments=7
+turn#1 R t=856->1152ms route=0 ip=76 slow/turn=70/80 ra_yaw_max=103.3 hard=24 lock=0 rec=11 target=80.0 outer=1660 yaw_rate_max=484 exit=coast stall=0/0
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 R t=1256->1520ms route=1 ip=64 slow/turn=70/80 ra_yaw_max=71.8 hard=26 lock=0 rec=1 target=80.0 outer=1577 yaw_rate_max=477 exit=coast stall=0/0
+turn#3 L t=1992->2272ms route=2 ip=74 slow/turn=70/80 ra_yaw_max=92.5 hard=25 lock=0 rec=8 target=80.0 outer=1660 yaw_rate_max=482 exit=coast stall=0/0
+  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#4 L t=2448->2808ms route=3 ip=66 slow/turn=70/80 ra_yaw_max=101.6 hard=27 lock=0 rec=11 target=80.0 outer=1577 yaw_rate_max=461 exit=coast stall=0/0
+  WARN turn#4: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#5 R t=3208->3528ms route=4 ip=108 slow/turn=70/80 ra_yaw_max=95.9 hard=26 lock=0 rec=11 target=80.0 outer=1577 yaw_rate_max=488 exit=coast stall=0/0
+  WARN turn#5: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#6 R t=3832->4112ms route=5 ip=92 slow/turn=70/80 ra_yaw_max=87.6 hard=24 lock=0 rec=8 target=80.0 outer=1577 yaw_rate_max=469 exit=coast stall=0/0
+turn#7 R t=4768->4992ms route=6 ip=34 slow/turn=70/80 ra_yaw_max=5.2 hard=4 lock=0 rec=0 target=80.0 outer=1577 yaw_rate_max=124 exit=none stall=0/0
+  WARN turn#7: yaw too small, likely exits early or turn force is not enough.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

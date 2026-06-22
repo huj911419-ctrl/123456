@@ -1,0 +1,36 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 768,
+    "overflow": 1,
+    "pid_period_ms": 8,
+    "sample_period_ms": 8,
+    "motor_speed": 260,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 80
+  },
+  "analysis": [
+    "records=768 duration=6136ms overflow=1 dt_min/max=8/8ms",
+    "err avg/max=16.7/68 lookahead avg/max=3.8/76 valid_rows min=0",
+    "time max: tf=9957us inter=4124us, avg_speed_lag=900.2",
+    "line_lost samples=93, ra_pre samples=455, pre_dir=455, pre_slow=451, sym_component samples=31",
+    "turn_stall samples=4, wheel_stall samples=0",
+    "turn_segments=3",
+    "turn#1 L t=6208->6208ms route=8 ip=110 slow/turn=70/14 ra_yaw_max=96.6 hard=0 lock=0 rec=1 target=80.0 outer=857 yaw_rate_max=289 exit=yaw stall=0/0",
+    "  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "turn#2 L t=6528->6800ms route=9 ip=70 slow/turn=70/14 ra_yaw_max=79.4 hard=32 lock=0 rec=1 target=80.0 outer=2596 yaw_rate_max=442 exit=line stall=1/0",
+    "  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "turn#3 R t=7888->8200ms route=11 ip=66 slow/turn=70/14 ra_yaw_max=83.7 hard=35 lock=2 rec=1 target=80.0 outer=2596 yaw_rate_max=373 exit=timeout stall=3/0",
+    "  WARN turn#3: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more.",
+    "WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run."
+  ],
+  "record_count": 768
+}

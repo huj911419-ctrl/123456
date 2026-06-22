@@ -1,0 +1,21 @@
+records=486 duration=6776ms overflow=0 dt_min/max=8/32ms
+err avg/max=18.7/88 lookahead avg/max=8.4/60 valid_rows min=0
+time max: tf=9947us inter=4299us, avg_speed_lag=766.8
+line_lost samples=128, ra_pre samples=193, pre_dir=193, pre_slow=185, sym_component samples=43
+turn_stall samples=2, wheel_stall samples=0
+turn_segments=6
+turn#1 R t=792->1176ms route=0 ip=74 slow/turn=70/32 ra_yaw_max=102.2 hard=34 lock=5 rec=8 target=90.0 outer=2010 yaw_rate_max=417 exit=timeout stall=0/0
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 R t=1192->1456ms route=1 ip=90 slow/turn=70/44 ra_yaw_max=92.0 hard=31 lock=0 rec=1 target=90.0 outer=2550 yaw_rate_max=418 exit=line stall=0/0
+turn#3 L t=1848->2160ms route=2 ip=78 slow/turn=70/32 ra_yaw_max=105.7 hard=31 lock=0 rec=7 target=90.0 outer=1991 yaw_rate_max=441 exit=yaw stall=0/0
+  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#4 L t=2312->2560ms route=3 ip=90 slow/turn=70/44 ra_yaw_max=78.7 hard=29 lock=0 rec=1 target=90.0 outer=2550 yaw_rate_max=433 exit=line stall=1/0
+  WARN turn#4: yaw too small, likely exits early or turn force is not enough.
+  WARN turn#4: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#5 R t=2872->3224ms route=4 ip=42 slow/turn=70/44 ra_yaw_max=96.1 hard=35 lock=5 rec=1 target=90.0 outer=2550 yaw_rate_max=381 exit=timeout stall=1/0
+  WARN turn#5: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#6 R t=4512->4776ms route=5 ip=74 slow/turn=70/44 ra_yaw_max=82.9 hard=30 lock=0 rec=2 target=90.0 outer=2534 yaw_rate_max=376 exit=line stall=0/0
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.

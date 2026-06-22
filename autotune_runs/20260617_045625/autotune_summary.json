@@ -1,0 +1,29 @@
+{
+  "summary": {
+    "version": 2,
+    "record_size": 67,
+    "count": 160,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 280,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1660,
+    "ra_hard_yaw": 80
+  },
+  "analysis": [
+    "records=160 duration=2888ms overflow=0 dt_min/max=8/32ms",
+    "err avg/max=22.1/72 lookahead avg/max=16.4/60 valid_rows min=0",
+    "time max: tf=10117us inter=3893us, avg_speed_lag=969.6",
+    "line_lost samples=29, ra_pre samples=58, pre_dir=42, pre_slow=58, sym_component samples=16",
+    "turn_segments=1",
+    "turn#1 R t=848->1312ms route=0 ip=74 slow/turn=70/60 ra_yaw_max=86.0 hard=46 lock=0 rec=11 target=80.0 outer=1660 yaw_rate_max=429 exit=coast stall=0/0",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN wheel speed feedback lags target; acceleration/current/traction may limit speed plan.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 160
+}

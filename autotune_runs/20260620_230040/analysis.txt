@@ -1,0 +1,10 @@
+records=144 duration=1360ms overflow=0 dt_min/max=8/32ms
+err avg/max=3.0/40 lookahead avg/max=2.6/38 valid_rows min=0
+time max: tf=9853us inter=4634us, avg_speed_lag=474.7
+line_lost samples=114, ra_pre samples=16, pre_dir=16, pre_slow=13, sym_component samples=5
+turn_stall samples=1, wheel_stall samples=0
+turn_segments=1
+turn#1 R t=120->536ms route=0 ip=70 slow/turn=50/70 ra_yaw_max=96.5 hard=41 lock=4 rec=8 target=90.0 outer=1924 yaw_rate_max=369 exit=emergency stall=1/0 hard_ip/t=70/120 yaw_start=160 duty_start=120 pre_frames=4 rec_block=0
+  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.

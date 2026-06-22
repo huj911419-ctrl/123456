@@ -1,0 +1,31 @@
+{
+  "summary": {
+    "version": 4,
+    "record_size": 74,
+    "count": 390,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 48,
+    "motor_speed": 340,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 90
+  },
+  "analysis": [
+    "records=310 duration=3568ms overflow=0 dt_min/max=0/4672ms",
+    "err avg/max=74.1/9472 lookahead avg/max=30.0/7424 valid_rows min=0",
+    "time max: tf=28171us inter=12055us, avg_speed_lag=589.3",
+    "battery_x10 min/max=110/21248 (11.0V..2124.8V)",
+    "line_lost samples=277, ra_pre samples=9, pre_dir=8, pre_slow=8, sym_component samples=4",
+    "turn_segments=2",
+    "turn#1 R t=624->736ms route=0 ip=62 slow/turn=50/20 ra_yaw_max=29.5 hard=15 lock=0 rec=0 target=90.0 outer=1835 yaw_rate_max=313 exit=none stall=0/0 hard_ip/t=62/624 yaw_start=632 duty_start=624 pre_frames=3 rec_block=0",
+    "  WARN turn#1: yaw too small, likely exits early or turn force is not enough.",
+    "turn#2 R t=888->952ms route=0 ip=110 slow/turn=50/20 ra_yaw_max=94.8 hard=3 lock=5 rec=1 target=90.0 outer=1718 yaw_rate_max=378 exit=yaw stall=0/0 hard_ip/t=62/624 yaw_start=-1 duty_start=-1 pre_frames=3 rec_block=0",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 310
+}

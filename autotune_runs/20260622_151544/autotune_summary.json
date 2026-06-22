@@ -1,0 +1,31 @@
+{
+  "summary": {
+    "version": 4,
+    "record_size": 74,
+    "count": 483,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 48,
+    "motor_speed": 360,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 85
+  },
+  "analysis": [
+    "records=483 duration=5512ms overflow=0 dt_min/max=8/48ms",
+    "err avg/max=7.0/82 lookahead avg/max=5.2/82 valid_rows min=0",
+    "time max: tf=9448us inter=5164us, avg_speed_lag=292.3",
+    "battery_x10 min/max=118/120 (11.8V..12.0V)",
+    "line_lost samples=357, ra_pre samples=70, pre_dir=57, pre_slow=66, sym_component samples=20",
+    "turn_segments=2",
+    "turn#1 R t=384->776ms route=0 ip=54 slow/turn=38/38 ra_yaw_max=91.7 hard=35 lock=5 rec=8 target=85.0 outer=1930 yaw_rate_max=352 exit=yaw stall=0/0 hard_ip/t=54/400 yaw_start=416 duty_start=400 pre_frames=5 rec_block=2",
+    "turn#2 R t=1928->2240ms route=1 ip=78 slow/turn=50/68 ra_yaw_max=109.6 hard=29 lock=10 rec=1 target=85.0 outer=1850 yaw_rate_max=454 exit=yaw stall=0/0 hard_ip/t=78/1928 yaw_start=1944 duty_start=1928 pre_frames=0 rec_block=0",
+    "  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 483
+}
