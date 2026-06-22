@@ -460,7 +460,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_FAST_TURN_ROW_ADVANCE_MAX 0u    /* 高速转弯行提前最大值 */
 #define RA_FAST_TURN_ROW_ADVANCE_SPEED_END 1700
 #define RA_TURN_ROW_MIN         18u         /* 转弯行最小值 */
-#define RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX 0 /* 高速预识别直角不立刻HARD */
+#define RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX 3000 /* 高速预识别直角不立刻HARD */
 #define RA_ROUTE_PRE_HARD_ENABLE 0u         /* 路线预HARD开关 */
 #define RA_ROUTE_PRE_HARD_VALID_ROWS 35u    /* 路线预HARD有效行数 */
 #define RA_ROUTE_PRE_HARD_LOOKAHEAD_MIN 18  /* 路线预HARD最小前瞻误差 */
@@ -475,8 +475,8 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_ROUTE_DIRECT_EARLY_MIN_TICKS PID_MS_TO_TICKS(500u)
 #define RA_PRE_DIRECT_HARD_IP_ROW 24u       /* 预直接HARD最小拐点行 */
 #define RA_PRE_DIRECT_HARD_FRAMES 1u        /* 预直接HARD帧数 */
-#define RA_PRE_DIRECT_NO_IP_ENABLE 0u       /* allow strong pre-turn without IP row */
-#define RA_PRE_DIRECT_NO_IP_ROW 58u         /* equivalent row for no-IP pre-turn */
+#define RA_PRE_DIRECT_NO_IP_ENABLE 1u       /* allow strong pre-turn without IP row */
+#define RA_PRE_DIRECT_NO_IP_ROW 30u         /* equivalent row for no-IP pre-turn */
 #define RA_PRE_DIRECT_NO_IP_VALID_ROWS 38u  /* no-IP pre-turn max valid rows */
 #define RA_PRE_DIRECT_NO_IP_LA_MIN 2        /* no-IP pre-turn min lookahead */
 #define RA_PRE_DIRECT_STRAIGHT_VALID_ROWS 42u
