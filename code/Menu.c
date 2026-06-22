@@ -31,7 +31,7 @@
 /* ==================== 菜单可调参数变量 ==================== */
 /* 每个变量都绑定到菜单的某个条目，用户可通过按键实时修改 */
 
-int16 motor_speed =300;       /* 目标电机速度（PWM占空比单位），范�?~600，步�?0 */
+int16 motor_speed =360;       /* 目标电机速度（PWM占空比单位），范�?~600，步�?0 */
 int16 motor_enable = 0;       /* 电机使能开关：0=禁用（停止）�?=启用（允许运行） */
 int16 motor_run_time =12;     /* 电机最大运行时间（秒） */
 int16 run_quiet_enable =RUN_QUIET_STOP_KEY; /* 运行静默模式：运行时关闭TFT/UART图传/普通按�?*///RUN_QUIET_STOP_KEY   RUN_QUIET_DEFAULT_ENABLE
@@ -68,7 +68,7 @@ int16 yaw_kp = 12;            /* IMU级联控制的航向角比例系数Kp */
 /* 主页菜单条目：常用运行开关和速度档位 */
 static MenuItem items_main[] = {
     {"Quiet", &run_quiet_enable, 0, 1, 1},    /* 运行静默�?=运行时关闭TFT/UART/普通按�?*/
-    {"Speed", &motor_speed, 0, 600, 20},      /* 速度设定�?~600，步�?0 */
+    {"Speed", &motor_speed, 0, 700, 20},      /* 速度设定�?~600，步�?0 */
 };
 
 /* 综合调参页：电机、摄像头、PID和速度规划�?*/

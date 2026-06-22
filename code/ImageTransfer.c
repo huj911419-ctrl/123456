@@ -46,6 +46,7 @@
 #include "Pid.h"
 #include "IMU.h"
 #include "App_Config.h"
+#include "Battery.h"
 
 /* 外部变量声明 */
 extern volatile uint32 prof_tf_us;
@@ -67,7 +68,7 @@ extern volatile uint32 prof_inter_us;
 #define PACKED_SIZE    ((IMG_W * IMG_H + 7) / 8)
 #define EDGE_DATA_SIZE (IMG_H * 6)
 #define PARAM_DATA_SIZE 41
-#define TELEMETRY_DATA_SIZE 56
+#define TELEMETRY_DATA_SIZE 60
 
 /* ==================== 无效边线标记 ==================== */
 #define EDGE_INVALID   0xFFFF
@@ -300,6 +301,8 @@ void send_image_uart0(void)
     put_i16_be(telemetry_data, &idx, ra_slow_row);
     telemetry_data[idx++] = imu_ready;
     telemetry_data[idx++] = imu_error;
+    put_u16_be(telemetry_data, &idx, battery_get_voltage_x10());
+    put_i16_be(telemetry_data, &idx, (int16)yaw_rate);
 
     send_uart_packet(FRAME_TYPE_TELEMETRY, telemetry_data, TELEMETRY_DATA_SIZE);
     }

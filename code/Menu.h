@@ -1,60 +1,123 @@
+/**
+ * ========================================================================
+ * Menu.h - 菜单系统模块头文件
+ * ========================================================================
+ * 提供TFT屏幕上的参数调节菜单系统。
+ * 支持多页面切换、光标导航、参数增减调节。
+ *
+ * 硬件：4个按键（KEY1-4）+ 2个拨码开关（SWITCH1-2）+ 1个比赛按键
+ * 按键功能：
+ *   KEY1/KEY2：翻页（上一页/下一页）
+ *   KEY3/KEY4：选择模式下移动光标，调节模式下增减参数值
+ * 拨码开关：两个都未拨下=选择模式，任一拨下=调节模式
+ * ======================================================================== */
 #ifndef MENU_H_
 #define MENU_H_
 
 #include "zf_common_headfile.h"
 #include "App_Config.h"
 
+/* ========================================================================
+ * 菜单页面枚举
+ * ======================================================================== */
+
+/**
+ * @brief 菜单页面编号枚举
+ *
+ * 定义了4个菜单页面：
+ *   PAGE_MAIN：主页，显示静默模式开关和速度设定
+ *   PAGE_TUNE：调参页，显示阈值偏移、曝光、Kp、Kd
+ *   PAGE_RA：直角弯页，显示RA状态机各阶段参数
+ *   PAGE_IMU：IMU页，显示级联PID和航向角控制参数
+ */
 typedef enum
 {
-    PAGE_MAIN = 0,
-    PAGE_TUNE,
-    PAGE_RA,
-    PAGE_IMU,
-    PAGE_MAX
+    PAGE_MAIN = 0,  /* 主页：常用运行开关和速度档位 */
+    PAGE_TUNE,      /* 调参页：阈值偏移、曝光、PID增益 */
+    PAGE_RA,        /* 直角弯页：RA状态机各阶段参数 */
+    PAGE_IMU,       /* IMU页：级联PID和航向角控制 */
+    PAGE_MAX        /* 页面总数（用于循环翻页） */
 } MenuPage;
 
+/* ========================================================================
+ * 菜单条目结构体
+ * ======================================================================== */
+
+/**
+ * @brief 菜单条目定义结构体
+ *
+ * 每个菜单条目绑定一个int16变量，用户可通过按键实时修改其值。
+ * 条目在TFT上显示为一行：标签 + 当前值
+ */
 typedef struct
 {
-    const char *label;
-    int16 *value;
-    int16 min;
-    int16 max;
-    int16 step;
+    const char *label;  /* 条目标签（如"Speed"、"Kp"），显示在TFT左侧 */
+    int16 *value;       /* 绑定的变量指针，直接修改目标变量 */
+    int16 min;          /* 变量最小值（下限保护） */
+    int16 max;          /* 变量最大值（上限保护） */
+    int16 step;         /* 每次按键的步进值（调节精度） */
 } MenuItem;
 
+/* ========================================================================
+ * 菜单页面定义结构体
+ * ======================================================================== */
+
+/**
+ * @brief 菜单页面定义结构体
+ *
+ * 每个页面包含标题、条目数组和可选的自定义绘制函数。
+ */
 typedef struct
 {
-    const char *title;
-    MenuItem *items;
-    uint8 item_count;
-    void (*draw)(void);
+    const char *title;      /* 页面标题（如"MAIN"、"TUNE"），显示在TFT顶部 */
+    MenuItem *items;        /* 条目数组指针 */
+    uint8 item_count;       /* 条目数量 */
+    void (*draw)(void);     /* 自定义绘制函数（NULL=使用默认绘制） */
 } MenuPageDef;
 
-#define RACE_STATE_STOP  0u
-#define RACE_STATE_READY 1u
-#define RACE_STATE_RUN   2u
-#define RACE_STATE_DONE  3u
-#define RACE_STATE_ARMED 4u
-#define RACE_STATE_LAUNCH 5u
+/* ========================================================================
+ * 比赛控制状态机
+ * ========================================================================
+ * 比赛流程：STOP -> READY -> ARMED -> RUN -> DONE -> READY
+ *   STOP：初始状态，电机禁用
+ *   READY：准备状态，等待用户确认
+ *   ARMED：已就绪，等待启动（IMU校准、PID初始化完成）
+ *   RUN：运行中，电机使能
+ *   DONE：运行结束，等待复位
+ */
+#define RACE_STATE_STOP  0u                 /* 停止状态 */
+#define RACE_STATE_READY 1u                 /* 准备状态 */
+#define RACE_STATE_RUN   2u                 /* 运行状态 */
+#define RACE_STATE_DONE  3u                 /* 完成状态 */
+#define RACE_STATE_ARMED 4u                 /* 已就绪状态 */
+#define RACE_STATE_LAUNCH 5u                /* 启动状态（预留） */
 
-extern MenuPage now_page;
-extern uint8 menu_cursor;
-extern int16 motor_speed;
-extern int16 motor_enable;
-extern int16 motor_run_time;
-extern int16 run_quiet_enable;
-extern uint8 race_state;
+/* ========================================================================
+ * 全局变量声明
+ * ======================================================================== */
 
-void key_init_all(void);
-void key_process(void);
-void key_process_quiet(void);
-void ui_process_keys(void);
-void race_control_process(void);
-uint8 quiet_stop_key_pressed(void);
-uint8 ui_raw_input_state(void);
-void menu_show(void);
-uint8 run_quiet_active(void);
-void turn_right_led_on(void);
-void turn_right_led_off(void);
+extern MenuPage now_page;       /* 当前显示的页面编号 */
+extern uint8 menu_cursor;       /* 当前页面内的光标位置 */
+extern int16 motor_speed;       /* 目标电机速度（菜单可调） */
+extern int16 motor_enable;      /* 电机使能开关：0=禁用，1=启用 */
+extern int16 motor_run_time;    /* 电机最大运行时间（秒） */
+extern int16 run_quiet_enable;  /* 运行静默模式开关 */
+extern uint8 race_state;        /* 比赛控制状态机当前状态 */
+
+/* ========================================================================
+ * 接口函数声明
+ * ======================================================================== */
+
+void key_init_all(void);            /* 初始化所有按键和LED的GPIO引脚 */
+void key_process(void);             /* 处理按键事件（菜单导航和参数调节） */
+void key_process_quiet(void);       /* 静默模式下的按键处理（仅停止键有效） */
+void ui_process_keys(void);         /* 统一按键处理入口（比赛控制+菜单） */
+void race_control_process(void);    /* 比赛控制状态机处理 */
+uint8 quiet_stop_key_pressed(void); /* 检查静默停止键是否按下 */
+uint8 ui_raw_input_state(void);     /* 获取所有按键/拨码的原始电平状态 */
+void menu_show(void);               /* 菜单页面显示主函数 */
+uint8 run_quiet_active(void);       /* 查询当前是否处于运行静默模式 */
+void turn_right_led_on(void);       /* 点亮右转指示LED */
+void turn_right_led_off(void);      /* 熄灭右转指示LED */
 
 #endif /* MENU_H_ */

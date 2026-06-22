@@ -4,6 +4,7 @@
 #include "Pid.h"
 #include "Track_funsion.h"
 #include "IMU.h"
+#include "Battery.h"
 #include "zf_device_small_driver_uart_control.h"
 
 #define AT_HEADER_1 0xAAu
@@ -44,6 +45,7 @@ typedef struct
     uint16 ra_hard_cnt;
     uint16 tf_us;
     uint16 inter_us;
+    uint16 battery_x10;
     uint8 valid_rows;
     uint8 ra_flag;
     uint8 ra_pre;
@@ -173,6 +175,7 @@ static void at_pack_record(uint8 *p, const AutoTuneRecord *r)
     at_put_u16(p, &idx, r->ra_hard_cnt);
     at_put_u16(p, &idx, r->tf_us);
     at_put_u16(p, &idx, r->inter_us);
+    at_put_u16(p, &idx, r->battery_x10);
     p[idx++] = r->valid_rows;
     p[idx++] = r->ra_flag;
     p[idx++] = r->ra_pre;
@@ -213,6 +216,7 @@ static void at_pack_live(uint8 *p, const AutoTuneRecord *r)
     at_put_i16(p, &idx, r->yaw10);
     at_put_i16(p, &idx, r->ra_yaw10);
     at_put_i16(p, &idx, r->yaw_rate_dps);
+    at_put_u16(p, &idx, r->battery_x10);
     at_put_i16(p, &idx, r->duty_left);
     at_put_i16(p, &idx, r->duty_right);
     p[idx++] = r->valid_rows;
@@ -357,6 +361,7 @@ void auto_tune_log_pid_tick(void)
     r->ra_hard_cnt = ra_dbg_hard_cnt;
     r->tf_us = at_clip_u16_u32(prof_tf_us);
     r->inter_us = at_clip_u16_u32(prof_inter_us);
+    r->battery_x10 = battery_get_voltage_x10();
     r->valid_rows = at_clip_u8_u16(g_tf.valid_row_count);
     r->ra_flag = g_ra_flag;
     r->ra_pre = (uint8)((g_ra_pre_flag || g_ra_pre_slow_flag) ? 1u : 0u);

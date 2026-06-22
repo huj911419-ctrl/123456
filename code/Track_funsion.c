@@ -1,13 +1,13 @@
-/* 包含巡线融合模块头文件，定义了常量、结构体和接口声�?*/
+/* 包含巡线融合模块头文件，定义了常量、结构体和接口声明  */
 #include "Track_funsion.h"
-/* 包含PID控制头文件，用于获取单边巡线模式变量 g_post_edge_side */
+/* 包含PID控制头文件，用于获取单边巡线模式变量 g_post_edge_side  */
 #include "Pid.h"
 
 /* ========================================================================
  * 全局变量定义
- * ======================================================================== */
+ * ========================================================================  */
 
-/* 巡线融合主结构体，存储每帧的边缘、中线、误差等所有巡线结�?*/
+/* 巡线融合主结构体，存储每帧的边缘、中线、误差等所有巡线结果  */
 TrackFusion_t g_tf;
 static TrackFusion_t s_tf_work;
 static TrackFusion_t * const s_tf_publish_target = &g_tf;
@@ -20,19 +20,19 @@ void track_fusion_publish(void)
     interrupt_global_enable(irq_state);
 }
 
-/* 二值化后的图像数据（压缩后 94x60），255=白（赛道），0=黑（背景�?*/
+/* 二值化后的图像数据（压缩后 94x60），255=白（赛道），0=黑（背景） */
 uint8 Image_Binarize[TF_IMG_H][TF_IMG_W];
 
-/* 压缩后的灰度图像数据�?4x60），由原�?188x120 最近邻下采样得�?*/
+/* 压缩后的灰度图像数据（94x60），由原始 188x120 最近邻下采样得到  */
 uint8 image_0[COMP_H][COMP_W];
 
-/* 当前使用的二值化阈值，初始�?Otsu 最低阈�?75 */
+/* 当前使用的二值化阈值，初始Otsu 最低阈值 75  */
 uint16 Image_Threshold = (uint16)TF_OTSU_MIN_THRESHOLD;
 
-/* 阈值偏移量，通过菜单调节，正值提高阈值（更少白色），负值降低阈值（更多白色�?*/
+/* 阈值偏移量，通过菜单调节，正值提高阈值（更少白色），负值降低阈值（更多白色） */
 int16 threshold_bias = 30;
 
-/* TFT图像诊断：判断是否真的处理到新帧，以及二值图里是否有白色像素 */
+/* TFT图像诊断：判断是否真的处理到新帧，以及二值图里是否有白色像素  */
 volatile uint8 g_tf_image_ready = 0u;
 volatile uint32 g_tf_frame_count = 0u;
 volatile uint16 g_tf_white_count = 0u;
@@ -40,61 +40,61 @@ uint8 g_corner_fill_active = 0u;
 int16 g_corner_fill_center[TF_IMG_H];
 uint8 g_corner_fill_valid[TF_IMG_H];
 
-/* 未降噪二值图临时缓冲区，降噪后直接写�?Image_Binarize */
+/* 未降噪二值图临时缓冲区，降噪后直接写入 Image_Binarize  */
 static uint8 s_bin_tmp[TF_IMG_H][TF_IMG_W];
 
-/* ---- Otsu 内部变量 ---- */
+/* ---- Otsu 内部变量 ----  */
 
-/* Otsu 帧计数器，每 TF_OTSU_INTERVAL 帧执行一�?Otsu 自适应阈值计�?*/
+/* Otsu 帧计数器，每 TF_OTSU_INTERVAL 帧执行一次 Otsu 自适应阈值计算  */
 static uint8 s_otsu_cnt = 0;
 
-/* Otsu 灰度直方图，统计 0~255 各灰度级的像素数�?*/
+/* Otsu 灰度直方图，统计 0~255 各灰度级的像素数 */
 static uint16 s_hist[256];
 
-/* ---- 丢线检测与拐点相关变量 ---- */
+/* ---- 丢线检测与拐点相关变量 ----  */
 
-/* 行扫描过程中首次丢失行的行号�?1 表示未丢失。用于路�?弯道检�?*/
+/* 行扫描过程中首次丢失行的行号1 表示未丢失。用于路弯道检 */
 static int16 s_first_miss_row = -1;
 
-/* 最后一个有效行的中点列号，当某行丢失时用于回退参�?*/
+/* 最后一个有效行的中点列号，当某行丢失时用于回退参 */
 static int16 s_last_valid_center = TF_IMG_CENTER;
 
-/* Post-turn frames that skip pre-detect and intersection detect. */
+/* Post-turn frames that skip pre-detect and intersection detect.  */
 static volatile uint8 s_inter_post_turn_suppress_cnt = 0u;
 
-/* 基准行行号（基点行），即从底部开始搜索赛道的起始�?*/
+/* 基准行行号（基点行），即从底部开始搜索赛道的起始 */
 static int16 s_jidian_row = TF_JIDIAN_ROW;
 
-/* 动态赛道半宽度（像素），根据有效边缘对自动更新，用于单边模式补全缺失边�?*/
+/* 动态赛道半宽度（像素），根据有效边缘对自动更新，用于单边模式补全缺失边 */
 static int16 s_track_half_width = TRACK_HALF_WIDTH;
 static int16 s_tf_error_filtered = 0;
 static int16 s_tf_lookahead_filtered = 0;
 static uint8 s_tf_error_filter_valid = 0u;
 
-/* 中点列号环形缓冲区大小，用于路口检测时选取倒数�?N 个有效中�?*/
+/* 中点列号环形缓冲区大小，用于路口检测时选取倒数N 个有效中 */
 #define IP_COL_BUF_SIZE 8
 
-/* 中点列号环形缓冲区，存储最近若干帧的有效中点列�?*/
+/* 中点列号环形缓冲区，存储最近若干帧的有效中点列 */
 static int16 s_center_buf[IP_COL_BUF_SIZE];
 
-/* 中点缓冲区已存元素计数（不超�?IP_COL_BUF_SIZE�?*/
+/* 中点缓冲区已存元素计数（不超IP_COL_BUF_SIZE */
 static uint8 s_center_buf_cnt = 0u;
 
-/* 左侧探针列号（像素），用于在图像左侧边缘附近检测白色像素（路口分支�?*/
+/* 左侧探针列号（像素），用于在图像左侧边缘附近检测白色像素（路口分支 */
 int16 ip_left_col = 9;
 
-/* 右侧探针列号（像素），用于在图像右侧边缘附近检测白色像素（路口分支�?*/
+/* 右侧探针列号（像素），用于在图像右侧边缘附近检测白色像素（路口分支 */
 int16 ip_right_col = 84;
 
-/* 中点缓冲区偏移量�?=取最近（倒数�?个）�?=取倒数�?个，以此类推 */
+/* 中点缓冲区偏移量=取最近（倒数个）=取倒数个，以此类推  */
 int16 ip_col_offset = 2;
 
-/* ---- 前向声明 ---- */
+/* ---- 前向声明 ----  */
 
-/* 前向声明：侧面探针白色检测（检测某行指定列附近是否有足够白色像素） */
+/* 前向声明：侧面探针白色检测（检测某行指定列附近是否有足够白色像素）  */
 static uint8 side_probe_has_white(int16 row, int16 center_col);
 
-/* 前向声明：对称分量检测（判断某行是否为三极管等干扰的对称结构�?*/
+/* 前向声明：对称分量检测（判断某行是否为三极管等干扰的对称结构 */
 static uint8 symmetric_component_at_row(int16 row, int16 center_col);
 
 static uint8 inter_side_branch_has_road(int16 row,
@@ -166,27 +166,27 @@ static void copy_binary_image(void);
 static uint8 corner_real_line_takeover_ready(int16 jrow, int16 end_row);
 static void corner_fill_apply(int16 jrow, int16 end_row);
 
-/* 前向声明：int16 取绝对�?*/
+/* 前向声明：int16 取绝对 */
 static int16 abs_i16(int16 v);
 
-/* 前向声明：清除路口检测结�?*/
+/* 前向声明：清除路口检测结 */
 static void clear_inter_result(void);
 
 /**
- * @brief �?int16 阈值值钳位到 [20, 240] 范围并转�?uint16
+ * @brief int16 阈值值钳位到 [20, 240] 范围并转uint16
  *
- * 作用：保证二值化阈值不会过低（全白）或过高（全黑），提供基本的数值安全性�?
+ * 作用：保证二值化阈值不会过低（全白）或过高（全黑），提供基本的数值安全性
  *
- * @param value 输入阈值值（int16 类型�?
+ * @param value 输入阈值值（int16 类型
  * @return 钳位后的 uint16 阈值，范围 [20, 240]
- */
+  */
 static uint16 clamp_threshold_i16(int16 value)
 {
-    /* 若值低于下�?0，强制设�?0，防止阈值过低导致二值化全白 */
+    /* 若值低于下0，强制设0，防止阈值过低导致二值化全白  */
     if (value < 20) value = 20;
-    /* 若值高于上�?40，强制设�?40，防止阈值过高导致二值化全黑 */
+    /* 若值高于上40，强制设40，防止阈值过高导致二值化全黑  */
     if (value > 240) value = 240;
-    /* 将钳位后�?int16 值转�?uint16 类型返回 */
+    /* 将钳位后int16 值转uint16 类型返回  */
     return (uint16)value;
 }
 
@@ -241,33 +241,33 @@ static int16 filter_track_signal(int16 raw, int16 *state, int16 max_step)
 }
 
 /* ========================================================================
- * 图像压缩�?88x120 -> 94x60（最近邻下采样）
- * ======================================================================== */
+ * 图像压缩88x120 -> 94x60（最近邻下采样）
+ * ========================================================================  */
 
 /**
  * @brief 图像压缩：将原始 188x120 灰度图像通过最近邻下采样压缩为 94x60
  *
- * 采用最简单的隔行隔列抽样方式（步长为2），速度极快，适合嵌入式实时处理�?
- * 压缩后图像存�?image_0[COMP_H][COMP_W]，后续所有处理基于此压缩图像�?
+ * 采用最简单的隔行隔列抽样方式（步长为2），速度极快，适合嵌入式实时处理
+ * 压缩后图像存image_0[COMP_H][COMP_W]，后续所有处理基于此压缩图像
  *
- * 算法：对原始图像�?行取1行、每2列取1列，等价�?nearest-neighbor 缩放�?
- * 原始 188x120 -> 压缩�?94x60，像素数减少�?1/4，显著降低后续处理计算量�?
- */
+ * 算法：对原始图像行取1行、每2列取1列，等价nearest-neighbor 缩放
+ * 原始 188x120 -> 压缩94x60，像素数减少1/4，显著降低后续处理计算量
+  */
 static void compress_image(void)
 {
-    /* 外层循环：遍历压缩后图像的每一行（0 �?COMP_H-1，即 0~59�?*/
+    /* 外层循环：遍历压缩后图像的每一行（0 COMP_H-1，即 0~59 */
     for (uint8 i = 0u; i < COMP_H; i++)
     {
-        /* 目标行指针，指向压缩后图像第 i 行的起始位置 */
+        /* 目标行指针，指向压缩后图像第 i 行的起始位置  */
         uint8 *dst = image_0[i];
-        /* 源行指针，指向原始图像第 i*2 行（步长�?，隔行取样） */
+        /* 源行指针，指向原始图像第 i*2 行（步长，隔行取样）  */
         const uint8 *row0 = mt9v03x_image[(uint16)i * 2u];
         const uint8 *row1 = mt9v03x_image[(uint16)i * 2u + 1u];
 
-        /* 内层循环：遍历压缩后图像的每一列（0 �?COMP_W-1，即 0~93�?*/
+        /* 内层循环：遍历压缩后图像的每一列（0 COMP_W-1，即 0~93 */
         for (uint8 j = 0u; j < COMP_W; j++)
         {
-            /* 隔列抽样，取原始图像�?j*2 列的像素值赋给压缩图�?*/
+            /* 隔列抽样，取原始图像j*2 列的像素值赋给压缩图 */
             uint16 col = (uint16)j * 2u;
             dst[j] = (uint8)(((uint16)row0[col] + row0[col + 1u] +
                               row1[col] + row1[col + 1u] + 2u) >> 2);
@@ -276,143 +276,143 @@ static void compress_image(void)
 }
 
 /* ========================================================================
- * Otsu 自适应阈值算法（基于压缩�?94x60 图像�?
- * ======================================================================== */
+ * Otsu 自适应阈值算法（基于压缩94x60 图像
+ * ========================================================================  */
 
 /**
- * @brief Otsu 自适应阈值算法（基于压缩�?94x60 图像�?
+ * @brief Otsu 自适应阈值算法（基于压缩94x60 图像
  *
- * Otsu 算法（大津法）通过最大化类间方差自动选取最佳二值化阈值�?
- * 实现步骤�?
- *   1. 统计灰度直方�?s_hist[256]
- *   2. 遍历所有可能阈�?t (0~255)，计算前�?背景的类间方�?
- *   3. 选取使类间方差最大的 t 作为阈�?
- *   4. 阈值不低于 TF_OTSU_MIN_THRESHOLD�?5），防止低对比度场景阈值过�?
- *   5. 加上菜单可调�?threshold_bias 偏移�?
+ * Otsu 算法（大津法）通过最大化类间方差自动选取最佳二值化阈值
+ * 实现步骤
+ *   1. 统计灰度直方s_hist[256]
+ *   2. 遍历所有可能阈t (0~255)，计算前背景的类间方
+ *   3. 选取使类间方差最大的 t 作为阈
+ *   4. 阈值不低于 TF_OTSU_MIN_THRESHOLD5），防止低对比度场景阈值过
+ *   5. 加上菜单可调threshold_bias 偏移
  *
  * @return 计算得到的二值化阈值（uint16），范围 [20, 240]
- */
+  */
 static uint16 calc_otsu(void)
 {
-    /* 图像总像素数 = 94 * 60 = 5640，用于计算前�?背景的权重比�?*/
+    /* 图像总像素数 = 94 * 60 = 5640，用于计算前背景的权重比 */
     uint32 total = (uint32)COMP_H * COMP_W;
-    /* 所有像素灰度值的加权总和，用于快速计算前景均�?*/
+    /* 所有像素灰度值的加权总和，用于快速计算前景均 */
     uint32 sum = 0u;
-    /* 默认阈值（最低保护值），当 Otsu 计算结果过低时使用此�?*/
+    /* 默认阈值（最低保护值），当 Otsu 计算结果过低时使用此 */
     uint16 threshold = (uint16)TF_OTSU_MIN_THRESHOLD;
 
-    /* ---- 步骤1：清零直方图并统计各灰度级出现次�?---- */
-    /* �?256 个灰度级的计数全部清�?*/
+    /* ---- 步骤1：清零直方图并统计各灰度级出现次----  */
+    /* 256 个灰度级的计数全部清 */
     for (uint16 i = 0; i < 256; i++) s_hist[i] = 0;
-    /* 遍历压缩图像的每个像素，累加对应灰度级的直方图计�?*/
+    /* 遍历压缩图像的每个像素，累加对应灰度级的直方图计算  */
     for (uint8 i = 0; i < COMP_H; i++)
         for (uint8 j = 0; j < COMP_W; j++)
             s_hist[image_0[i][j]]++;
 
-    /* ---- 步骤2：计算总灰度加权和 sum = sigma(t * hist[t]) ---- */
-    /* 遍历所有灰度级，计算加权总和，用于后续快速求前景均�?*/
+    /* ---- 步骤2：计算总灰度加权和 sum = sigma(t * hist[t]) ----  */
+    /* 遍历所有灰度级，计算加权总和，用于后续快速求前景均 */
     for (uint16 t = 0; t < 256; t++)
         sum += (uint32)t * s_hist[t];
 
-    /* 背景类（灰度�?<= t）的灰度加权和，逐步累加 */
+    /* 背景类（灰度<= t）的灰度加权和，逐步累加  */
     uint32 sumB = 0u;
-    /* 背景类的像素数（权重），逐步累加 */
+    /* 背景类的像素数（权重），逐步累加  */
     uint32 wB = 0u;
-    /* 记录遍历过程中遇到的最大类间方差得�?*/
+    /* 记录遍历过程中遇到的最大类间方差得到  */
     uint32 max_score = 0u;
 
-    /* ---- 步骤3：遍历所有阈值，寻找使类间方差最大的阈�?---- */
+    /* ---- 步骤3：遍历所有阈值，寻找使类间方差最大的阈----  */
     for (uint16 t = 0; t < 256; t++)
     {
-        /* 累加当前灰度�?t 的像素数到背景类 */
+        /* 累加当前灰度t 的像素数到背景类  */
         wB += s_hist[t];
-        /* 若背景类为空（尚无像素），跳过当前阈�?*/
+        /* 若背景类为空（尚无像素），跳过当前阈 */
         if (wB == 0) continue;
 
-        /* 前景类像素数 = 总像素数 - 背景类像素数 */
+        /* 前景类像素数 = 总像素数 - 背景类像素数  */
         uint32 wF = total - wB;
-        /* 若前景类为空（所有像素都在背景中），后续阈值无意义，提前退�?*/
+        /* 若前景类为空（所有像素都在背景中），后续阈值无意义，提前退 */
         if (wF == 0) break;
 
-        /* 累加当前灰度级的加权和到背景�?*/
+        /* 累加当前灰度级的加权和到背景） */
         sumB += (uint32)t * s_hist[t];
 
-        /* 计算背景类的灰度均�?*/
+        /* 计算背景类的灰度均 */
         uint32 meanB = sumB / wB;
-        /* 计算前景类的灰度均�?*/
+        /* 计算前景类的灰度均 */
         uint32 meanF = (sum - sumB) / wF;
-        /* 计算背景与前景均值之�?*/
+        /* 计算背景与前景均值之 */
         int32 diff = (int32)meanB - (int32)meanF;
-        /* 取均值差的绝对�?*/
+        /* 取均值差的绝对 */
         uint32 diff_abs = (uint32)((diff < 0) ? -diff : diff);
-        /* 计算类间权重，右�?位防止乘法溢�?*/
+        /* 计算类间权重，右位防止乘法溢 */
         uint32 weight = (wB * wF) >> 8;
-        /* 类间方差得分 = 权重 * 均值差平方 */
+        /* 类间方差得分 = 权重 * 均值差平方  */
         uint32 score = weight * diff_abs * diff_abs;
 
-        /* 若当前得分超过历史最大值，更新最优阈�?*/
+        /* 若当前得分超过历史最大值，更新最优阈 */
         if (score > max_score)
         {
-            /* 记录新的最大得�?*/
+            /* 记录新的最大得到  */
             max_score = score;
-            /* 记录当前阈值为最优阈�?*/
+            /* 记录当前阈值为最优阈 */
             threshold = t;
         }
     }
 
-    /* 阈值下限保护：防止低对比度场景阈值过低导致大量噪�?*/
+    /* 阈值下限保护：防止低对比度场景阈值过低导致大量噪 */
     if (threshold < (uint16)TF_OTSU_MIN_THRESHOLD)
         threshold = (uint16)TF_OTSU_MIN_THRESHOLD;
 
-    /* 加上菜单可调的阈值偏移量，钳位到 [20, 240] 后返�?*/
+    /* 加上菜单可调的阈值偏移量，钳位到 [20, 240] 后返 */
     return clamp_threshold_i16((int16)threshold + threshold_bias);
 }
 
 /* ========================================================================
- * 图像二值化（基于压缩后图像�?
- * ======================================================================== */
+ * 图像二值化（基于压缩后图像
+ * ========================================================================  */
 
 /**
- * @brief 图像二值化：将压缩后的灰度图像转为黑白二值图�?
+ * @brief 图像二值化：将压缩后的灰度图像转为黑白二值图
  *
- * 遍历 image_0 中每个像素，灰度值大于阈值设为白�?(255)，否则设为黑�?(0)�?
- * 结果先存�?s_bin_tmp，降噪后再写�?Image_Binarize，供后续边缘扫描使用�?
- * 二值化是将连续灰度信息简化为0/1的关键步骤，大幅简化后续边缘检测逻辑�?
- */
+ * 遍历 image_0 中每个像素，灰度值大于阈值设为白(255)，否则设为黑(0)
+ * 结果先存s_bin_tmp，降噪后再写入 Image_Binarize，供后续边缘扫描使用
+ * 二值化是将连续灰度信息简化为0/1的关键步骤，大幅简化后续边缘检测逻辑
+  */
 static void binarize_image(void)
 {
-    /* 外层循环：遍历压缩图像的每一�?*/
+    /* 外层循环：遍历压缩图像的每一 */
     for (uint16 i = 0; i < COMP_H; i++)
     {
         const uint8 *src = image_0[i];
         uint8 *dst = s_bin_tmp[i];
-        /* 内层循环：遍历压缩图像的每一�?*/
+        /* 内层循环：遍历压缩图像的每一 */
         for (uint16 j = 0; j < COMP_W; j++)
-            /* 灰度值大于阈值设为白�?255)，否则设为黑�?0)，完成二值化 */
+            /* 灰度值大于阈值设为白255)，否则设为黑0)，完成二值化  */
             dst[j] = (src[j] > Image_Threshold) ? Image_WHITE : Image_BLACK;
     }
 }
 
 /* ========================================================================
- * 3x3 邻域双缓冲降噪（二值化图像�?
- * ======================================================================== */
+ * 3x3 邻域双缓冲降噪（二值化图像
+ * ========================================================================  */
 
 /**
  * @brief 3x3 邻域双缓冲降噪，消除二值化图像中的孤立噪点
  *
- * 对每个像素检查其 3x3 邻域内的白色像素数量�?
+ * 对每个像素检查其 3x3 邻域内的白色像素数量
  *   - 若当前像素为白色：邻域白色数 >= TF_DENOISE_WHITE_MIN(4) 则保留，否则变黑（去白噪点）
- *   - 若当前像素为黑色：邻域白色数 >= TF_DENOISE_BLACK_FILL(7) 则变白（填补黑噪点），否则保�?
- *   - 图像边界像素不做处理，直接保留原�?
+ *   - 若当前像素为黑色：邻域白色数 >= TF_DENOISE_BLACK_FILL(7) 则变白（填补黑噪点），否则保
+ *   - 图像边界像素不做处理，直接保留原
  *
- * 使用双缓冲：�?s_bin_tmp 读取未降噪二值图，直接写�?Image_Binarize�?
- * 避免在计算过程中读写同一数组导致结果不一致，同时省掉整幅图拷贝�?
- */
+ * 使用双缓冲：s_bin_tmp 读取未降噪二值图，直接写入 Image_Binarize
+ * 避免在计算过程中读写同一数组导致结果不一致，同时省掉整幅图拷贝
+  */
 static void denoise_binary_image(void)
 {
     uint16 white_count = 0u;
 
-    /* 外层循环：遍历二值化图像的每一�?*/
+    /* 外层循环：遍历二值化图像的每一 */
     for (uint8 i = 0u; i < COMP_H; i++)
     {
         const uint8 *src = s_bin_tmp[i];
@@ -436,7 +436,7 @@ static void denoise_binary_image(void)
         if (dst[0] == Image_WHITE)
             white_count++;
 
-        /* 内层循环：遍历二值化图像的每一�?*/
+        /* 内层循环：遍历二值化图像的每一 */
         uint8 colsum[COMP_W];
         for (uint8 c = 0u; c < COMP_W; c++)
             colsum[c] = (uint8)((prev[c] == Image_WHITE) + (src[c] == Image_WHITE) + (next[c] == Image_WHITE));
@@ -494,23 +494,23 @@ static void update_image_diagnostics(void)
 
 /* ========================================================================
  * 二值化图像辅助函数
- * ======================================================================== */
+ * ========================================================================  */
 
 /**
  * @brief 判断指定坐标是否为白色像素（带边界检查）
  *
- * 提供安全的像素访问接口，越界时返回黑色（0），避免数组越界访问�?
+ * 提供安全的像素访问接口，越界时返回黑色（0），避免数组越界访问
  *
  * @param row 行号（int16 类型，支持负数检查）
  * @param col 列号（int16 类型，支持负数检查）
- * @return 1=白色像素�?=黑色像素或坐标越�?
- */
+ * @return 1=白色像素=黑色像素或坐标越
+  */
 static inline uint8 is_white(int16 row, int16 col)
 {
-    /* 越界检查：行号或列号超出图像范围时返回0（视为黑色） */
+    /* 越界检查：行号或列号超出图像范围时返回0（视为黑色）  */
     if (row < 0 || row >= TF_IMG_H || col < 0 || col >= TF_IMG_W)
         return 0u;
-    /* 在范围内，判断像素值是否等于白�?255)，是返回1，否返回0 */
+    /* 在范围内，判断像素值是否等于白255)，是返回1，否返回0  */
     return (Image_Binarize[row][col] == Image_WHITE) ? 1u : 0u;
 }
 
@@ -548,7 +548,7 @@ static uint8 inline_component_ip_guard(const InflectionPoint_t *ip)
     if (!center_forward_has)
         return 0u;
 
-    /* Resistor-like straight components: stable line, high white area, fixed near-bottom IP. */
+    /* Resistor-like straight components: stable line, high white area, fixed near-bottom IP.  */
     if (ip->row >= (int16)INTER_INLINE_COMPONENT_BOTTOM_ROW_MIN &&
         ip->row <= (int16)INTER_INLINE_COMPONENT_BOTTOM_ROW_MAX &&
         g_tf.valid_row_count >= INTER_INLINE_COMPONENT_BOTTOM_VALID_MIN &&
@@ -573,340 +573,340 @@ static uint8 inline_component_ip_guard(const InflectionPoint_t *ip)
 }
 
 /**
- * @brief 判断指定位置是否为左边缘（黑->白跳变，即赛道左边界�?
+ * @brief 判断指定位置是否为左边缘（黑->白跳变，即赛道左边界
  *
- * 左边缘定义：左边像素为黑，当前和右边像素为白�?
- * 这代表赛道从背景进入赛道的跳变点（赛道左边界）�?
- * 通过检查三个连续像素的黑白关系来检测边缘跳变�?
+ * 左边缘定义：左边像素为黑，当前和右边像素为白
+ * 这代表赛道从背景进入赛道的跳变点（赛道左边界）
+ * 通过检查三个连续像素的黑白关系来检测边缘跳变
  *
  * @param row 行号
  * @param col 列号
- * @return 1=是左边缘�?=不是或越�?
- */
+ * @return 1=是左边缘=不是或越
+  */
 static inline uint8 is_left_edge(int16 row, int16 col)
 {
-    /* 边界列不检测（需要访�?col-1 �?col+1，避免越界） */
+    /* 边界列不检测（需要访col-1 col+1，避免越界）  */
     if (row < 0 || row >= TF_IMG_H || col < 1 || col >= TF_IMG_W - 1) return 0u;
     const uint8 *line = Image_Binarize[row];
-    /* 左边缘条件：col-1为黑 �?col为白 �?col+1为白（黑->白跳变） */
+    /* 左边缘条件：col-1为黑 col为白 col+1为白（黑->白跳变）  */
     return (line[col - 1] != Image_WHITE &&
             line[col]     == Image_WHITE &&
             line[col + 1] == Image_WHITE) ? 1u : 0u;
 }
 
 /**
- * @brief 判断指定位置是否为右边缘（白->黑跳变，即赛道右边界�?
+ * @brief 判断指定位置是否为右边缘（白->黑跳变，即赛道右边界
  *
- * 右边缘定义：左边和当前像素为白，右边像素为黑�?
- * 这代表赛道从赛道进入背景的跳变点（赛道右边界）�?
- * 通过检查三个连续像素的黑白关系来检测边缘跳变�?
+ * 右边缘定义：左边和当前像素为白，右边像素为黑
+ * 这代表赛道从赛道进入背景的跳变点（赛道右边界）
+ * 通过检查三个连续像素的黑白关系来检测边缘跳变
  *
  * @param row 行号
  * @param col 列号
- * @return 1=是右边缘�?=不是或越�?
- */
+ * @return 1=是右边缘=不是或越
+  */
 static inline uint8 is_right_edge(int16 row, int16 col)
 {
-    /* 边界列不检测（需要访�?col-1 �?col+1，避免越界） */
+    /* 边界列不检测（需要访col-1 col+1，避免越界）  */
     if (row < 0 || row >= TF_IMG_H || col < 1 || col >= TF_IMG_W - 1) return 0u;
     const uint8 *line = Image_Binarize[row];
-    /* 右边缘条件：col-1为白 �?col为白 �?col+1为黑（白->黑跳变） */
+    /* 右边缘条件：col-1为白 col为白 col+1为黑（白->黑跳变）  */
     return (line[col - 1] == Image_WHITE &&
             line[col]     == Image_WHITE &&
             line[col + 1] != Image_WHITE) ? 1u : 0u;
 }
 
 /* ========================================================================
- * 边缘扫描函数（带边界安全保护�?
- * ======================================================================== */
+ * 边缘扫描函数（带边界安全保护
+ * ========================================================================  */
 
 /**
- * @brief �?start 向右扫描寻找左边缘（�?>白跳变点�?
+ * @brief start 向右扫描寻找左边缘（>白跳变点
  *
- * 在指定行中，�?start 列向 end 列逐列扫描，找到第一个左边缘即返回�?
- * 左边�?= 左边黑、当前白、右边白�?
+ * 在指定行中，start 列向 end 列逐列扫描，找到第一个左边缘即返回
+ * 左边= 左边黑、当前白、右边白
  *
  * @param row   行号
- * @param start 起始列号（含�?
- * @param end   结束列号（含�?
- * @return 找到的边缘列号，未找到返�?TF_INVALID(-1)
- */
+ * @param start 起始列号（含
+ * @param end   结束列号（含
+ * @return 找到的边缘列号，未找到返TF_INVALID(-1)
+  */
 static int16 scan_left_edge_right(int16 row, int16 start, int16 end)
 {
-    /* 将起始列钳位�?>= 1（左边缘检测需要访�?col-1�?*/
+    /* 将起始列钳位>= 1（左边缘检测需要访col-1 */
     if (start < 1) start = 1;
-    /* 将结束列钳位�?<= TF_IMG_W-2（需要访�?col+1�?*/
+    /* 将结束列钳位<= TF_IMG_W-2（需要访col+1 */
     if (end >= TF_IMG_W - 1) end = TF_IMG_W - 2;
-    /* 若起始列大于结束列，搜索范围无效，直接返�?*/
+    /* 若起始列大于结束列，搜索范围无效，直接返 */
     if (start > end) return TF_INVALID;
-    /* 从左到右逐列扫描，找到第一个左边缘即返回其列号 */
+    /* 从左到右逐列扫描，找到第一个左边缘即返回其列号  */
     for (int16 c = start; c <= end; c++)
         if (is_left_edge(row, c)) return c;
-    /* 扫描完毕未找到左边缘，返回无效标�?*/
+    /* 扫描完毕未找到左边缘，返回无效标 */
     return TF_INVALID;
 }
 
 /**
- * @brief �?start 向左扫描寻找左边缘（�?>白跳变点�?
+ * @brief start 向左扫描寻找左边缘（>白跳变点
  *
- * 在指定行中，�?start 列向 end 列逐列反向扫描，找到第一个左边缘即返回�?
- * 用于从中心向左搜索赛道左边界�?
+ * 在指定行中，start 列向 end 列逐列反向扫描，找到第一个左边缘即返回
+ * 用于从中心向左搜索赛道左边界
  *
  * @param row   行号
- * @param start 起始列号（含），扫描方向为从右向�?
- * @param end   结束列号（含�?
- * @return 找到的边缘列号，未找到返�?TF_INVALID(-1)
- */
+ * @param start 起始列号（含），扫描方向为从右向
+ * @param end   结束列号（含
+ * @return 找到的边缘列号，未找到返TF_INVALID(-1)
+  */
 static int16 scan_left_edge_left(int16 row, int16 start, int16 end)
 {
-    /* 将起始列钳位�?<= TF_IMG_W-2（右边界保护�?*/
+    /* 将起始列钳位<= TF_IMG_W-2（右边界保护 */
     if (start >= TF_IMG_W - 1) start = TF_IMG_W - 2;
-    /* 将结束列钳位�?>= 1（左边缘检测需要访�?col-1�?*/
+    /* 将结束列钳位>= 1（左边缘检测需要访col-1 */
     if (end < 1) end = 1;
-    /* 若起始列小于结束列（反向范围无效），直接返回 */
+    /* 若起始列小于结束列（反向范围无效），直接返回  */
     if (start < end) return TF_INVALID;
-    /* 从右到左逐列扫描，找到第一个左边缘即返回其列号 */
+    /* 从右到左逐列扫描，找到第一个左边缘即返回其列号  */
     for (int16 c = start; c >= end; c--)
         if (is_left_edge(row, c)) return c;
-    /* 扫描完毕未找到左边缘，返回无效标�?*/
+    /* 扫描完毕未找到左边缘，返回无效标 */
     return TF_INVALID;
 }
 
 /**
- * @brief �?start 向左扫描寻找右边缘（�?>黑跳变点�?
+ * @brief start 向左扫描寻找右边缘（>黑跳变点
  *
- * 在指定行中，�?start 列向 end 列逐列反向扫描，找到第一个右边缘即返回�?
- * 右边�?= 左边白、当前白、右边黑�?
+ * 在指定行中，start 列向 end 列逐列反向扫描，找到第一个右边缘即返回
+ * 右边= 左边白、当前白、右边黑
  *
  * @param row   行号
- * @param start 起始列号（含），扫描方向为从右向�?
- * @param end   结束列号（含�?
- * @return 找到的边缘列号，未找到返�?TF_INVALID(-1)
- */
+ * @param start 起始列号（含），扫描方向为从右向
+ * @param end   结束列号（含
+ * @return 找到的边缘列号，未找到返TF_INVALID(-1)
+  */
 static int16 scan_right_edge_left(int16 row, int16 start, int16 end)
 {
-    /* 将起始列钳位�?<= TF_IMG_W-2（右边缘检测需要访�?col+1�?*/
+    /* 将起始列钳位<= TF_IMG_W-2（右边缘检测需要访col+1 */
     if (start >= TF_IMG_W - 1) start = TF_IMG_W - 2;
-    /* 将结束列钳位�?>= 1 */
+    /* 将结束列钳位>= 1  */
     if (end < 1) end = 1;
-    /* 若起始列小于结束列（反向范围无效），直接返回 */
+    /* 若起始列小于结束列（反向范围无效），直接返回  */
     if (start < end) return TF_INVALID;
-    /* 从右到左逐列扫描，找到第一个右边缘即返回其列号 */
+    /* 从右到左逐列扫描，找到第一个右边缘即返回其列号  */
     for (int16 c = start; c >= end; c--)
         if (is_right_edge(row, c)) return c;
-    /* 扫描完毕未找到右边缘，返回无效标�?*/
+    /* 扫描完毕未找到右边缘，返回无效标 */
     return TF_INVALID;
 }
 
 /**
- * @brief �?start 向右扫描寻找右边缘（�?>黑跳变点�?
+ * @brief start 向右扫描寻找右边缘（>黑跳变点
  *
- * 在指定行中，�?start 列向 end 列逐列扫描，找到第一个右边缘即返回�?
- * 用于从中心向右搜索赛道右边界�?
+ * 在指定行中，start 列向 end 列逐列扫描，找到第一个右边缘即返回
+ * 用于从中心向右搜索赛道右边界
  *
  * @param row   行号
- * @param start 起始列号（含�?
- * @param end   结束列号（含�?
- * @return 找到的边缘列号，未找到返�?TF_INVALID(-1)
- */
+ * @param start 起始列号（含
+ * @param end   结束列号（含
+ * @return 找到的边缘列号，未找到返TF_INVALID(-1)
+  */
 static int16 scan_right_edge_right(int16 row, int16 start, int16 end)
 {
-    /* 将起始列钳位�?>= 1 */
+    /* 将起始列钳位>= 1  */
     if (start < 1) start = 1;
-    /* 将结束列钳位�?<= TF_IMG_W-2（右边缘检测需要访�?col+1�?*/
+    /* 将结束列钳位<= TF_IMG_W-2（右边缘检测需要访col+1 */
     if (end >= TF_IMG_W - 1) end = TF_IMG_W - 2;
-    /* 若起始列大于结束列，搜索范围无效，直接返�?*/
+    /* 若起始列大于结束列，搜索范围无效，直接返 */
     if (start > end) return TF_INVALID;
-    /* 从左到右逐列扫描，找到第一个右边缘即返回其列号 */
+    /* 从左到右逐列扫描，找到第一个右边缘即返回其列号  */
     for (int16 c = start; c <= end; c++)
         if (is_right_edge(row, c)) return c;
-    /* 扫描完毕未找到右边缘，返回无效标�?*/
+    /* 扫描完毕未找到右边缘，返回无效标 */
     return TF_INVALID;
 }
 
-/* ---- 前向声明（函数定义在后面�?---- */
+/* ---- 前向声明（函数定义在后面----  */
 
-/* 前向声明：将边缘列号钳位到合法范�?[1, TF_IMG_W-2] */
+/* 前向声明：将边缘列号钳位到合法范[1, TF_IMG_W-2]  */
 static int16 clamp_edge_col(int16 col);
 
-/* 前向声明：返回当前有效的赛道半宽度（带上下限保护�?*/
+/* 前向声明：返回当前有效的赛道半宽度（带上下限保护 */
 static int16 active_track_half_width(void);
 
 /**
- * @brief 在指定行中，�?ref_col 为中心查找最近的白色段（赛道区域�?
+ * @brief 在指定行中，ref_col 为中心查找最近的白色段（赛道区域
  *
- * 搜索策略�?
- *   1. 先检�?ref_col 处是否为白色
- *   2. 若不是，向两侧交替扩展搜索最近的白色像素作为种子�?
+ * 搜索策略
+ *   1. 先检ref_col 处是否为白色
+ *   2. 若不是，向两侧交替扩展搜索最近的白色像素作为种子
  *   3. 找到种子后向左右扩展得到完整的白色段 [left, right]
  *   4. 对白色段宽度进行合法性检查：
- *      - 过宽�? TF_MAX_TRACK_WIDTH）：可能是噪声区域，返回失败
- *      - 过窄�? TF_MIN_TRACK_WIDTH）：使用半宽度补�?
+ *      - 过宽 TF_MAX_TRACK_WIDTH）：可能是噪声区域，返回失败
+ *      - 过窄 TF_MIN_TRACK_WIDTH）：使用半宽度补
  *
  * @param row      行号
- * @param ref_col  参考列号（搜索起点�?
- * @param out_lb   输出参数：白色段左边界列�?
- * @param out_rb   输出参数：白色段右边界列�?
- * @return 1=找到有效白色段，0=未找�?
- */
+ * @param ref_col  参考列号（搜索起点
+ * @param out_lb   输出参数：白色段左边界列
+ * @param out_rb   输出参数：白色段右边界列
+ * @return 1=找到有效白色段，0=未找
+  */
 static uint8 find_white_segment_near_col(int16 row, int16 ref_col,
                                          int16 *out_lb, int16 *out_rb)
 {
-    /* 种子白色像素的列号，初始为无效�?*/
+    /* 种子白色像素的列号，初始为无效 */
     int16 seed = TF_INVALID;
-    /* 白色段的左边界、右边界、中心和半宽�?*/
+    /* 白色段的左边界、右边界、中心和半宽 */
     int16 left, right, center, half;
 
-    /* 将参考列钳位到合法范�?[1, TF_IMG_W-2]，避免越界访�?*/
+    /* 将参考列钳位到合法范[1, TF_IMG_W-2]，避免越界访 */
     if (ref_col < 1) ref_col = 1;
     if (ref_col > (int16)(TF_IMG_W - 2)) ref_col = (int16)(TF_IMG_W - 2);
 
-    /* 策略1：直接检查参考列是否为白色像�?*/
+    /* 策略1：直接检查参考列是否为白色像 */
     if (is_white(row, ref_col))
     {
-        /* 参考列为白色，直接作为种子 */
+        /* 参考列为白色，直接作为种子  */
         seed = ref_col;
     }
     else
     {
-        /* 策略2：从参考列向两侧交替扩展搜索最近的白色像素 */
+        /* 策略2：从参考列向两侧交替扩展搜索最近的白色像素  */
         for (int16 d = 1; d < TF_IMG_W; d++)
         {
-            /* 计算左侧候选列 */
+            /* 计算左侧候选列  */
             int16 l = ref_col - d;
-            /* 计算右侧候选列 */
+            /* 计算右侧候选列  */
             int16 r = ref_col + d;
 
-            /* 检查左侧候选列是否在范围内且为白色 */
+            /* 检查左侧候选列是否在范围内且为白色  */
             if (l >= 1 && is_white(row, l))
             {
-                /* 找到左侧白色种子，记录并退出搜�?*/
+                /* 找到左侧白色种子，记录并退出搜 */
                 seed = l;
                 break;
             }
-            /* 检查右侧候选列是否在范围内且为白色 */
+            /* 检查右侧候选列是否在范围内且为白色  */
             if (r <= (int16)(TF_IMG_W - 2) && is_white(row, r))
             {
-                /* 找到右侧白色种子，记录并退出搜�?*/
+                /* 找到右侧白色种子，记录并退出搜 */
                 seed = r;
                 break;
             }
         }
     }
 
-    /* 若未找到任何白色像素种子，整行无赛道，返回失�?*/
+    /* 若未找到任何白色像素种子，整行无赛道，返回失 */
     if (seed == TF_INVALID)
         return 0u;
 
-    /* 从种子位置向左扩展，找到白色段的左边�?*/
+    /* 从种子位置向左扩展，找到白色段的左边 */
     left = seed;
     right = seed;
-    /* 向左扩展：只要左边像素仍为白色就继续左移 */
+    /* 向左扩展：只要左边像素仍为白色就继续左移  */
     while (left > 1 && is_white(row, left - 1))
         left--;
-    /* 向右扩展：只要右边像素仍为白色就继续右移 */
+    /* 向右扩展：只要右边像素仍为白色就继续右移  */
     while (right < (int16)(TF_IMG_W - 2) && is_white(row, right + 1))
         right++;
 
-    /* 白色段宽度过大（超过 TF_MAX_TRACK_WIDTH=30），判定为噪声区域（如大面积白色背景），返回失败 */
+    /* 白色段宽度过大（超过 TF_MAX_TRACK_WIDTH=30），判定为噪声区域（如大面积白色背景），返回失败  */
     if ((right - left) > TF_MAX_TRACK_WIDTH)
         return 0u;
 
-    /* 白色段宽度过小（不足 TF_MIN_TRACK_WIDTH=4），使用动态半宽度补全 */
+    /* 白色段宽度过小（不足 TF_MIN_TRACK_WIDTH=4），使用动态半宽度补全  */
     if ((right - left) < TF_MIN_TRACK_WIDTH)
     {
-        /* 计算白色段中心列�?*/
+        /* 计算白色段中心列 */
         center = (int16)((left + right) / 2);
-        /* 获取当前有效的赛道半宽度 */
+        /* 获取当前有效的赛道半宽度  */
         half = active_track_half_width();
-        /* 以中心为基准，向左右各扩展半宽度，得到补全后的边�?*/
+        /* 以中心为基准，向左右各扩展半宽度，得到补全后的边 */
         left = clamp_edge_col((int16)(center - half));
         right = clamp_edge_col((int16)(center + half));
     }
 
-    /* 输出补全/确认后的白色段边�?*/
+    /* 输出补全/确认后的白色段边 */
     *out_lb = left;
     *out_rb = right;
-    /* 返回成功标志 */
+    /* 返回成功标志  */
     return 1u;
 }
 
 /**
- * @brief 判断左右边缘对是否构成合法赛道宽�?
+ * @brief 判断左右边缘对是否构成合法赛道宽
  *
- * 检查边缘列号是否有效，且宽度在 [TF_MIN_TRACK_WIDTH(4), TF_MAX_TRACK_WIDTH(30)] 范围内�?
- * 用于过滤噪声边缘对和异常宽度的检测结果�?
+ * 检查边缘列号是否有效，且宽度在 [TF_MIN_TRACK_WIDTH(4), TF_MAX_TRACK_WIDTH(30)] 范围内
+ * 用于过滤噪声边缘对和异常宽度的检测结果
  *
- * @param lb 左边缘列�?
- * @param rb 右边缘列�?
- * @return 1=合法边缘对，0=非法（边缘无效或宽度超限�?
- */
+ * @param lb 左边缘列
+ * @param rb 右边缘列
+ * @return 1=合法边缘对，0=非法（边缘无效或宽度超限
+  */
 static inline uint8 valid_pair(int16 lb, int16 rb)
 {
-    /* 若任一边缘为无效�?-1)，直接判定为非法 */
+    /* 若任一边缘为无效-1)，直接判定为非法  */
     if (lb == TF_INVALID || rb == TF_INVALID) return 0u;
-    /* 计算赛道宽度（右边缘 - 左边缘） */
+    /* 计算赛道宽度（右边缘 - 左边缘）  */
     int16 w = rb - lb;
-    /* 宽度在合法范围内返回1，否则返�? */
+    /* 宽度在合法范围内返回1，否则返  */
     return (w >= TF_MIN_TRACK_WIDTH && w <= TF_MAX_TRACK_WIDTH) ? 1u : 0u;
 }
 
 /**
  * @brief 将边缘列号钳位到合法范围 [1, TF_IMG_W-2]
  *
- * 边缘列不能为 0 �?TF_IMG_W-1，因�?is_left_edge/is_right_edge 需要访问相邻列（col-1 �?col+1）�?
- * 钳位�?[1, TF_IMG_W-2] 保证所有边缘检测函数不会越界�?
+ * 边缘列不能为 0 TF_IMG_W-1，因is_left_edge/is_right_edge 需要访问相邻列（col-1 col+1）
+ * 钳位[1, TF_IMG_W-2] 保证所有边缘检测函数不会越界
  *
  * @param col 输入列号
- * @return 钳位后的列号，范�?[1, TF_IMG_W-2]
- */
+ * @return 钳位后的列号，范[1, TF_IMG_W-2]
+  */
 static int16 clamp_edge_col(int16 col)
 {
-    /* 下限保护：列号不能小�? */
+    /* 下限保护：列号不能小  */
     if (col < 1) return 1;
-    /* 上限保护：列号不能大�?TF_IMG_W-2 */
+    /* 上限保护：列号不能大TF_IMG_W-2  */
     if (col > (int16)(TF_IMG_W - 2)) return (int16)(TF_IMG_W - 2);
-    /* 在合法范围内，直接返回原�?*/
+    /* 在合法范围内，直接返回原 */
     return col;
 }
 
 /**
  * @brief 将中线列号钳位到合法范围 [0, TF_IMG_W-1]
  *
- * 中线列号可以取图像最边缘的列�? �?TF_IMG_W-1），
- * 不像边缘列那样需要访问相邻列�?
+ * 中线列号可以取图像最边缘的列 TF_IMG_W-1），
+ * 不像边缘列那样需要访问相邻列
  *
  * @param col 输入列号
- * @return 钳位后的列号，范�?[0, TF_IMG_W-1]
- */
+ * @return 钳位后的列号，范[0, TF_IMG_W-1]
+  */
 static int16 clamp_center_col(int16 col)
 {
-    /* 下限保护：列号不能小�? */
+    /* 下限保护：列号不能小  */
     if (col < 0) return 0;
-    /* 上限保护：列号不能大�?TF_IMG_W-1 */
+    /* 上限保护：列号不能大TF_IMG_W-1  */
     if (col > (int16)(TF_IMG_W - 1)) return (int16)(TF_IMG_W - 1);
-    /* 在合法范围内，直接返回原�?*/
+    /* 在合法范围内，直接返回原 */
     return col;
 }
 
 /**
  * @brief 返回当前有效的赛道半宽度（带上下限保护）
  *
- * s_track_half_width 在运行过程中通过 update_track_half_width() 自动更新�?
- * 此函数将其限制在 [TRACK_HALF_WIDTH_MIN(4), TRACK_HALF_WIDTH_MAX(14)] 范围内�?
- * 半宽度用于单边模式下补全缺失的边缘�?
+ * s_track_half_width 在运行过程中通过 update_track_half_width() 自动更新
+ * 此函数将其限制在 [TRACK_HALF_WIDTH_MIN(4), TRACK_HALF_WIDTH_MAX(14)] 范围内
+ * 半宽度用于单边模式下补全缺失的边缘
  *
  * @return 钳位后的赛道半宽度（像素），范围 [4, 14]
- */
+  */
 static int16 active_track_half_width(void)
 {
-    /* 若半宽度低于最小�?4)，返回最小�?*/
+    /* 若半宽度低于最小4)，返回最小 */
     if (s_track_half_width < TRACK_HALF_WIDTH_MIN)
         return TRACK_HALF_WIDTH_MIN;
-    /* 若半宽度超过最大�?14)，返回最大�?*/
+    /* 若半宽度超过最大14)，返回最大 */
     if (s_track_half_width > TRACK_HALF_WIDTH_MAX)
         return TRACK_HALF_WIDTH_MAX;
-    /* 在合法范围内，直接返回当前�?*/
+    /* 在合法范围内，直接返回当前 */
     return s_track_half_width;
 }
 
@@ -914,58 +914,58 @@ static int16 active_track_half_width(void)
  * @brief 根据新发现的边缘对更新动态赛道半宽度
  *
  * 采用一阶低通滤波（权重 3:1）平滑更新：
- *   s_track_half_width = (旧�?* 3 + 新�?+ 2) / 4
- * 这样单帧噪声不会剧烈改变半宽度，同时能跟踪赛道宽度的缓慢变化�?
- * +2 用于四舍五入，提高精度�?
+ *   s_track_half_width = (旧* 3 + 新+ 2) / 4
+ * 这样单帧噪声不会剧烈改变半宽度，同时能跟踪赛道宽度的缓慢变化
+ * +2 用于四舍五入，提高精度
  *
- * @param lb 左边缘列�?
- * @param rb 右边缘列�?
- */
+ * @param lb 左边缘列
+ * @param rb 右边缘列
+  */
 static void update_track_half_width(int16 lb, int16 rb)
 {
-    /* 计算当前帧的赛道宽度（右边缘 - 左边缘） */
+    /* 计算当前帧的赛道宽度（右边缘 - 左边缘）  */
     int16 w = rb - lb;
-    /* 当前帧的半宽�?*/
+    /* 当前帧的半宽 */
     int16 half;
 
-    /* 宽度不合法（超出赛道宽度范围），不更新半宽度 */
+    /* 宽度不合法（超出赛道宽度范围），不更新半宽度  */
     if (w < TF_MIN_TRACK_WIDTH || w > TF_MAX_TRACK_WIDTH)
         return;
 
-    /* 计算半宽度（宽度除以2�?*/
+    /* 计算半宽度（宽度除以2 */
     half = w / 2;
-    /* 钳位半宽度到合法范围下限 */
+    /* 钳位半宽度到合法范围下限  */
     if (half < TRACK_HALF_WIDTH_MIN)
         half = TRACK_HALF_WIDTH_MIN;
-    /* 钳位半宽度到合法范围上限 */
+    /* 钳位半宽度到合法范围上限  */
     if (half > TRACK_HALF_WIDTH_MAX)
         half = TRACK_HALF_WIDTH_MAX;
 
-    /* 低通滤波更新：旧值权�?，新值权�?�?2 为四舍五�?*/
+    /* 低通滤波更新：旧值权，新值权2 为四舍五 */
     s_track_half_width = (int16)((s_track_half_width * 3 + half + 2) / 4);
 }
 
 /**
  * @brief 根据单边巡线模式归一化边缘对
  *
- * 单边巡线模式下（g_post_edge_side �?EDGE_LEFT �?EDGE_RIGHT），
+ * 单边巡线模式下（g_post_edge_side EDGE_LEFT EDGE_RIGHT），
  * 仅使用一侧的有效边缘，另一侧通过半宽度推算：
- *   - EDGE_LEFT（左侧巡线）：仅用左边缘，右边缘 = 左边�?+ 2*半宽�?
- *   - EDGE_RIGHT（右侧巡线）：仅用右边缘，左边缘 = 右边�?- 2*半宽�?
+ *   - EDGE_LEFT（左侧巡线）：仅用左边缘，右边缘 = 左边+ 2*半宽
+ *   - EDGE_RIGHT（右侧巡线）：仅用右边缘，左边缘 = 右边- 2*半宽
  *   - EDGE_BOTH（双边模式）：正常检查边缘对合法性，并更新半宽度
  *
- * 此函数同时负责更新动态半宽度（仅在双边模式下）�?
+ * 此函数同时负责更新动态半宽度（仅在双边模式下）
  *
- * @param lb 输入/输出：左边缘列号（指针，可被修改�?
- * @param rb 输入/输出：右边缘列号（指针，可被修改�?
+ * @param lb 输入/输出：左边缘列号（指针，可被修改
+ * @param rb 输入/输出：右边缘列号（指针，可被修改
  * @return 1=有效边缘对，0=无效
- */
+  */
 static uint8 normalize_edges_for_mode(int16 *lb, int16 *rb)
 {
-    /* 获取当前有效的赛道半宽度 */
+    /* 获取当前有效的赛道半宽度  */
     int16 half = active_track_half_width();
 
-    /* 单边左侧巡线模式：只需左边缘有效，右边缘由半宽度推�?*/
+    /* 单边左侧巡线模式：只需左边缘有效，右边缘由半宽度推 */
     if (g_post_edge_side == EDGE_LEFT)
     {
         if (*lb == TF_INVALID)
@@ -981,7 +981,7 @@ static uint8 normalize_edges_for_mode(int16 *lb, int16 *rb)
         return (*rb > *lb) ? 1u : 0u;
     }
 
-    /* 单边右侧巡线模式：只需右边缘有效，左边缘由半宽度推�?*/
+    /* 单边右侧巡线模式：只需右边缘有效，左边缘由半宽度推 */
     if (g_post_edge_side == EDGE_RIGHT)
     {
         if (*rb == TF_INVALID)
@@ -997,134 +997,134 @@ static uint8 normalize_edges_for_mode(int16 *lb, int16 *rb)
         return (*rb > *lb) ? 1u : 0u;
     }
 
-    /* 双边模式（EDGE_BOTH）：正常检查边缘对合法�?*/
+    /* 双边模式（EDGE_BOTH）：正常检查边缘对合法 */
     if (!valid_pair(*lb, *rb))
         return 0u;
 
-    /* 合法边缘对，更新动态半宽度（仅双边模式下更新） */
+    /* 合法边缘对，更新动态半宽度（仅双边模式下更新）  */
     update_track_half_width(*lb, *rb);
-    /* 返回成功标志 */
+    /* 返回成功标志  */
     return 1u;
 }
 
 /**
- * @brief 根据边缘对计算赛道中线列�?
+ * @brief 根据边缘对计算赛道中线列
  *
  * 单边巡线模式下，中线 = 活跃边缘 + 半宽度偏移：
- *   - EDGE_LEFT：中�?= 左边�?+ 半宽度（靠右侧推算赛道中心）
- *   - EDGE_RIGHT：中�?= 右边�?- 半宽度（靠左侧推算赛道中心）
- *   - EDGE_BOTH：中�?= (左边�?+ 右边�? / 2（取两侧边缘中点�?
+ *   - EDGE_LEFT：中= 左边+ 半宽度（靠右侧推算赛道中心）
+ *   - EDGE_RIGHT：中= 右边- 半宽度（靠左侧推算赛道中心）
+ *   - EDGE_BOTH：中= (左边+ 右边 / 2（取两侧边缘中点
  *
- * @param lb 左边缘列�?
- * @param rb 右边缘列�?
- * @return 钳位后的中线列号，范�?[0, TF_IMG_W-1]
- */
+ * @param lb 左边缘列
+ * @param rb 右边缘列
+ * @return 钳位后的中线列号，范[0, TF_IMG_W-1]
+  */
 static int16 calc_center_from_edges(int16 lb, int16 rb)
 {
-    /* 获取当前有效的赛道半宽度 */
+    /* 获取当前有效的赛道半宽度  */
     int16 half = active_track_half_width();
 
-    /* 单边左侧模式：中�?= 左边�?+ 半宽�?*/
+    /* 单边左侧模式：中= 左边+ 半宽 */
     if (g_post_edge_side == EDGE_LEFT)
         return clamp_center_col((int16)(lb + half));
 
-    /* 单边右侧模式：中�?= 右边�?- 半宽�?*/
+    /* 单边右侧模式：中= 右边- 半宽 */
     if (g_post_edge_side == EDGE_RIGHT)
         return clamp_center_col((int16)(rb - half));
 
-    /* 双边模式：中�?= 左右边缘中点 */
+    /* 双边模式：中= 左右边缘中点  */
     return clamp_center_col((int16)((lb + rb) / 2));
 }
 
 /* ========================================================================
- * 基准行（基点）检�?—�?在底部行搜索赛道
- * ======================================================================== */
+ * 基准行（基点）检—在底部行搜索赛道
+ * ========================================================================  */
 
 /**
- * @brief 设置基准行（基点）的行号和边缘数�?
+ * @brief 设置基准行（基点）的行号和边缘数
  *
  * 将找到的基准行信息写入全局状态：
  *   - s_jidian_row：基准行行号
  *   - g_tf.left_jidian：左边缘列号
  *   - g_tf.right_jidian：右边缘列号
  *
- * @param row 基准行行�?
- * @param lb  左边缘列�?
- * @param rb  右边缘列�?
- */
+ * @param row 基准行行
+ * @param lb  左边缘列
+ * @param rb  右边缘列
+  */
 static void set_jidian_row_data(int16 row, int16 lb, int16 rb)
 {
-    /* 记录基准行的行号 */
+    /* 记录基准行的行号  */
     s_jidian_row = row;
-    /* 记录基准行的左边缘列号（转为uint8存储�?*/
+    /* 记录基准行的左边缘列号（转为uint8存储 */
     g_tf.left_jidian = (uint8)lb;
-    /* 记录基准行的右边缘列号（转为uint8存储�?*/
+    /* 记录基准行的右边缘列号（转为uint8存储 */
     g_tf.right_jidian = (uint8)rb;
 }
 
 /**
- * @brief 在指定行搜索赛道边缘对（基点搜索�?
+ * @brief 在指定行搜索赛道边缘对（基点搜索
  *
- * 搜索策略（按优先级依次尝试）�?
- *   1. 检查图像中心列(col=47)附近是否有白色区域，从中心向两侧找边�?
- *   2. 检�?1/4 �?col=23)附近是否有白色区�?
- *   3. 检�?3/4 �?col=70)附近是否有白色区�?
+ * 搜索策略（按优先级依次尝试）
+ *   1. 检查图像中心列(col=47)附近是否有白色区域，从中心向两侧找边
+ *   2. 检1/4 col=23)附近是否有白色区
+ *   3. 检3/4 col=70)附近是否有白色区
  *   4. 从左到右扫描第一个左边缘，再从右到左扫描对应的右边缘
- * 最后通过 normalize_edges_for_mode() 根据单边/双边模式归一化边缘对�?
+ * 最后通过 normalize_edges_for_mode() 根据单边/双边模式归一化边缘对
  *
  * @param row    行号
  * @param out_lb 输出参数：左边缘列号
  * @param out_rb 输出参数：右边缘列号
- * @return 1=找到有效边缘对，0=未找�?
- */
+ * @return 1=找到有效边缘对，0=未找
+  */
 static uint8 find_jidian_at_row(int16 row, int16 *out_lb, int16 *out_rb)
 {
-    /* 图像中心列号 = 47 */
+    /* 图像中心列号 = 47  */
     const int16 mid = (int16)TF_IMG_CENTER;
-    /* 图像 1/4 列号 = 23 */
+    /* 图像 1/4 列号 = 23  */
     const int16 qtr = (int16)(TF_IMG_W / 4);
-    /* 图像 3/4 列号 = 70 */
+    /* 图像 3/4 列号 = 70  */
     const int16 tqtr = (int16)(TF_IMG_W * 3 / 4);
-    /* 初始化左右边缘为无效�?*/
+    /* 初始化左右边缘为无效 */
     int16 lb = TF_INVALID, rb = TF_INVALID;
     *out_lb = TF_INVALID;
     *out_rb = TF_INVALID;
 
-    /* 策略1：检查中心列(mid)附近3个像素是否为白色（赛道区域） */
+    /* 策略1：检查中心列(mid)附近3个像素是否为白色（赛道区域）  */
     if (is_white(row, mid - 1) && is_white(row, mid) && is_white(row, mid + 1))
     {
-        /* 从中心向左扫描左边缘 */
+        /* 从中心向左扫描左边缘  */
         lb = scan_left_edge_left(row, mid, 1);
-        /* 从中心向右扫描右边缘 */
+        /* 从中心向右扫描右边缘  */
         rb = scan_right_edge_right(row, mid, TF_IMG_W - 2);
     }
-    /* 策略2：检�?1/4 �?qtr)附近是否为白�?*/
+    /* 策略2：检1/4 qtr)附近是否为白 */
     else if (is_white(row, qtr - 1) && is_white(row, qtr) && is_white(row, qtr + 1))
     {
-        /* �?1/4 列向左扫描左边缘 */
+        /* 1/4 列向左扫描左边缘  */
         lb = scan_left_edge_left(row, qtr, 1);
-        /* �?1/4 列向右扫描右边缘 */
+        /* 1/4 列向右扫描右边缘  */
         rb = scan_right_edge_right(row, qtr, TF_IMG_W - 2);
     }
-    /* 策略3：检�?3/4 �?tqtr)附近是否为白�?*/
+    /* 策略3：检3/4 tqtr)附近是否为白 */
     else if (is_white(row, tqtr - 1) && is_white(row, tqtr) && is_white(row, tqtr + 1))
     {
-        /* �?3/4 列向左扫描左边缘 */
+        /* 3/4 列向左扫描左边缘  */
         lb = scan_left_edge_left(row, tqtr, 1);
-        /* �?3/4 列向右扫描右边缘 */
+        /* 3/4 列向右扫描右边缘  */
         rb = scan_right_edge_right(row, tqtr, TF_IMG_W - 2);
     }
-    /* 策略4：以上位置均无白色，从左到右全扫描找左边�?*/
+    /* 策略4：以上位置均无白色，从左到右全扫描找左边 */
     else
     {
-        /* 从图像左端向右扫描，找第一个左边缘 */
+        /* 从图像左端向右扫描，找第一个左边缘  */
         lb = scan_left_edge_right(row, 1, TF_IMG_W - 2);
-        /* 若找到左边缘，从图像右端向左扫描找对应的右边�?*/
+        /* 若找到左边缘，从图像右端向左扫描找对应的右边 */
         if (lb != TF_INVALID)
             rb = scan_right_edge_left(row, TF_IMG_W - 2, lb + TF_MIN_TRACK_WIDTH);
     }
 
-    /* 根据单边/双边模式归一化边缘对（可能推算缺失边缘或更新半宽度） */
+    /* 根据单边/双边模式归一化边缘对（可能推算缺失边缘或更新半宽度）  */
     if (g_post_edge_side != EDGE_BOTH)
     {
         if (lb == TF_INVALID)
@@ -1135,42 +1135,42 @@ static uint8 find_jidian_at_row(int16 row, int16 *out_lb, int16 *out_rb)
 
     if (!normalize_edges_for_mode(&lb, &rb)) return 0u;
 
-    /* 输出找到的边缘对 */
+    /* 输出找到的边缘对  */
     *out_lb = lb;
     *out_rb = rb;
-    /* 返回成功标志 */
+    /* 返回成功标志  */
     return 1u;
 }
 
 /**
  * @brief 基点搜索主函数：从底部向上搜索赛道基准行
  *
- * �?TF_JIDIAN_ROW(56) 向上搜索�?TF_JIDIAN_MIN_ROW(45)，找到第一�?
- * 有效边缘对即作为基准行。基准行是逐行向上扫描的起点�?
- * 如果在所有候选行中都找不到有效边缘对，判定为丢线�?
+ * TF_JIDIAN_ROW(56) 向上搜索TF_JIDIAN_MIN_ROW(45)，找到第一
+ * 有效边缘对即作为基准行。基准行是逐行向上扫描的起点
+ * 如果在所有候选行中都找不到有效边缘对，判定为丢线
  *
- * @return 1=找到基准行，0=未找到（判定丢线�?
- */
+ * @return 1=找到基准行，0=未找到（判定丢线
+  */
 static uint8 find_jidian1(void)
 {
-    /* 初始化左右边缘为无效�?*/
+    /* 初始化左右边缘为无效 */
     int16 lb = TF_INVALID;
     int16 rb = TF_INVALID;
 
-    /* 从底部行(56)向上搜索到最小基准行(45)，共搜索12�?*/
+    /* 从底部行(56)向上搜索到最小基准行(45)，共搜索12 */
     for (int16 row = (int16)TF_JIDIAN_ROW;
          row >= (int16)TF_JIDIAN_MIN_ROW; row--)
     {
-        /* 在当前行尝试搜索赛道边缘�?*/
+        /* 在当前行尝试搜索赛道边缘 */
         if (find_jidian_at_row(row, &lb, &rb))
         {
-            /* 找到有效边缘对，设置基准行数据并返回成功 */
+            /* 找到有效边缘对，设置基准行数据并返回成功  */
             set_jidian_row_data(row, lb, rb);
             return 1u;
         }
     }
 
-    /* 所有候选行均未找到有效边缘对，判定丢线 */
+    /* 所有候选行均未找到有效边缘对，判定丢线  */
     if (g_post_edge_side != EDGE_BOTH)
     {
         for (int16 row = (int16)(TF_JIDIAN_MIN_ROW - 1);
@@ -1189,145 +1189,145 @@ static uint8 find_jidian1(void)
 
 /* ========================================================================
  * 逐行边缘搜索（基于上一行的局部范围搜索）
- * ======================================================================== */
+ * ========================================================================  */
 
 /**
- * @brief 逐行边缘搜索：在指定行中基于上一行的边缘位置搜索新的边缘�?
+ * @brief 逐行边缘搜索：在指定行中基于上一行的边缘位置搜索新的边缘
  *
  * 搜索策略（三级回退机制）：
- *   1. 局部搜索：以上一行边缘为中心，左右各 TF_LOCAL_RANGE(10) 像素范围内搜�?
- *   2. 反向搜索：若局部未找到，扩大范围反向扫描（防止边缘跳变�?
+ *   1. 局部搜索：以上一行边缘为中心，左右各 TF_LOCAL_RANGE(10) 像素范围内搜
+ *   2. 反向搜索：若局部未找到，扩大范围反向扫描（防止边缘跳变
  *   3. 全局搜索：若仍未找到，从图像中心向两侧全扫描
- *   4. 白色段搜索：以上一行中点为参考，查找最近的白色段作为最后手�?
+ *   4. 白色段搜索：以上一行中点为参考，查找最近的白色段作为最后手
  *
- * 多级回退机制保证在弯道、路口等边缘大幅移动场景下仍能可靠跟踪�?
+ * 多级回退机制保证在弯道、路口等边缘大幅移动场景下仍能可靠跟踪
  *
  * @param row     当前行号
  * @param prev_lb 上一行左边缘列号（作为搜索参考）
  * @param prev_rb 上一行右边缘列号（作为搜索参考）
- * @param out_lb  输出参数：当前行左边缘列�?
- * @param out_rb  输出参数：当前行右边缘列�?
- * @return 1=找到有效边缘对，0=未找�?
- */
+ * @param out_lb  输出参数：当前行左边缘列
+ * @param out_rb  输出参数：当前行右边缘列
+ * @return 1=找到有效边缘对，0=未找
+  */
 static uint8 search_row_edges(int16 row, int16 prev_lb, int16 prev_rb,
                               int16 *out_lb, int16 *out_rb)
 {
-    /* 初始化左右边缘为无效�?*/
+    /* 初始化左右边缘为无效 */
     int16 lb = TF_INVALID, rb = TF_INVALID;
     *out_lb = TF_INVALID;
     *out_rb = TF_INVALID;
-    /* 局部搜索范�?±10 像素 */
+    /* 局部搜索范±10 像素  */
     const int16 R = TF_LOCAL_RANGE;
-    /* 图像中心列号 */
+    /* 图像中心列号  */
     const int16 MID = TF_IMG_CENTER;
 
-    /* ---- 左边缘搜索：局部范�?-> 反向 -> 全局 ---- */
-    /* �?级：以上一行左边缘为中心，向右扫描局部范�?*/
+    /* ---- 左边缘搜索：局部范-> 反向 -> 全局 ----  */
+    /* 级：以上一行左边缘为中心，向右扫描局部范 */
     lb = scan_left_edge_right(row, prev_lb - R, prev_lb + R);
-    /* �?级：局部未找到，反向扫描（从右到左�?*/
+    /* 级：局部未找到，反向扫描（从右到左 */
     if (lb == TF_INVALID) lb = scan_left_edge_left(row, prev_lb + R, prev_lb - R);
-    /* �?级：仍未找到，从中心向左全局扫描 */
+    /* 级：仍未找到，从中心向左全局扫描  */
     if (lb == TF_INVALID) lb = scan_left_edge_left(row, MID, 1);
 
-    /* ---- 右边缘搜索：局部范�?-> 反向 -> 全局 ---- */
-    /* �?级：以上一行右边缘为中心，向左扫描局部范�?*/
+    /* ---- 右边缘搜索：局部范-> 反向 -> 全局 ----  */
+    /* 级：以上一行右边缘为中心，向左扫描局部范 */
     rb = scan_right_edge_left(row, prev_rb + R, prev_rb - R);
-    /* �?级：局部未找到，反向扫描（从左到右�?*/
+    /* 级：局部未找到，反向扫描（从左到右 */
     if (rb == TF_INVALID) rb = scan_right_edge_right(row, prev_rb - R, prev_rb + R);
-    /* �?级：仍未找到，从中心向右全局扫描 */
+    /* 级：仍未找到，从中心向右全局扫描  */
     if (rb == TF_INVALID) rb = scan_right_edge_right(row, MID, TF_IMG_W - 2);
 
-    /* 若边缘扫描未得到合法对，尝试白色段搜索作为最后手�?*/
+    /* 若边缘扫描未得到合法对，尝试白色段搜索作为最后手 */
     if (!normalize_edges_for_mode(&lb, &rb))
     {
-        /* 计算上一行中点作为白色段搜索的参考列 */
+        /* 计算上一行中点作为白色段搜索的参考列  */
         int16 ref_center = (int16)((prev_lb + prev_rb) / 2);
-        /* 以上一行中点为中心，查找最近的白色�?*/
+        /* 以上一行中点为中心，查找最近的白色） */
         if (!find_white_segment_near_col(row, ref_center, &lb, &rb))
             return 0u;
-        /* 再次归一化边缘对 */
+        /* 再次归一化边缘对  */
         if (!normalize_edges_for_mode(&lb, &rb))
             return 0u;
     }
 
-    /* 输出找到的边缘对 */
+    /* 输出找到的边缘对  */
     *out_lb = lb;
     *out_rb = rb;
-    /* 返回成功标志 */
+    /* 返回成功标志  */
     return 1u;
 }
 
 /* ========================================================================
- * 初始�?
- * ======================================================================== */
+ * 初始
+ * ========================================================================  */
 
 /**
- * @brief 巡线融合模块初始�?
+ * @brief 巡线融合模块初始
  *
- * 清零所有边�?中线/有效行数据，重置误差、基点、阈值等全局状态�?
- * 在系统启动或重新开始比赛时调用，将所有状态恢复到初始值�?
- */
+ * 清零所有边中线/有效行数据，重置误差、基点、阈值等全局状态
+ * 在系统启动或重新开始比赛时调用，将所有状态恢复到初始值
+  */
 void track_fusion_init(void)
 {
-    /* 循环变量 */
+    /* 循环变量  */
     uint16 i, j;
 
-    /* 清零每行的边缘、中线和有效标志 */
+    /* 清零每行的边缘、中线和有效标志  */
     for (i = 0; i < TF_IMG_H; i++)
     {
-        /* 左边缘设为无效�?*/
+        /* 左边缘设为无效 */
         g_tf.left_edge[i] = TF_INVALID;
-        /* 右边缘设为无效�?*/
+        /* 右边缘设为无效 */
         g_tf.right_edge[i] = TF_INVALID;
-        /* 中线设为无效�?*/
+        /* 中线设为无效 */
         g_tf.center_line[i] = TF_INVALID;
-        /* 有效标志清零 */
+        /* 有效标志清零  */
         g_tf.row_valid[i] = 0u;
         g_corner_fill_center[i] = TF_INVALID;
         g_corner_fill_valid[i] = 0u;
     }
     g_corner_fill_active = 0u;
-    /* 横向偏差清零 */
+    /* 横向偏差清零  */
     g_tf.error = 0;
-    /* 前瞻误差清零 */
+    /* 前瞻误差清零  */
     g_tf.lookahead_error = 0;
-    /* 误差趋势清零 */
+    /* 误差趋势清零  */
     g_tf.error_trend = 0;
-    /* 有效行计数清�?*/
+    /* 有效行计数清 */
     g_tf.valid_row_count = 0u;
-    /* 丢线标志清零 */
+    /* 丢线标志清零  */
     g_tf.line_lost = 0u;
-    /* 基点左边缘默认设为图像中�?*/
+    /* 基点左边缘默认设为图像中 */
     g_tf.left_jidian = (uint8)TF_IMG_CENTER;
-    /* 基点右边缘默认设为图像中�?*/
+    /* 基点右边缘默认设为图像中 */
     g_tf.right_jidian = (uint8)TF_IMG_CENTER;
-    /* 基点行重置为默认底部�?*/
+    /* 基点行重置为默认底部 */
     s_jidian_row = (int16)TF_JIDIAN_ROW;
-    /* 清除路口检测结�?*/
+    /* 清除路口检测结 */
     clear_inter_result();
-    /* 阈值重置为 Otsu 最低保护�?*/
+    /* 阈值重置为 Otsu 最低保护 */
     Image_Threshold = (uint16)TF_OTSU_MIN_THRESHOLD;
-    /* 阈值偏移量清零 */
+    /* 阈值偏移量清零  */
     threshold_bias = 0;
     s_inter_post_turn_suppress_cnt = 0u;
     g_tf_image_ready = 0u;
     g_tf_frame_count = 0u;
     g_tf_white_count = 0u;
-    /* Otsu 计数器设为间隔值，确保首帧即触�?Otsu 计算 */
+    /* Otsu 计数器设为间隔值，确保首帧即触Otsu 计算  */
     s_otsu_cnt = (uint8)TF_OTSU_INTERVAL;
-    /* 赛道半宽度重置为默认�?*/
+    /* 赛道半宽度重置为默认 */
     s_track_half_width = TRACK_HALF_WIDTH;
     reset_track_error_filter();
 
-    /* 清零压缩图像、二值化图像和临时缓冲区 */
+    /* 清零压缩图像、二值化图像和临时缓冲区  */
     for (i = 0; i < COMP_H; i++)
         for (j = 0; j < COMP_W; j++)
         {
-            /* 二值化图像清零（黑色） */
+            /* 二值化图像清零（黑色）  */
             Image_Binarize[i][j] = Image_BLACK;
-            /* 压缩灰度图像清零 */
+            /* 压缩灰度图像清零  */
             image_0[i][j] = 0u;
-            /* 降噪临时缓冲区清�?*/
+            /* 降噪临时缓冲区清 */
             s_bin_tmp[i][j] = Image_BLACK;
         }
 
@@ -1336,31 +1336,31 @@ void track_fusion_init(void)
 
 /* ========================================================================
  * 加权中线误差计算
- * ======================================================================== */
+ * ========================================================================  */
 
 /**
- * @brief 计算指定行范围内的加权中线列�?
+ * @brief 计算指定行范围内的加权中线列
  *
- * 对指定范围内的有效行，按距离加权计算平均中线位置�?
- * 权重分配模式�?
- *   - top_heavy=0（底部权重高）：越靠�?start_row（底部近相机）权重越大，用于正常巡线
- *   - top_heavy=1（顶部权重高）：越靠�?end_row（顶部远相机）权重越大，用于前瞻弯道预测
+ * 对指定范围内的有效行，按距离加权计算平均中线位置
+ * 权重分配模式
+ *   - top_heavy=0（底部权重高）：越靠start_row（底部近相机）权重越大，用于正常巡线
+ *   - top_heavy=1（顶部权重高）：越靠end_row（顶部远相机）权重越大，用于前瞻弯道预测
  *
  * @param start_row 起始行号（包含，行号大的一端）
  * @param end_row   结束行号（包含，行号小的一端）
- * @param top_heavy 0=底部加权（近处优先）�?=顶部加权（远处优先）
+ * @param top_heavy 0=底部加权（近处优先）=顶部加权（远处优先）
  * @return 加权平均中线列号，无有效行时返回 TF_IMG_CENTER(47)
- */
+  */
 static int16 calc_weighted_center(int16 start_row, int16 end_row, uint8 top_heavy)
 {
-    /* 加权中线列号总和 */
+    /* 加权中线列号总和  */
     int32 sum = 0;
-    /* 权重总和 */
+    /* 权重总和  */
     int32 wtotal = 0;
-    /* �?start_row �?end_row（行号递减）遍�?*/
+    /* start_row end_row（行号递减）遍 */
     for (int16 row = start_row; row >= end_row; row--)
     {
-        /* 仅处理有效行（边缘对合法的行�?*/
+        /* 仅处理有效行（边缘对合法的行 */
         uint8 valid = g_tf.row_valid[row];
         int16 center = g_tf.center_line[row];
         if (g_corner_fill_active != 0u && g_corner_fill_valid[row] != 0u)
@@ -1377,84 +1377,84 @@ static int16 calc_weighted_center(int16 start_row, int16 end_row, uint8 top_heav
             wtotal += w;
         }
     }
-    /* 有有效行则返回加权平均值，否则返回图像中心 */
+    /* 有有效行则返回加权平均值，否则返回图像中心  */
     return (wtotal > 0) ? (int16)(sum / wtotal) : (int16)TF_IMG_CENTER;
 }
 
 /* ========================================================================
  * 每帧更新主函数：压缩 -> Otsu -> 二值化 -> 降噪 -> 边缘扫描
- * ======================================================================== */
+ * ========================================================================  */
 
 /**
  * @brief 每帧巡线融合主函数（在主循环中调用）
  *
- * 完整处理流程�?
- *   1. 清除上一帧数�?
+ * 完整处理流程
+ *   1. 清除上一帧数
  *   2. 压缩图像 188x120 -> 94x60
- *   3. 计算/使用二值化阈值（Otsu 自适应或固定阈值，�?TF_FIXED_THRESHOLD_ENABLE 控制�?
- *   4. 二值化（灰�?-> 黑白�?
+ *   3. 计算/使用二值化阈值（Otsu 自适应或固定阈值，TF_FIXED_THRESHOLD_ENABLE 控制
+ *   4. 二值化（灰-> 黑白
  *   5. 3x3 邻域降噪（消除孤立噪点）
  *   6. 在底部行搜索基准（基点），失败则判定丢线
- *   7. 从基点向上逐行扫描边缘，同时进行对称分量检测和分支检�?
- *   8. 计算加权横向偏差（底部加权，用于正常巡线控制�?
- *   9. 计算前瞻误差（顶部加权，用于弯道预测和速度规划�?
- *  10. 误差值乘�?缩放到原始坐标系，兼�?PID 参数
- */
+ *   7. 从基点向上逐行扫描边缘，同时进行对称分量检测和分支检
+ *   8. 计算加权横向偏差（底部加权，用于正常巡线控制
+ *   9. 计算前瞻误差（顶部加权，用于弯道预测和速度规划
+ *  10. 误差值乘缩放到原始坐标系，兼PID 参数
+  */
 void track_fusion_update(void)
 {
     uint8 fast_mode = fast_vision_mode();
 
     s_fast_pass_cache_ok = 0u;
     s_straight_inline_cache_ok = 0u;
-    /* ---- 步骤1：清除上一帧的逐行数据 ---- */
+    /* ---- 步骤1：清除上一帧的逐行数据 ----  */
     for (uint8 i = 0; i < TF_IMG_H; i++)
     {
-        /* 左边缘设为无�?*/
+        /* 左边缘设为无 */
         g_tf.left_edge[i] = TF_INVALID;
-        /* 右边缘设为无�?*/
+        /* 右边缘设为无 */
         g_tf.right_edge[i] = TF_INVALID;
-        /* 中线设为无效 */
+        /* 中线设为无效  */
         g_tf.center_line[i] = TF_INVALID;
-        /* 有效标志清零 */
+        /* 有效标志清零  */
         g_tf.row_valid[i] = 0u;
         g_corner_fill_center[i] = TF_INVALID;
         g_corner_fill_valid[i] = 0u;
     }
     g_corner_fill_active = 0u;
-    /* 横向偏差清零 */
+    /* 横向偏差清零  */
     g_tf.error = 0;
-    /* 前瞻误差清零 */
+    /* 前瞻误差清零  */
     g_tf.lookahead_error = 0;
-    /* 误差趋势清零 */
+    /* 误差趋势清零  */
     g_tf.error_trend = 0;
-    /* 有效行计数清�?*/
+    /* 有效行计数清 */
     g_tf.valid_row_count = 0u;
-    /* 丢线标志清零 */
+    /* 丢线标志清零  */
     g_tf.line_lost = 0u;
-    /* 清除对称分量标志（三极管干扰检测） */
+    /* 清除对称分量标志（三极管干扰检测）  */
     g_sym_component_flag = 0u;
     s_first_miss_row = -1;
     s_center_buf_cnt = 0u;
     s_last_valid_center = TF_IMG_CENTER;
 
-    /* ---- 步骤2：压�?188x120 -> 94x60 ---- */
+    /* ---- 步骤2：压188x120 -> 94x60 ----  */
     compress_image();
 
 #if TF_FIXED_THRESHOLD_ENABLE
-    /* ---- 步骤3（固定阈值模式）：使用固定阈�?+ 菜单偏移 ---- */
-    /* 适合光照稳定的比赛环境，跳过 Otsu 计算以提高帧�?*/
+    /* ---- 步骤3（固定阈值模式）：使用固定阈+ 菜单偏移 ----  */
+    /* 适合光照稳定的比赛环境，跳过 Otsu 计算以提高帧 */
     Image_Threshold = clamp_threshold_i16(
         (int16)TF_FIXED_THRESHOLD_VALUE + threshold_bias);
 #else
-    /* ---- 步骤3（自适应阈值模式）：每�?TF_OTSU_INTERVAL 帧执行一�?Otsu 计算 ---- */
-    /* 递增 Otsu 帧计数器 */
+    /* ---- 步骤3（自适应阈值模式）：每TF_OTSU_INTERVAL 帧执行一次 Otsu 计算 ----  */
+    /* 递增 Otsu 帧计数器  */
     s_otsu_cnt++;
-    /* 计数器达到间隔阈值时，执�?Otsu 计算并重置计数器 */
+    /* 计数器达到间隔阈值时，执Otsu 计算并重置计数器  */
     if (s_otsu_cnt >= TF_OTSU_INTERVAL)
     {
-        /* 重置计数�?*/
+        /* 重置计数 */
         s_otsu_cnt = 0u;
-        /* 计算自适应阈�?*/
+        /* 计算自适应阈 */
         {
             uint16 new_th = calc_otsu();
             uint16 old_th = Image_Threshold;
@@ -1467,10 +1467,10 @@ void track_fusion_update(void)
     }
 #endif
 
-    /* ---- 步骤4：二值化（灰�?-> 黑白�?---- */
+    /* ---- 步骤4：二值化（灰-> 黑白----  */
     binarize_image();
 
-    /* ---- 步骤5�?x3 邻域降噪（消除孤立噪点） ---- */
+    /* ---- 步骤5x3 邻域降噪（消除孤立噪点） ----  */
     if (fast_mode &&
         TF_FAST_DENOISE_DIV > 1u &&
         ((g_tf_frame_count % TF_FAST_DENOISE_DIV) != 0u))
@@ -1483,57 +1483,57 @@ void track_fusion_update(void)
     }
     update_image_diagnostics();
 
-    /* ---- 步骤6：在底部行搜索赛道基准（基点�?---- */
-    /* 若未找到基点，判定丢线并提前返回 */
+    /* ---- 步骤6：在底部行搜索赛道基准（基点----  */
+    /* 若未找到基点，判定丢线并提前返回  */
     if (!find_jidian1())
     {
-        /* 设置丢线标志 */
+        /* 设置丢线标志  */
         g_tf.line_lost = 1u;
         reset_track_error_filter();
-        /* 丢线状态下不进行后续处理，直接返回 */
+        /* 丢线状态下不进行后续处理，直接返回  */
         return;
     }
 
-    /* 基点行号（从底部开始向上扫描的起点�?*/
+    /* 基点行号（从底部开始向上扫描的起点 */
     const int16 jrow = s_jidian_row;
-    /* 上一行左边缘列号，初始化为基点左边缘 */
+    /* 上一行左边缘列号，初始化为基点左边缘  */
     int16 prev_lb = (int16)g_tf.left_jidian;
-    /* 上一行右边缘列号，初始化为基点右边缘 */
+    /* 上一行右边缘列号，初始化为基点右边缘  */
     int16 prev_rb = (int16)g_tf.right_jidian;
 
-    /* 设置基点行的边缘和中线数据到全局结构�?*/
+    /* 设置基点行的边缘和中线数据到全局结构 */
     g_tf.left_edge[jrow] = prev_lb;
     g_tf.right_edge[jrow] = prev_rb;
-    /* 根据边缘对计算基点行的中线列�?*/
+    /* 根据边缘对计算基点行的中线列 */
     g_tf.center_line[jrow] = calc_center_from_edges(prev_lb, prev_rb);
-    /* 标记基点行为有效 */
+    /* 标记基点行为有效  */
     g_tf.row_valid[jrow] = 1u;
-    /* 有效行计数初始化�? */
+    /* 有效行计数初始化  */
     g_tf.valid_row_count = 1u;
 
-    /* ---- 步骤7：从基点向上逐行扫描边缘 ---- */
-    /* 连续丢失行计数器，用于判断何时停止向上扫�?*/
+    /* ---- 步骤7：从基点向上逐行扫描边缘 ----  */
+    /* 连续丢失行计数器，用于判断何时停止向上扫 */
     uint8 miss_streak = 0u;
-    /* 扫描终止行号（行�?，图像顶部附近） */
+    /* 扫描终止行号（行，图像顶部附近）  */
     int16 end_row = (int16)TF_SEARCH_END_ROW;
-    /* 重置首次丢失行为未丢失状�?*/
+    /* 重置首次丢失行为未丢失状 */
     s_first_miss_row = -1;
-    /* 清空中点环形缓冲区计�?*/
+    /* 清空中点环形缓冲区计算  */
     s_center_buf_cnt = 0u;
-    /* 初始化最后有效中点为基点行的中线列号 */
+    /* 初始化最后有效中点为基点行的中线列号  */
     s_last_valid_center = g_tf.center_line[jrow];
 
-    /* 从基点行上一行开始，向上（行号递减）逐行扫描到终止行 */
+    /* 从基点行上一行开始，向上（行号递减）逐行扫描到终止行  */
     for (int16 row = jrow - 1; row >= end_row; row--)
     {
-        /* 当前行的左右边缘列号 */
+        /* 当前行的左右边缘列号  */
         int16 lb, rb;
-        /* 在当前行基于上一行边缘位置搜索新的边缘对 */
+        /* 在当前行基于上一行边缘位置搜索新的边缘对  */
         if (search_row_edges(row, prev_lb, prev_rb, &lb, &rb))
         {
-            /* 找到有效边缘对，计算当前行的原始中线列号 */
+            /* 找到有效边缘对，计算当前行的原始中线列号  */
             int16 raw_center = calc_center_from_edges(lb, rb);
-            /* 检查当前行是否存在对称分量（三极管干扰等） */
+            /* 检查当前行是否存在对称分量（三极管干扰等）  */
             uint8 sym_row = symmetric_component_at_row(row, raw_center);
             uint8 left_branch_near = 0u;
             uint8 right_branch_near = 0u;
@@ -1543,15 +1543,15 @@ void track_fusion_update(void)
             uint8 side_pair_near = 0u;
             uint8 probe_noise_row = 0u;
             uint8 inline_component_row = 0u;
-            /* 是否为分支（路口）行标志 */
+            /* 是否为分支（路口）行标志  */
             uint8 branch_row = 0u;
 
-            /* 若检测到对称分量，设置全局标志 */
+            /* 若检测到对称分量，设置全局标志  */
             if (sym_row)
                 g_sym_component_flag = 1u;
 
-            /* 分支检测：检查图像左右边缘附近是否有白色延伸（路口分支） */
-            /* 条件：行�?>= INTER_MIN_MISS_ROW(28) �?左或右探针有白色 �?不是对称分量 */
+            /* 分支检测：检查图像左右边缘附近是否有白色延伸（路口分支）  */
+            /* 条件：行>= INTER_MIN_MISS_ROW(28) 左或右探针有白色 不是对称分量  */
             if (row >= (int16)INTER_MIN_MISS_ROW &&
                 (!fast_mode ||
                  row >= (int16)INTER_BOX_START_ROW ||
@@ -1606,25 +1606,25 @@ void track_fusion_update(void)
                      y_branch_row) &&
                     (!sym_row || y_branch_row))
                 {
-                    /* 标记当前行为分支�?*/
+                    /* 标记当前行为分支 */
                     branch_row = 1u;
-                    /* 若是首次检测到分支行，记录其行�?*/
+                    /* 若是首次检测到分支行，记录其行 */
                     if (s_first_miss_row < 0)
                         s_first_miss_row = row;
                 }
             }
 
-            /* 根据是否为分支行，采用不同的数据更新策略 */
+            /* 根据是否为分支行，采用不同的数据更新策略  */
             if (branch_row)
             {
-                /* 分支行只用于路口识别，不写入普通边�?中线，防�?
-                 * 三极管、T口、侧向分支把循迹中线拉歪�?
-                 * 旧逻辑直接 break，会让分支行上方（含前瞻�?0~35行）
-                 * 全部停扫，入弯瞬�?valid_rows 塌到1、前瞻丢失，导致
-                 * T�?斜入弯冷启动转不动。改为跳过该行继续向上扫�?
-                 * 保住前瞻；连续丢失过多仍�?miss_streak 兜底停止�?
-                 * s_first_miss_row 已在上方 branch 检测时记录�?
-                 * 路口识别不受影响�?*/
+                /* 分支行只用于路口识别，不写入普通边中线，防
+                 * 三极管、T口、侧向分支把循迹中线拉歪
+                 * 旧逻辑直接 break，会让分支行上方（含前瞻0~35行）
+                 * 全部停扫，入弯瞬valid_rows 塌到1、前瞻丢失，导致
+                 * T斜入弯冷启动转不动。改为跳过该行继续向上扫
+                 * 保住前瞻；连续丢失过多仍miss_streak 兜底停止
+                 * s_first_miss_row 已在上方 branch 检测时记录
+                 * 路口识别不受影响 */
 #if TF_BRANCH_ROW_KEEP_SCAN
                 g_tf.left_edge[row] = TF_INVALID;
                 g_tf.right_edge[row] = TF_INVALID;
@@ -1639,75 +1639,75 @@ void track_fusion_update(void)
             }
             else
             {
-                /* 正常行：使用当前行实际检测到的边缘和中线 */
+                /* 正常行：使用当前行实际检测到的边缘和中线  */
                 g_tf.left_edge[row] = lb;
                 g_tf.right_edge[row] = rb;
                 g_tf.center_line[row] = raw_center;
-                /* 更新上一行边缘参考值（供下一行搜索使用） */
+                /* 更新上一行边缘参考值（供下一行搜索使用）  */
                 prev_lb = lb;
                 prev_rb = rb;
-                /* 更新最后有效中�?*/
+                /* 更新最后有效中 */
                 s_last_valid_center = raw_center;
-                /* 将有效中点存入环形缓冲区（用于路口检测时选取稳定中点�?*/
+                /* 将有效中点存入环形缓冲区（用于路口检测时选取稳定中点 */
                 s_center_buf[s_center_buf_cnt % IP_COL_BUF_SIZE] = raw_center;
-                /* 递增缓冲区计�?*/
+                /* 递增缓冲区计算  */
                 s_center_buf_cnt++;
             }
 
-            /* 标记当前行为有效 */
+            /* 标记当前行为有效  */
             g_tf.row_valid[row] = 1u;
-            /* 有效行计数递增 */
+            /* 有效行计数递增  */
             g_tf.valid_row_count++;
-            /* 找到有效行，重置连续丢失计数�?*/
+            /* 找到有效行，重置连续丢失计数 */
             miss_streak = 0u;
         }
         else
         {
-            /* 该行未找到有效边缘对，记录为无效 */
+            /* 该行未找到有效边缘对，记录为无效  */
             g_tf.left_edge[row] = TF_INVALID;
             g_tf.right_edge[row] = TF_INVALID;
-            /* 标记当前行为无效 */
+            /* 标记当前行为无效  */
             g_tf.row_valid[row] = 0u;
-            /* 连续丢失计数递增 */
+            /* 连续丢失计数递增  */
             miss_streak++;
-            /* 连续丢失2行时记录首次丢失行（用于路口检测判断） */
+            /* 连续丢失2行时记录首次丢失行（用于路口检测判断）  */
             if (miss_streak == 2 && s_first_miss_row < 0)
-                /* row+1 = 丢失前的最后一个有效行 */
+                /* row+1 = 丢失前的最后一个有效行  */
                 s_first_miss_row = row + 1;
-            /* 连续丢失超过上限(5�?，停止向上扫�?*/
+            /* 连续丢失超过上限(5，停止向上扫 */
             if (miss_streak >= TF_MAX_MISS_ROWS) break;
         }
     }
 
-    /* 若无任何有效行，判定丢线 */
+    /* 若无任何有效行，判定丢线  */
     if (g_tf.valid_row_count == 0u)
     {
-        /* 设置丢线标志 */
+        /* 设置丢线标志  */
         g_tf.line_lost = 1u;
         reset_track_error_filter();
-        /* 丢线状态下直接返回 */
+        /* 丢线状态下直接返回  */
         return;
     }
 
-    /* ---- 步骤8：计算加权横向偏差（底部加权，用于正常巡线控制） ---- */
-    /* 计算所有有效行的加权平均中线列号（底部行权重更高） */
+    /* ---- 步骤8：计算加权横向偏差（底部加权，用于正常巡线控制） ----  */
+    /* 计算所有有效行的加权平均中线列号（底部行权重更高）  */
     corner_fill_apply(jrow, end_row);
 
     int16 avg_center = calc_weighted_center(jrow, end_row, 0);
     int16 raw_error;
     int16 raw_lookahead;
-    /* 横向偏差 = -(平均中线 - 图像中心)，负号使得左偏为正、右偏为�?*/
+    /* 横向偏差 = -(平均中线 - 图像中心)，负号使得左偏为正、右偏为 */
     raw_error = -(avg_center - (int16)TF_IMG_CENTER);
-    /* 有有效行，清除丢线标�?*/
+    /* 有有效行，清除丢线标 */
     g_tf.line_lost = 0u;
 
-    /* ---- 步骤9：计算前瞻误差（顶部加权，用于弯道预测和速度规划�?---- */
-    /* 使用局部作用域限制 la_center 变量的生命周�?*/
+    /* ---- 步骤9：计算前瞻误差（顶部加权，用于弯道预测和速度规划----  */
+    /* 使用局部作用域限制 la_center 变量的生命周 */
     {
-        /* 计算前瞻区域(�?5~20)的加权平均中线（顶部行权重更高） */
+        /* 计算前瞻区域(5~20)的加权平均中线（顶部行权重更高）  */
         int16 la_center = calc_weighted_center(
             (int16)TF_LOOKAHEAD_START_ROW, (int16)TF_LOOKAHEAD_END_ROW, 1);
-        /* 前瞻误差 = -(前瞻中线 - 图像中心) */
+        /* 前瞻误差 = -(前瞻中线 - 图像中心)  */
         raw_lookahead = -(la_center - (int16)TF_IMG_CENTER);
     }
 
@@ -1727,9 +1727,9 @@ void track_fusion_update(void)
     s_tf_error_filter_valid = 1u;
     g_tf.error_trend = g_tf.lookahead_error - g_tf.error;
 
-    /* ---- 步骤10：误差值乘�?，缩放到原始图像坐标�?---- */
-    /* 原始图像 188x120，压缩后 94x60，乘�?回到原始坐标尺度 */
-    /* 这样 PID 参数可以基于原始图像坐标调整，不受压缩影�?*/
+    /* ---- 步骤10：误差值乘，缩放到原始图像坐标----  */
+    /* 原始图像 188x120，压缩后 94x60，乘回到原始坐标尺度  */
+    /* 这样 PID 参数可以基于原始图像坐标调整，不受压缩影 */
     g_tf.error = g_tf.error * 2;
     g_tf.lookahead_error = g_tf.lookahead_error * 2;
     g_tf.error_trend = g_tf.error_trend * 2;
@@ -1737,9 +1737,9 @@ void track_fusion_update(void)
 
 /* ========================================================================
  * 直角/弯道预检测（远场检测，用于提前减速）
- * ======================================================================== */
+ * ========================================================================  */
 
-/* 直角/弯道预检测标志，1=检测到远场边缘丢失（提前减速信号） */
+/* 直角/弯道预检测标志，1=检测到远场边缘丢失（提前减速信号）  */
 uint8 g_ra_pre_flag = 0u;
 uint8 g_ra_pre_dir = 0u;
 uint8 g_ra_pre_slow_flag = 0u;
@@ -1794,16 +1794,16 @@ static uint8 single_edge_side_evidence(uint8 side)
     return 0u;
 }
 
-static uint8 s_single_edge_startup = 0u;  /* 单边启动冷却：只在刚进单边时用一次 */
-static uint16 s_single_edge_ra_gap = 0u;  /* 单边触发RA后的冷却：每次RA后独立 */
-static uint8 s_se_gap_tick = 0u;          /* 帧内去重：每帧只减一次 */
+static uint8 s_single_edge_startup = 0u;  /* 单边启动冷却：只在刚进单边时用一次  */
+static uint16 s_single_edge_ra_gap = 0u;  /* 单边触发RA后的冷却：每次RA后独立  */
+static uint8 s_se_gap_tick = 0u;          /* 帧内去重：每帧只减一次  */
 static uint32 s_single_edge_dir_cache_frame = 0u;
 static uint8 s_single_edge_dir_cache_side = EDGE_BOTH;
 static uint8 s_single_edge_dir_cache_valid = 0u;
 static uint8 s_single_edge_dir_cache_value = 0u;
 
-#define SINGLE_EDGE_STARTUP_FRAMES 8u     /* 刚进单边：8帧冷却 */
-#define SINGLE_EDGE_RA_GAP_FRAMES 24u     /* 单边触发RA后冷却帧数 */
+#define SINGLE_EDGE_STARTUP_FRAMES 8u     /* 刚进单边：8帧冷却  */
+#define SINGLE_EDGE_RA_GAP_FRAMES 24u     /* 单边触发RA后冷却帧数  */
 
 static uint8 cache_single_edge_route_dir(uint8 value)
 {
@@ -1832,7 +1832,7 @@ static uint8 single_edge_route_ra_dir(void)
         return cache_single_edge_route_dir(0u);
     }
 
-    /* 帧内去重：每帧只减一次gap计数器 */
+    /* 帧内去重：每帧只减一次gap计数器  */
     if (s_se_gap_tick != g_tf_frame_count)
     {
         s_se_gap_tick = g_tf_frame_count;
@@ -1842,11 +1842,11 @@ static uint8 single_edge_route_ra_dir(void)
             s_single_edge_ra_gap--;
     }
 
-    /* 刚进单边：8帧冷却，只这一次 */
+    /* 刚进单边：8帧冷却，只这一次  */
     if (s_single_edge_startup < SINGLE_EDGE_STARTUP_FRAMES)
         return cache_single_edge_route_dir(0u);
 
-    /* 触发RA后：10帧冷却，和启动8帧无关 */
+    /* 触发RA后：10帧冷却，和启动8帧无关  */
     if (s_single_edge_ra_gap > 0u)
         return cache_single_edge_route_dir(0u);
 
@@ -1881,28 +1881,28 @@ static uint8 single_edge_route_ra_dir(void)
 /**
  * @brief 直角/弯道预检测函数（远场检测，用于提前减速）
  *
- * 在行 46~28 范围内检查左右边缘是否接近图像边界（距离 < RA_PRE_EDGE_MARGIN=5 像素）�?
- * 若一侧边缘丢失行�?>= RA_PRE_LOST_THRESH(2)，则设置 g_ra_pre_flag 提前减速�?
+ * 在行 46~28 范围内检查左右边缘是否接近图像边界（距离 < RA_PRE_EDGE_MARGIN=5 像素）
+ * 若一侧边缘丢失行>= RA_PRE_LOST_THRESH(2)，则设置 g_ra_pre_flag 提前减速
  *
- * 特殊处理：若检测到对称分量（三极管干扰等），则清除标志，防止误触发减速�?
+ * 特殊处理：若检测到对称分量（三极管干扰等），则清除标志，防止误触发减速
  *
- * 使用滞回滤波防止抖动�?
+ * 使用滞回滤波防止抖动
  *   - 连续 2 帧检测到 -> 置位（快速响应）
- *   - 连续 5 帧未检测到 -> 清除（缓慢释放，防止抖动�?
- */
+ *   - 连续 5 帧未检测到 -> 清除（缓慢释放，防止抖动
+  */
 void right_angle_pre_detect(void)
 {
-    /* 连续检测到的帧计数（用于滞回置位判断） */
+    /* 连续检测到的帧计数（用于滞回置位判断）  */
     static uint8 s_on_cnt = 0;
-    /* 连续未检测到的帧计数（用于滞回清除判断） */
+    /* 连续未检测到的帧计数（用于滞回清除判断）  */
     static uint8 s_off_cnt = 0;
     static uint8 s_slow_off_cnt = 0u;
 
-    /* 右边缘接近图像右边界的行数计�?*/
+    /* 右边缘接近图像右边界的行数计算  */
     uint8 right_lost = 0u;
-    /* 左边缘接近图像左边界的行数计�?*/
+    /* 左边缘接近图像左边界的行数计算  */
     uint8 left_lost = 0u;
-    /* 存在对称分量的行数计�?*/
+    /* 存在对称分量的行数计算  */
     uint8 sym_component_rows = 0u;
     uint8 far_open_rows = 0u;
     int16 far_min_center = TF_IMG_W;
@@ -1922,11 +1922,11 @@ void right_angle_pre_detect(void)
     uint8 post_turn_guard =
         (s_inter_post_turn_suppress_cnt > 0u) ? 1u : 0u;
 
-    /* 近场保留原来的贴边判断；远场用边线打开/中线跳变提前降速�?*/
+    /* 近场保留原来的贴边判断；远场用边线打开/中线跳变提前降速 */
     for (int16 i = (int16)RA_PRE_START_ROW;
          i >= (int16)RA_PRE_FAR_END_ROW; i--)
     {
-        /* 跳过无效行（无有效边缘对的行�?*/
+        /* 跳过无效行（无有效边缘对的行 */
         if (!g_tf.row_valid[i])
             continue;
         if (glare_pre_guard_row(i))
@@ -1939,23 +1939,23 @@ void right_angle_pre_detect(void)
             i <= (int16)RA_PRE_FAR_START_ROW)
             continue;
 
-        /* 检查该行是否为对称分量（三极管干扰等） */
+        /* 检查该行是否为对称分量（三极管干扰等）  */
         if (fast_aux_row_allowed(i) &&
             symmetric_component_at_row(i, g_tf.center_line[i]))
         {
-            /* 对称分量行计数递增 */
+            /* 对称分量行计数递增  */
             sym_component_rows++;
-            /* 设置全局对称分量标志 */
+            /* 设置全局对称分量标志  */
             g_sym_component_flag = 1u;
         }
 
         if (i > (int16)RA_PRE_END_ROW)
         {
-            /* 右边缘接近图像右边界（列�?>= TF_IMG_W-5）视为丢�?*/
+            /* 右边缘接近图像右边界（列>= TF_IMG_W-5）视为丢 */
             if (g_tf.right_edge[i] >= (int16)(TF_IMG_W - RA_PRE_EDGE_MARGIN))
                 right_lost++;
 
-            /* 左边缘接近图像左边界（列�?<= 5）视为丢�?*/
+            /* 左边缘接近图像左边界（列<= 5）视为丢 */
             if (g_tf.left_edge[i] <= (int16)RA_PRE_EDGE_MARGIN)
                 left_lost++;
         }
@@ -1978,7 +1978,7 @@ void right_angle_pre_detect(void)
         }
     }
 
-    /* 判断是否检测到远场边缘丢失：至少一侧丢失行数达到阈�?2) */
+    /* 判断是否检测到远场边缘丢失：至少一侧丢失行数达到阈2)  */
     uint8 detected = (right_lost >= RA_PRE_LOST_THRESH ||
                       left_lost >= RA_PRE_LOST_THRESH) ? 1u : 0u;
     uint8 pre_dir = 0u;
@@ -2124,23 +2124,23 @@ void right_angle_pre_detect(void)
     }
 #endif
 
-    /* 若对称分量行数足够多(>=2)，判定为干扰（如三极管），清除标志并返回 */
+    /* 若对称分量行数足够多(>=2)，判定为干扰（如三极管），清除标志并返回  */
     if (single_edge_ra_dir == 0u &&
         route_direct_dir == 0u &&
         sym_component_rows >= INTER_SYM_PRE_ROWS)
     {
-        /* 清除检测标�?*/
+        /* 清除检测标 */
         detected = 0u;
-        /* 重置置位计数�?*/
+        /* 重置置位计数 */
         s_on_cnt = 0u;
-        /* 重置清除计数�?*/
+        /* 重置清除计数 */
         s_off_cnt = 0u;
         s_slow_off_cnt = 0u;
-        /* 清除预检测标�?*/
+        /* 清除预检测标 */
         g_ra_pre_flag = 0u;
         g_ra_pre_dir = 0u;
         g_ra_pre_slow_flag = 0u;
-        /* 干扰情况下直接返�?*/
+        /* 干扰情况下直接返 */
         return;
     }
 
@@ -2157,14 +2157,14 @@ void right_angle_pre_detect(void)
             g_ra_pre_slow_flag = 0u;
     }
 
-    /* 滞回滤波：防止检测结果在边界处反复抖�?*/
+    /* 滞回滤波：防止检测结果在边界处反复抖 */
     if (detected)
     {
-        /* 检测到边缘丢失，递增置位计数�?*/
+        /* 检测到边缘丢失，递增置位计数 */
         s_on_cnt++;
-        /* 重置清除计数�?*/
+        /* 重置清除计数 */
         s_off_cnt = 0;
-        /* 连续确认后再置直角预检测，避免单帧边缘抖动触发�?*/
+        /* 连续确认后再置直角预检测，避免单帧边缘抖动触发 */
         if (s_on_cnt >= RA_PRE_CONFIRM_FRAMES ||
             single_edge_ra_dir != 0u ||
             route_direct_dir != 0u)
@@ -2175,11 +2175,11 @@ void right_angle_pre_detect(void)
     }
     else
     {
-        /* 未检测到边缘丢失，递增清除计数�?*/
+        /* 未检测到边缘丢失，递增清除计数 */
         s_off_cnt++;
-        /* 重置置位计数�?*/
+        /* 重置置位计数 */
         s_on_cnt = 0;
-        /* 连续未检测到5帧，清除预检测标�?*/
+        /* 连续未检测到5帧，清除预检测标 */
         if (s_off_cnt >= 5)
         {
             g_ra_pre_flag = 0u;
@@ -2191,97 +2191,97 @@ void right_angle_pre_detect(void)
 /* ========================================================================
  * 路口检测：拐点扫描 + 检测框 + 类型分类
  *
- * 方法：当逐行扫描丢失赛道时，从丢失行向上扫描寻找图像左右边缘的白色像素�?
- * 左边缘有白色 -> 左转弯，拐点在赛道右�?
- * 右边缘有白色 -> 右转弯，拐点在赛道左�?
- * 两侧有白�?-> 十字路口，拐点在中心
- * ======================================================================== */
+ * 方法：当逐行扫描丢失赛道时，从丢失行向上扫描寻找图像左右边缘的白色像素
+ * 左边缘有白色 -> 左转弯，拐点在赛道右
+ * 右边缘有白色 -> 右转弯，拐点在赛道左
+ * 两侧有白-> 十字路口，拐点在中心
+ * ========================================================================  */
 
-/* 直角/路口标志�?~5），�?detect_intersection() 设置，Pid.c 中的 RA 状态机使用 */
-/* 含义�?=右转 2=左转 3=T型左 4=T型右 5=十字 */
+/* 直角/路口标志~5），detect_intersection() 设置，Pid.c 中的 RA 状态机使用  */
+/* 含义=右转 2=左转 3=T型左 4=T型右 5=十字  */
 uint8 g_ra_flag = 0u;
 
-/* 对称分量标志�?=当前帧检测到对称分量（三极管干扰等） */
+/* 对称分量标志=当前帧检测到对称分量（三极管干扰等）  */
 uint8 g_sym_component_flag = 0u;
 
-/* 路口检测结果结构体，存储拐点坐标、检测框边界和路口类�?*/
+/* 路口检测结果结构体，存储拐点坐标、检测框边界和路口类 */
 IntersectionResult_t g_inter_result;
 
-/* 拐点最大行号（像素�?2），用于 RA 状态机判断何时进入转弯阶段 */
+/* 拐点最大行号（像素2），用于 RA 状态机判断何时进入转弯阶段  */
 uint8 g_ip_max_row = 0u;
 
-/* 路口锁定帧计数器�?0 表示正在锁定状态（RA 正在执行转弯动作�?*/
+/* 路口锁定帧计数器0 表示正在锁定状态（RA 正在执行转弯动作 */
 static volatile uint8 s_inter_lock_cnt = 0u;
 
-/* 路口冷却帧计数器，锁定结束后冷却期内不再检测新路口，防止重复触�?*/
+/* 路口冷却帧计数器，锁定结束后冷却期内不再检测新路口，防止重复触 */
 static volatile uint8 s_inter_cooldown_cnt = 0u;
 
-/* 框候选有效标志，1=当前有活跃的候选检测框 */
+/* 框候选有效标志，1=当前有活跃的候选检测框  */
 static uint8 s_box_candidate_valid = 0u;
 
-/* 框锁定有效标志，1=候选框已稳定足够帧数，锁定生效可用于分�?*/
+/* 框锁定有效标志，1=候选框已稳定足够帧数，锁定生效可用于分 */
 static uint8 s_box_lock_valid = 0u;
 
-/* 框位置稳定帧计数（候选框连续在相同位置的帧数�?*/
+/* 框位置稳定帧计数（候选框连续在相同位置的帧数 */
 static uint8 s_box_stable_cnt = 0u;
 
-/* 上一帧候选框的中心列号，用于判断框是否发生移�?*/
+/* 上一帧候选框的中心列号，用于判断框是否发生移 */
 static int16 s_box_last_cx = 0;
 
-/* 上一帧候选框的中心行号，用于判断框是否发生移�?*/
+/* 上一帧候选框的中心行号，用于判断框是否发生移 */
 static int16 s_box_last_cy = 0;
 
-/* 锁定后的框中心列号，分类时使用此稳定位置而非移动中的候选位�?*/
+/* 锁定后的框中心列号，分类时使用此稳定位置而非移动中的候选位 */
 static int16 s_box_lock_cx = 0;
 
-/* 锁定后的框中心行号，分类时使用此稳定位置 */
+/* 锁定后的框中心行号，分类时使用此稳定位置  */
 static int16 s_box_lock_cy = 0;
 
-/* 路口类型投票缓冲区，环形存储最�?INTER_TYPE_VOTE_FRAMES(2) 帧的检测结�?*/
+/* 路口类型投票缓冲区，环形存储最INTER_TYPE_VOTE_FRAMES(2) 帧的检测结 */
 static uint8 s_type_vote[INTER_TYPE_VOTE_FRAMES];
 
-/* 投票缓冲区写入索引（环形缓冲区当前位置） */
+/* 投票缓冲区写入索引（环形缓冲区当前位置）  */
 static uint8 s_type_vote_idx = 0u;
 
-/* 投票缓冲区已存帧数（不超�?INTER_TYPE_VOTE_FRAMES�?*/
+/* 投票缓冲区已存帧数（不超INTER_TYPE_VOTE_FRAMES */
 static uint8 s_type_vote_cnt = 0u;
 
 /**
- * @brief 侧面探针白色检测：检查指定行 center_col 附近 5 像素宽区域内是否有足够白�?
+ * @brief 侧面探针白色检测：检查指定行 center_col 附近 5 像素宽区域内是否有足够白
  *
- * 用于检测图像左右边缘附近是否有白色延伸（路�?弯道分支）�?
- * 检测区域为 [center_col-2, center_col+2]，共5个像素�?
- * 白色像素 >= 3 即判定有白色延伸，表示该侧可能存在分支道路�?
+ * 用于检测图像左右边缘附近是否有白色延伸（路弯道分支）
+ * 检测区域为 [center_col-2, center_col+2]，共5个像素
+ * 白色像素 >= 3 即判定有白色延伸，表示该侧可能存在分支道路
  *
  * @param row        行号
  * @param center_col 探针中心列号
- * @return 1=有足够白色（>=3个）�?=�?
- */
+ * @return 1=有足够白色（>=3个）=
+  */
 static uint8 side_probe_has_white(int16 row, int16 center_col)
 {
-    /* 探针左边界（中心�?2�?*/
+    /* 探针左边界（中心2 */
     int16 start = center_col - 2;
-    /* 探针右边界（中心�?2�?*/
+    /* 探针右边界（中心2 */
     int16 end = center_col + 2;
-    /* 白色像素计数�?*/
+    /* 白色像素计数 */
     uint8 white_cnt = 0u;
 
-    /* 行号越界检�?*/
+    /* 行号越界检 */
     if (row < 0 || row >= TF_IMG_H) return 0u;
-    /* 列号左边界保护，不能小于0 */
+    /* 列号左边界保护，不能小于0  */
     if (start < 0) start = 0;
-    /* 列号右边界保护，不能超过图像宽度 */
+    /* 列号右边界保护，不能超过图像宽度  */
     if (end >= TF_IMG_W) end = TF_IMG_W - 1;
 
-    /* 遍历探针区域内每个像素，统计白色像素�?*/
+    /* 遍历探针区域内每个像素，统计白色像素 */
     for (int16 col = start; col <= end; col++)
     {
-        /* 检查当前像素是否为白色 */
+        /* 检查当前像素是否为白色  */
         if (Image_Binarize[row][col] == Image_WHITE)
             white_cnt++;
     }
 
-    /* 5个像素中至少3个白色，判定为有白色延伸 */
+    /* 5个像素中至少3个白色，判定为有白色延伸  */
     return (white_cnt >= 3u) ? 1u : 0u;
 }
 
@@ -2306,50 +2306,50 @@ static uint8 row_white_count(int16 row, int16 col_start, int16 col_end)
 /**
  * @brief 计算指定行指定列范围内最长连续白色像素段长度
  *
- * 用于路口检测中判断是否存在足够长的白色道路延伸�?
- * 连续白色段表示赛道区域，其长度可用于区分真实道路分支和噪声�?
+ * 用于路口检测中判断是否存在足够长的白色道路延伸
+ * 连续白色段表示赛道区域，其长度可用于区分真实道路分支和噪声
  *
  * @param row       行号
  * @param col_start 起始列号
  * @param col_end   结束列号
- * @return 最长连续白色段长度（像素数�?
- */
+ * @return 最长连续白色段长度（像素数
+  */
 static uint8 max_white_streak_on_row(int16 row, int16 col_start, int16 col_end)
 {
-    /* 当前连续白色像素计数 */
+    /* 当前连续白色像素计数  */
     uint8 streak = 0u;
-    /* 遇到的最长连续白色段长度 */
+    /* 遇到的最长连续白色段长度  */
     uint8 max_streak = 0u;
 
-    /* 行号越界检�?*/
+    /* 行号越界检 */
     if (row < 0 || row >= TF_IMG_H) return 0u;
-    /* 列号左边界保�?*/
+    /* 列号左边界保 */
     if (col_start < 0) col_start = 0;
-    /* 列号右边界保�?*/
+    /* 列号右边界保 */
     if (col_end >= TF_IMG_W) col_end = TF_IMG_W - 1;
-    /* 起始列大于结束列，范围无�?*/
+    /* 起始列大于结束列，范围无 */
     if (col_start > col_end) return 0u;
 
-    /* 遍历指定列范围内的每个像�?*/
+    /* 遍历指定列范围内的每个像 */
     for (int16 col = col_start; col <= col_end; col++)
     {
-        /* 检查当前像素是否为白色 */
+        /* 检查当前像素是否为白色  */
         if (Image_Binarize[row][col] == Image_WHITE)
         {
-            /* 白色像素，连续计数递增 */
+            /* 白色像素，连续计数递增  */
             streak++;
-            /* 更新最大连续长�?*/
+            /* 更新最大连续长 */
             if (streak > max_streak)
                 max_streak = streak;
         }
         else
         {
-            /* 遇到黑色像素，重置连续白色计�?*/
+            /* 遇到黑色像素，重置连续白色计算  */
             streak = 0u;
         }
     }
 
-    /* 返回找到的最长连续白色段长度 */
+    /* 返回找到的最长连续白色段长度  */
     return max_streak;
 }
 
@@ -2374,18 +2374,18 @@ static uint8 glare_pre_guard_row(int16 row)
  * @brief 对称分量形状检测：判断左右两侧白色像素是否构成对称结构
  *
  * 用于识别三极管等元器件干扰。此类干扰在图像中表现为左右对称的白色区域，
- * 与真实路�?弯道的不对称特征不同，可以通过形状分析过滤�?
+ * 与真实路弯道的不对称特征不同，可以通过形状分析过滤
  *
- * 判定条件（全部满足才判定为对称分量）�?
+ * 判定条件（全部满足才判定为对称分量）
  *   1. 左右探针行差 <= INTER_SYM_ROW_DELTA(3)（左右对称高度接近）
- *   2. 中心列偏�?<= INTER_SYM_CENTER_DELTA(8)（中心接近图像中心）
- *   3. 左右两侧外延白色段长�?< INTER_SYM_BRANCH_STREAK(18)（非真实分支道路�?
+ *   2. 中心列偏<= INTER_SYM_CENTER_DELTA(8)（中心接近图像中心）
+ *   3. 左右两侧外延白色段长< INTER_SYM_BRANCH_STREAK(18)（非真实分支道路
  *
  * @param left_row   左侧探针行号
  * @param right_row  右侧探针行号
  * @param center_col 中心列号
  * @return 1=是对称分量（干扰），0=不是
- */
+  */
 
 static float bezier_cubic_eval(float p0, float p1, float p2, float p3, float t)
 {
@@ -2725,97 +2725,97 @@ static void corner_fill_apply(int16 jrow, int16 end_row)
 
 static uint8 symmetric_component_shape(int16 left_row, int16 right_row, int16 center_col)
 {
-    /* 行号无效检查，任一侧行号为负则不是对称分量 */
+    /* 行号无效检查，任一侧行号为负则不是对称分量  */
     if (left_row < 0 || right_row < 0)
         return 0u;
 
-    /* 条件1：左右行差不能超�?INTER_SYM_ROW_DELTA(3)，否则不对称 */
+    /* 条件1：左右行差不能超INTER_SYM_ROW_DELTA(3)，否则不对称  */
     if (abs_i16(left_row - right_row) > INTER_SYM_ROW_DELTA)
         return 0u;
 
-    /* 条件2：中心列不能偏离图像中心超过 INTER_SYM_CENTER_DELTA(8) */
+    /* 条件2：中心列不能偏离图像中心超过 INTER_SYM_CENTER_DELTA(8)  */
     if (abs_i16(center_col - (int16)TF_IMG_CENTER) > INTER_SYM_CENTER_DELTA)
         return 0u;
 
-    /* 检查左侧外延白色段长度（从�?到中�?最小赛道宽度） */
+    /* 检查左侧外延白色段长度（从到中最小赛道宽度）  */
     uint8 left_streak = max_white_streak_on_row(
         left_row, 0, center_col - TF_MIN_TRACK_WIDTH);
-    /* 检查右侧外延白色段长度（从中心+最小赛道宽度到末列�?*/
+    /* 检查右侧外延白色段长度（从中心+最小赛道宽度到末列 */
     uint8 right_streak = max_white_streak_on_row(
         right_row, center_col + TF_MIN_TRACK_WIDTH, TF_IMG_W - 1);
 
-    /* 条件3：若任一侧外延白色段过长(>=18)，说明是真实道路分支，不是对称干�?*/
+    /* 条件3：若任一侧外延白色段过长(>=18)，说明是真实道路分支，不是对称干 */
     if (left_streak >= INTER_SYM_BRANCH_STREAK ||
         right_streak >= INTER_SYM_BRANCH_STREAK)
     {
         return 0u;
     }
 
-    /* 满足所有条件，判定为对称分量（三极管等干扰�?*/
+    /* 满足所有条件，判定为对称分量（三极管等干扰 */
     return 1u;
 }
 
 /**
  * @brief 检测指定行是否存在对称分量（左右两侧同时有白色像素且形状对称）
  *
- * 先检查左右探针列是否都有白色，再调用 symmetric_component_shape 进行形状验证�?
- * 两个条件都满足才判定为对称分量�?
+ * 先检查左右探针列是否都有白色，再调用 symmetric_component_shape 进行形状验证
+ * 两个条件都满足才判定为对称分量
  *
  * @param row        行号
  * @param center_col 中心列号（用于形状检测）
- * @return 1=存在对称分量�?=不存�?
- */
+ * @return 1=存在对称分量=不存
+  */
 static uint8 symmetric_component_at_row(int16 row, int16 center_col)
 {
-    /* 左侧探针列必须检测到白色 */
-    /* 右侧探针列也必须检测到白色 */
-    /* 任一侧无白色则不是对称分�?*/
+    /* 左侧探针列必须检测到白色  */
+    /* 右侧探针列也必须检测到白色  */
+    /* 任一侧无白色则不是对称分 */
     if (!side_probe_has_white(row, ip_left_col) ||
         !side_probe_has_white(row, ip_right_col))
     {
         return 0u;
     }
 
-    /* 左右都有白色，进一步检查形状是否对�?*/
+    /* 左右都有白色，进一步检查形状是否对 */
     return symmetric_component_shape(row, row, center_col);
 }
 
 /**
- * @brief 从丢失区域向上扫描寻找拐�?
+ * @brief 从丢失区域向上扫描寻找拐
  *
- * �?lost_row 向上扫描，检查左右探针列（ip_left_col / ip_right_col�?
- * 是否有白色像素（表示该侧有道路延伸）�?
+ * lost_row 向上扫描，检查左右探针列（ip_left_col / ip_right_col
+ * 是否有白色像素（表示该侧有道路延伸）
  *
- * 通过 found_side 返回哪侧有路�?
- *   - 1 = 右侧有路（右转弯场景�?
- *   - 2 = 左侧有路（左转弯场景�?
- *   - 3 = 两侧都有路（十字路口场景�?
+ * 通过 found_side 返回哪侧有路
+ *   - 1 = 右侧有路（右转弯场景
+ *   - 2 = 左侧有路（左转弯场景
+ *   - 3 = 两侧都有路（十字路口场景
  *
- * 找到拐点后还会进行对称分量检查，排除三极管干扰�?
+ * 找到拐点后还会进行对称分量检查，排除三极管干扰
  *
  * @param lost_row     丢失区域起始行号
  * @param last_center  最后有效中点列号（作为拐点列号参考）
- * @param ip           输出参数：拐点信息（valid/row/col�?
- * @param found_side   输出参数：哪侧有路（1=右，2=左，3=双侧�?
- * @return 1=找到有效拐点�?=未找�?
- */
+ * @param ip           输出参数：拐点信息（valid/row/col
+ * @param found_side   输出参数：哪侧有路（1=右，2=左，3=双侧
+ * @return 1=找到有效拐点=未找
+  */
 static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
                                     InflectionPoint_t *ip, uint8 *found_side)
 {
-    /* 初始化拐点为无效状�?*/
+    /* 初始化拐点为无效状 */
     ip->valid = 0u; ip->row = 0; ip->col = 0;
-    /* 初始化有路侧为无 */
+    /* 初始化有路侧为无  */
     *found_side = 0u;
 
-    /* 左侧首次检测到白色的行号，-1表示未检测到 */
+    /* 左侧首次检测到白色的行号，-1表示未检测到  */
     int16 left_white_row = -1;
-    /* 右侧首次检测到白色的行号，-1表示未检测到 */
+    /* 右侧首次检测到白色的行号，-1表示未检测到  */
     int16 right_white_row = -1;
 
-    /* 从丢失行向上扫描到图像顶部（行号递减�?*/
+    /* 从丢失行向上扫描到图像顶部（行号递减 */
     for (int16 row = lost_row; row >= (int16)TF_SEARCH_END_ROW; row--)
     {
-        /* 检查左侧探针列是否有白色（尚未找到时才检查） */
+        /* 检查左侧探针列是否有白色（尚未找到时才检查）  */
         if (left_white_row < 0 &&
             (side_probe_has_white(row, ip_left_col) ||
              inter_side_branch_has_road(row, last_center, 2u)))
@@ -2823,7 +2823,7 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
             left_white_row = row;
         }
 
-        /* 检查右侧探针列是否有白色（尚未找到时才检查） */
+        /* 检查右侧探针列是否有白色（尚未找到时才检查）  */
         if (right_white_row < 0 &&
             (side_probe_has_white(row, ip_right_col) ||
              inter_side_branch_has_road(row, last_center, 1u)))
@@ -2831,27 +2831,27 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
             right_white_row = row;
         }
 
-        /* 两侧都找到白色延伸，无需继续向上扫描 */
+        /* 两侧都找到白色延伸，无需继续向上扫描  */
         if (left_white_row >= 0 && right_white_row >= 0)
             break;
     }
 
-    /* 对称分量检查：若左右白色像素构成对称结构，判定为干扰，不作为拐�?*/
+    /* 对称分量检查：若左右白色像素构成对称结构，判定为干扰，不作为拐 */
     if (symmetric_component_shape(left_white_row, right_white_row, last_center))
     {
-        /* 标记拐点无效 */
+        /* 标记拐点无效  */
         ip->valid = 0u;
-        /* 无有路侧 */
+        /* 无有路侧  */
         *found_side = 0u;
-        /* 设置对称分量标志 */
+        /* 设置对称分量标志  */
         g_sym_component_flag = 1u;
-        /* 对称分量干扰，返回未找到 */
+        /* 对称分量干扰，返回未找到  */
         return 0u;
     }
 
-    /* 拐点行号，取离相机更近的行（行号更大的） */
+    /* 拐点行号，取离相机更近的行（行号更大的）  */
     int16 ip_row = -1;
-    /* 左右两侧都检测到白色延伸 */
+    /* 左右两侧都检测到白色延伸  */
     if (left_white_row >= 0 && right_white_row >= 0)
     {
         if (g_ra_pre_flag != 0u && (g_ra_pre_dir == 1u || g_ra_pre_dir == 2u))
@@ -2869,19 +2869,19 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
                 ip_row = (int16)((left_white_row + right_white_row) / 2);
                 *found_side = 3u;
             }
-            /* 左侧行号更大 = 左侧道路更近 = 左转场景 */
+            /* 左侧行号更大 = 左侧道路更近 = 左转场景  */
             else if (left_white_row > right_white_row)
             {
                 ip_row = left_white_row;
                 *found_side = 2u;
             }
-            /* 右侧行号更大 = 右侧道路更近 = 右转场景 */
+            /* 右侧行号更大 = 右侧道路更近 = 右转场景  */
             else if (right_white_row > left_white_row)
             {
                 ip_row = right_white_row;
                 *found_side = 1u;
             }
-            /* 同行 = 两侧距离相同 = 十字路口场景 */
+            /* 同行 = 两侧距离相同 = 十字路口场景  */
             else
             {
                 ip_row = (int16)((left_white_row + right_white_row) / 2);
@@ -2889,24 +2889,24 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
             }
         }
     }
-    /* 仅右侧检测到白色延伸 */
+    /* 仅右侧检测到白色延伸  */
     else if (right_white_row >= 0)
     {
-        /* 拐点行为右侧�?*/
+        /* 拐点行为右侧 */
         ip_row = right_white_row;
-        /* 右侧有路 -> 右转 */
+        /* 右侧有路 -> 右转  */
         *found_side = 1u;
     }
-    /* 仅左侧检测到白色延伸 */
+    /* 仅左侧检测到白色延伸  */
     else if (left_white_row >= 0)
     {
-        /* 拐点行为左侧�?*/
+        /* 拐点行为左侧 */
         ip_row = left_white_row;
-        /* 左侧有路 -> 左转 */
+        /* 左侧有路 -> 左转  */
         *found_side = 2u;
     }
 
-    /* 未找到任何白色延伸，返回未找�?*/
+    /* 未找到任何白色延伸，返回未找 */
     if (ip_row < 0) return 0u;
 
     if (ip_row + INTER_IP_ROW_BIAS <= lost_row)
@@ -2914,13 +2914,13 @@ static uint8 find_ip_from_lost_row(int16 lost_row, int16 last_center,
     else
         ip_row = lost_row;
 
-    /* 设置拐点有效标志 */
+    /* 设置拐点有效标志  */
     ip->valid = 1u;
-    /* 设置拐点行号 */
+    /* 设置拐点行号  */
     ip->row = ip_row;
-    /* 使用最后有效中点列号作为拐点列�?*/
+    /* 使用最后有效中点列号作为拐点列 */
     ip->col = last_center;
-    /* 返回找到有效拐点 */
+    /* 返回找到有效拐点  */
     return 1u;
 }
 
@@ -3015,69 +3015,69 @@ static uint8 find_probe_trigger_ip(InflectionPoint_t *ip, uint8 *found_side)
 /**
  * @brief 检查水平带状区域是否有足够白色像素（用于路口分类）
  *
- * �?center_row 为中心、厚度为 INTER_BAND_THICKNESS(3) 行的水平带内�?
- * 检�?[col_start, col_end] 范围内白色像素数和最长连续白色段是否达标�?
- * 两个条件同时满足才判定有足够白色道路�?
+ * center_row 为中心、厚度为 INTER_BAND_THICKNESS(3) 行的水平带内
+ * 检[col_start, col_end] 范围内白色像素数和最长连续白色段是否达标
+ * 两个条件同时满足才判定有足够白色道路
  *
- * @param center_row  带中心行�?
+ * @param center_row  带中心行
  * @param col_start   起始列号
  * @param col_end     结束列号
- * @param min_white   最少白色像素数阈�?
- * @param min_streak  最长连续白色段阈�?
- * @return 1=有足够白色道路，0=�?
- */
+ * @param min_white   最少白色像素数阈
+ * @param min_streak  最长连续白色段阈
+ * @return 1=有足够白色道路，0=
+  */
 static uint8 inter_horizontal_band_has_road(int16 center_row,
                                             int16 col_start,
                                             int16 col_end,
                                             uint8 min_white,
                                             uint8 min_streak)
 {
-    /* 带的半厚度（3/2=1�?*/
+    /* 带的半厚度（3/2=1 */
     int16 half = (int16)(INTER_BAND_THICKNESS / 2);
-    /* 带的起始�?*/
+    /* 带的起始 */
     int16 row_start = center_row - half;
-    /* 带的结束�?*/
+    /* 带的结束 */
     int16 row_end = center_row + half;
-    /* 总白色像素计�?*/
+    /* 总白色像素计算  */
     uint16 white_count = 0u;
-    /* 带内最长连续白色段长度 */
+    /* 带内最长连续白色段长度  */
     uint8 max_streak = 0u;
 
-    /* 行边界保护：不超出图像范�?*/
+    /* 行边界保护：不超出图像范 */
     if (row_start < 0) row_start = 0;
     if (row_end >= TF_IMG_H) row_end = TF_IMG_H - 1;
-    /* 列边界保护：不超出图像范�?*/
+    /* 列边界保护：不超出图像范 */
     if (col_start < 0) col_start = 0;
     if (col_end >= TF_IMG_W) col_end = TF_IMG_W - 1;
-    /* 范围有效性检�?*/
+    /* 范围有效性检 */
     if (row_start > row_end || col_start > col_end) return 0u;
 
-    /* 遍历带内所有行，统计白色像素和最长连续白色段 */
+    /* 遍历带内所有行，统计白色像素和最长连续白色段  */
     for (int16 r = row_start; r <= row_end; r++)
     {
-        /* 当前行的连续白色计数 */
+        /* 当前行的连续白色计数  */
         uint8 streak = 0u;
-        /* 遍历带内所有列 */
+        /* 遍历带内所有列  */
         for (int16 c = col_start; c <= col_end; c++)
         {
-            /* 检查当前像素是否为白色 */
+            /* 检查当前像素是否为白色  */
             if (is_white(r, c))
             {
-                /* 白色像素，总数和连续计数递增 */
+                /* 白色像素，总数和连续计数递增  */
                 white_count++;
                 streak++;
-                /* 更新最大连续长�?*/
+                /* 更新最大连续长 */
                 if (streak > max_streak) max_streak = streak;
             }
             else
             {
-                /* 遇到黑色像素，重置连续计�?*/
+                /* 遇到黑色像素，重置连续计算  */
                 streak = 0u;
             }
         }
     }
 
-    /* 白色像素数和连续段长度都达标才返回有�?*/
+    /* 白色像素数和连续段长度都达标才返回有 */
     return (white_count >= min_white && max_streak >= min_streak) ? 1u : 0u;
 }
 
@@ -3263,134 +3263,134 @@ static uint8 inter_side_crossing_has_road(int16 top,
 /**
  * @brief 检查垂直带状区域是否有足够白色像素（用于路口分类）
  *
- * �?center_col 为中心、厚度为 INTER_BAND_THICKNESS(3) 列的垂直带内�?
- * 检�?[row_start, row_end] 范围内白色像素数和最长连续白色段是否达标�?
- * 两个条件同时满足才判定有足够白色道路�?
+ * center_col 为中心、厚度为 INTER_BAND_THICKNESS(3) 列的垂直带内
+ * 检[row_start, row_end] 范围内白色像素数和最长连续白色段是否达标
+ * 两个条件同时满足才判定有足够白色道路
  *
- * @param center_col  带中心列�?
+ * @param center_col  带中心列
  * @param row_start   起始行号
  * @param row_end     结束行号
- * @param min_white   最少白色像素数阈�?
- * @param min_streak  最长连续白色段阈�?
- * @return 1=有足够白色道路，0=�?
- */
+ * @param min_white   最少白色像素数阈
+ * @param min_streak  最长连续白色段阈
+ * @return 1=有足够白色道路，0=
+  */
 static uint8 inter_vertical_band_has_road(int16 center_col,
                                           int16 row_start,
                                           int16 row_end,
                                           uint8 min_white,
                                           uint8 min_streak)
 {
-    /* 带的半厚度（3/2=1�?*/
+    /* 带的半厚度（3/2=1 */
     int16 half = (int16)(INTER_BAND_THICKNESS / 2);
-    /* 带的起始�?*/
+    /* 带的起始 */
     int16 col_start = center_col - half;
-    /* 带的结束�?*/
+    /* 带的结束 */
     int16 col_end = center_col + half;
-    /* 总白色像素计�?*/
+    /* 总白色像素计算  */
     uint16 white_count = 0u;
-    /* 带内最长连续白色段长度 */
+    /* 带内最长连续白色段长度  */
     uint8 max_streak = 0u;
 
-    /* 行边界保护：不超出图像范�?*/
+    /* 行边界保护：不超出图像范 */
     if (row_start < 0) row_start = 0;
     if (row_end >= TF_IMG_H) row_end = TF_IMG_H - 1;
-    /* 列边界保护：不超出图像范�?*/
+    /* 列边界保护：不超出图像范 */
     if (col_start < 0) col_start = 0;
     if (col_end >= TF_IMG_W) col_end = TF_IMG_W - 1;
-    /* 范围有效性检�?*/
+    /* 范围有效性检 */
     if (row_start > row_end || col_start > col_end) return 0u;
 
-    /* 遍历带内所有列，统计白色像素和最长连续白色段 */
+    /* 遍历带内所有列，统计白色像素和最长连续白色段  */
     for (int16 c = col_start; c <= col_end; c++)
     {
-        /* 当前列的连续白色计数 */
+        /* 当前列的连续白色计数  */
         uint8 streak = 0u;
-        /* 遍历带内所有行 */
+        /* 遍历带内所有行  */
         for (int16 r = row_start; r <= row_end; r++)
         {
-            /* 检查当前像素是否为白色 */
+            /* 检查当前像素是否为白色  */
             if (is_white(r, c))
             {
-                /* 白色像素，总数和连续计数递增 */
+                /* 白色像素，总数和连续计数递增  */
                 white_count++;
                 streak++;
-                /* 更新最大连续长�?*/
+                /* 更新最大连续长 */
                 if (streak > max_streak) max_streak = streak;
             }
             else
             {
-                /* 遇到黑色像素，重置连续计�?*/
+                /* 遇到黑色像素，重置连续计算  */
                 streak = 0u;
             }
         }
     }
 
-    /* 白色像素数和连续段长度都达标才返回有�?*/
+    /* 白色像素数和连续段长度都达标才返回有 */
     return (white_count >= min_white && max_streak >= min_streak) ? 1u : 0u;
 }
 
 /**
  * @brief 检查指定侧是否有足够长的白色分支道路（用于纯侧路检测）
  *
- * �?row 行为中心、厚度为 INTER_BAND_THICKNESS(3) 行的带内�?
- * 检�?center_col 以外（左侧或右侧）是否有长度 >= INTER_BRANCH_MIN_STREAK 的连续白色段�?
- * 用于检测纯侧路（flag 1/2）场景�?
+ * row 行为中心、厚度为 INTER_BAND_THICKNESS(3) 行的带内
+ * 检center_col 以外（左侧或右侧）是否有长度 >= INTER_BRANCH_MIN_STREAK 的连续白色段
+ * 用于检测纯侧路（flag 1/2）场景
  *
  * @param row        中心行号
  * @param center_col 中心列号（赛道中心）
- * @param side       1=检查右侧，2=检查左�?
- * @return 1=有足够长的分支道路，0=�?
- */
+ * @param side       1=检查右侧，2=检查左
+ * @return 1=有足够长的分支道路，0=
+  */
 static uint8 inter_side_branch_has_road(int16 row,
                                         int16 center_col,
                                         uint8 side)
 {
-    /* 带的起始�?*/
+    /* 带的起始 */
     int16 row_start = row - (int16)INTER_BRANCH_AREA_HALF_ROWS;
-    /* 带的结束�?*/
+    /* 带的结束 */
     int16 row_end = row + (int16)INTER_BRANCH_AREA_HALF_ROWS;
-    /* 检测区域的起始列和结束�?*/
+    /* 检测区域的起始列和结束 */
     int16 col_start;
     int16 col_end;
-    /* 带内最大连续白色段长度 */
+    /* 带内最大连续白色段长度  */
     uint8 max_streak = 0u;
     uint16 streak_sum = 0u;
     uint8 hit_rows = 0u;
     int16 branch_gap = active_track_half_width() + 2;
 
-    /* 行边界保�?*/
+    /* 行边界保 */
     if (row_start < 0) row_start = 0;
     if (row_end >= TF_IMG_H) row_end = TF_IMG_H - 1;
 
     if (branch_gap < (int16)(TF_MIN_TRACK_WIDTH + 2))
         branch_gap = (int16)(TF_MIN_TRACK_WIDTH + 2);
 
-    /* 根据检测侧确定列范�?*/
+    /* 根据检测侧确定列范 */
     if (side == 1u)
     {
-        /* 右侧：从 center_col + 最小赛道宽�?�?图像右边�?*/
+        /* 右侧：从 center_col + 最小赛道宽图像右边 */
         col_start = center_col + branch_gap;
         col_end = TF_IMG_W - 1;
     }
     else
     {
-        /* 左侧：从 图像左边�?�?center_col - 最小赛道宽�?*/
+        /* 左侧：从 图像左边center_col - 最小赛道宽 */
         col_start = 0;
         col_end = center_col - branch_gap;
     }
 
-    /* 列边界保�?*/
+    /* 列边界保 */
     if (col_start < 0) col_start = 0;
     if (col_end >= TF_IMG_W) col_end = TF_IMG_W - 1;
-    /* 列范围有效性检�?*/
+    /* 列范围有效性检 */
     if (col_start > col_end) return 0u;
 
-    /* 遍历带内所有行，取各行最大连续白色段的最大�?*/
+    /* 遍历带内所有行，取各行最大连续白色段的最大 */
     for (int16 r = row_start; r <= row_end; r++)
     {
-        /* 计算当前行在指定列范围内的最长连续白色段 */
+        /* 计算当前行在指定列范围内的最长连续白色段  */
         uint8 streak = max_white_streak_on_row(r, col_start, col_end);
-        /* 更新全局最大�?*/
+        /* 更新全局最大 */
         if (streak > max_streak)
             max_streak = streak;
 
@@ -3401,7 +3401,7 @@ static uint8 inter_side_branch_has_road(int16 row,
         }
     }
 
-    /* 连续白色段长度达到分支阈值才返回有分支道�?*/
+    /* 连续白色段长度达到分支阈值才返回有分支道 */
     if (max_streak >= INTER_BRANCH_MIN_STREAK)
         return 1u;
 
@@ -3414,7 +3414,7 @@ static uint8 inter_side_branch_has_road(int16 row,
     return 0u;
 }
 
-/* Strong side-branch evidence tuned from saved frames; components are shorter. */
+/* Strong side-branch evidence tuned from saved frames; components are shorter.  */
 static uint8 inter_side_branch_strong_has_road(int16 row,
                                                int16 center_col,
                                                uint8 side)
@@ -3559,45 +3559,45 @@ static uint8 inter_side_edge_reach_has_road(int16 row,
     return 0u;
 }
 
-/* Pick a stable inflection-point column from the recent center buffer. */
+/* Pick a stable inflection-point column from the recent center buffer.  */
 static void apply_ip_col_from_buffer(InflectionPoint_t *ip, uint8 found_side)
 {
-    /* 仅在拐点有效且缓冲区有数据时才从中点缓冲区选取 */
+    /* 仅在拐点有效且缓冲区有数据时才从中点缓冲区选取  */
     if (ip->valid && s_center_buf_cnt > 0u)
     {
-        /* 获取缓冲区偏移量（取倒数第几个） */
+        /* 获取缓冲区偏移量（取倒数第几个）  */
         uint8 offset = (uint8)ip_col_offset;
-        /* 获取缓冲区已存元素总数 */
+        /* 获取缓冲区已存元素总数  */
         uint8 total = s_center_buf_cnt;
-        /* 偏移量不超过已有数据量（取最早可用的�?*/
+        /* 偏移量不超过已有数据量（取最早可用的 */
         if (offset >= total) offset = total - 1u;
-        /* 计算环形缓冲区索引：取倒数�?(offset+1) 个有效中�?*/
+        /* 计算环形缓冲区索引：取倒数(offset+1) 个有效中 */
         uint8 idx = (uint8)((total - 1u - offset) % IP_COL_BUF_SIZE);
-        /* 用缓冲区中的稳定中点替换拐点列号 */
+        /* 用缓冲区中的稳定中点替换拐点列号  */
         ip->col = s_center_buf[idx];
     }
 
-    /* 拐点无效则无需偏移，直接返�?*/
+    /* 拐点无效则无需偏移，直接返 */
     if (!ip->valid)
         return;
 
-    /* 根据检测到的有路侧，向对应方向偏移拐点列号 */
+    /* 根据检测到的有路侧，向对应方向偏移拐点列号  */
     if (found_side == 1u)
-        /* 右侧有路：拐点列号向右偏移，帮助检测框罩住右侧岔路 */
+        /* 右侧有路：拐点列号向右偏移，帮助检测框罩住右侧岔路  */
         ip->col = clamp_center_col((int16)(ip->col + INTER_IP_SIDE_BIAS));
     else if (found_side == 2u)
-        /* 左侧有路：拐点列号向左偏移，帮助检测框罩住左侧岔路 */
+        /* 左侧有路：拐点列号向左偏移，帮助检测框罩住左侧岔路  */
         ip->col = clamp_center_col((int16)(ip->col - INTER_IP_SIDE_BIAS));
 }
 
 /**
- * @brief int16 取绝对�?
+ * @brief int16 取绝对
  *
- * 用于对称分量检测中的距离计算等场景�?
+ * 用于对称分量检测中的距离计算等场景
  *
- * @param v 输入值（int16 类型�?
- * @return 输入值的绝对�?
- */
+ * @param v 输入值（int16 类型
+ * @return 输入值的绝对
+  */
 static int16 abs_i16(int16 v)
 {
     if (v == (int16)(-32767 - 1))
@@ -3606,25 +3606,25 @@ static int16 abs_i16(int16 v)
 }
 
 /**
- * @brief 重置检测框锁定状�?
+ * @brief 重置检测框锁定状
  *
- * 清除候选框、锁定框、稳定计数和类型投票数据�?
- * 在路口处理完成或检测条件不满足时调用，将框状态恢复到初始值�?
- */
+ * 清除候选框、锁定框、稳定计数和类型投票数据
+ * 在路口处理完成或检测条件不满足时调用，将框状态恢复到初始值
+  */
 static void reset_box_lock(void)
 {
-    /* 清除候选框有效标志 */
+    /* 清除候选框有效标志  */
     s_box_candidate_valid = 0u;
-    /* 清除锁定框有效标�?*/
+    /* 清除锁定框有效标 */
     s_box_lock_valid = 0u;
-    /* 清除框位置稳定计�?*/
+    /* 清除框位置稳定计算  */
     s_box_stable_cnt = 0u;
-    /* 重置投票缓冲区写入索�?*/
+    /* 重置投票缓冲区写入索 */
     s_type_vote_idx = 0u;
-    /* 清除投票缓冲区已存帧�?*/
+    /* 清除投票缓冲区已存帧 */
     s_type_vote_cnt = 0u;
 
-    /* 清零投票缓冲区中所有元�?*/
+    /* 清零投票缓冲区中所有元 */
     for (uint8 i = 0u; i < INTER_TYPE_VOTE_FRAMES; i++)
         s_type_vote[i] = 0u;
 }
@@ -3632,34 +3632,36 @@ static void reset_box_lock(void)
 /**
  * @brief 清除路口检测结果结构体
  *
- * �?g_inter_result 的所有字段清零，包括左右拐点、检测框边界和路口类型�?
- * 同时清除 g_ip_max_row（拐点最大行号）�?
- */
+ * g_inter_result 的所有字段清零，包括左右拐点、检测框边界和路口类型
+ * 同时清除 g_ip_max_row（拐点最大行号）
+  */
 static void clear_inter_result(void)
 {
-    /* 左拐点有效标志清�?*/
+    /* 左拐点有效标志清 */
     g_inter_result.left_ip.valid = 0u;
-    /* 左拐点行号清�?*/
+    /* 左拐点行号清 */
     g_inter_result.left_ip.row = 0;
-    /* 左拐点列号清�?*/
+    /* 左拐点列号清 */
     g_inter_result.left_ip.col = 0;
-    /* 右拐点有效标志清�?*/
+    /* 右拐点有效标志清 */
     g_inter_result.right_ip.valid = 0u;
-    /* 右拐点行号清�?*/
+    /* 右拐点行号清 */
     g_inter_result.right_ip.row = 0;
-    /* 右拐点列号清�?*/
+    /* 右拐点列号清 */
     g_inter_result.right_ip.col = 0;
-    /* 检测框顶行清零 */
+    /* 检测框顶行清零  */
     g_inter_result.box_top = 0u;
-    /* 检测框底行清零 */
+    /* 检测框底行清零  */
     g_inter_result.box_bottom = 0u;
-    /* 检测框左列清零 */
+    /* 检测框左列清零  */
     g_inter_result.box_left = 0u;
-    /* 检测框右列清零 */
+    /* 检测框右列清零  */
     g_inter_result.box_right = 0u;
-    /* 检测到的路口类型清�?*/
+    /* 检测到的路口类型清 */
     g_inter_result.detected_type = 0u;
-    /* 拐点最大行号清�?*/
+    g_inter_result.confidence = 0u;
+    g_inter_result.evidence = 0u;
+    /* 拐点最大行号清 */
     g_ip_max_row = 0u;
 }
 
@@ -3769,22 +3771,22 @@ static uint8 straight_inline_view(void)
 }
 
 /**
- * @brief int16 钳位函数：将值限制在 [min_v, max_v] 范围�?
+ * @brief int16 钳位函数：将值限制在 [min_v, max_v] 范围
  *
- * 通用的数值钳位工具函数，用于检测框尺寸等参数的范围限制�?
+ * 通用的数值钳位工具函数，用于检测框尺寸等参数的范围限制
  *
- * @param v     输入�?
+ * @param v     输入
  * @param min_v 下限
  * @param max_v 上限
- * @return 钳位后的�?
- */
+ * @return 钳位后的
+  */
 static int16 clamp_i16(int16 v, int16 min_v, int16 max_v)
 {
-    /* 低于下限，返回下�?*/
+    /* 低于下限，返回下 */
     if (v < min_v) return min_v;
-    /* 高于上限，返回上�?*/
+    /* 高于上限，返回上 */
     if (v > max_v) return max_v;
-    /* 在范围内，返回原�?*/
+    /* 在范围内，返回原 */
     return v;
 }
 
@@ -3792,51 +3794,51 @@ static int16 clamp_i16(int16 v, int16 min_v, int16 max_v)
  * @brief 估算路口处的赛道宽度（像素）
  *
  * 估算策略（三级回退）：
- *   1. �?cy 行向上下各搜�?8 行，找到第一个有效边缘对，用其宽�?
- *   2. 若都不行，回退使用基点(left_jidian, right_jidian)边缘对宽�?
- *   3. 兜底使用 BOX_WIDTH/INTER_BOX_WIDTH_SCALE 默认�?
+ *   1. cy 行向上下各搜8 行，找到第一个有效边缘对，用其宽
+ *   2. 若都不行，回退使用基点(left_jidian, right_jidian)边缘对宽
+ *   3. 兜底使用 BOX_WIDTH/INTER_BOX_WIDTH_SCALE 默认
  *
- * 赛道宽度估算用于动态调整检测框的大小�?
+ * 赛道宽度估算用于动态调整检测框的大小
  *
- * @param cy 中心行号（拐点行�?
- * @return 估算的赛道宽度（像素�?
- */
+ * @param cy 中心行号（拐点行
+ * @return 估算的赛道宽度（像素
+  */
 static int16 estimate_inter_track_width(int16 cy)
 {
     (void)cy;
     return (int16)BOX_WIDTH;
 #if 0
 
-    /* 从偏�?开始，逐步扩大搜索范围 */
+    /* 从偏开始，逐步扩大搜索范围  */
     for (int16 offset = 0; offset <= 8; offset++)
     {
-        /* 向下偏移的行号（行号增大，更靠近相机�?*/
+        /* 向下偏移的行号（行号增大，更靠近相机 */
         int16 r1 = cy + offset;
-        /* 向上偏移的行号（行号减小，更远离相机�?*/
+        /* 向上偏移的行号（行号减小，更远离相机 */
         int16 r2 = cy - offset;
 
-        /* 检查向下偏移的行是否有有效边缘�?*/
+        /* 检查向下偏移的行是否有有效边缘 */
         if (r1 >= 0 && r1 < TF_IMG_H && g_tf.row_valid[r1] &&
             valid_pair(g_tf.left_edge[r1], g_tf.right_edge[r1]))
         {
-            /* 返回该行的赛道宽度（右边�?- 左边缘） */
+            /* 返回该行的赛道宽度（右边- 左边缘）  */
             return g_tf.right_edge[r1] - g_tf.left_edge[r1];
         }
 
-        /* 检查向上偏移的行（offset=0 时与 r1 相同，跳过避免重复检查） */
+        /* 检查向上偏移的行（offset=0 时与 r1 相同，跳过避免重复检查）  */
         if (offset != 0 && r2 >= 0 && r2 < TF_IMG_H && g_tf.row_valid[r2] &&
             valid_pair(g_tf.left_edge[r2], g_tf.right_edge[r2]))
         {
-            /* 返回该行的赛道宽�?*/
+            /* 返回该行的赛道宽 */
             return g_tf.right_edge[r2] - g_tf.left_edge[r2];
         }
     }
 
-    /* 回退：使用基点边缘对宽度 */
+    /* 回退：使用基点边缘对宽度  */
     if (valid_pair((int16)g_tf.left_jidian, (int16)g_tf.right_jidian))
         return (int16)g_tf.right_jidian - (int16)g_tf.left_jidian;
 
-    /* 兜底：使用默认赛道宽度�?*/
+    /* 兜底：使用默认赛道宽度 */
     return (int16)(BOX_WIDTH / INTER_BOX_WIDTH_SCALE);
 #endif
 }
@@ -3844,35 +3846,35 @@ static int16 estimate_inter_track_width(int16 cy)
 /**
  * @brief 根据拐点位置构建路口检测框
  *
- * 检测框�?(cx, cy) 为锚点，更多面积放在拐点前方�?
+ * 检测框(cx, cy) 为锚点，更多面积放在拐点前方
  *   - 宽度 = 赛道宽度 * INTER_BOX_WIDTH_SCALE(3)，限制在 [28, 44] 像素
  *   - 高度 = 赛道宽度 * INTER_BOX_HEIGHT_SCALE(2)，限制在 [16, 24] 像素
- * 框边界不超过图像范围�?
- * 检测框用于后续的带状区域白色像素检测，以分类路口类型�?
+ * 框边界不超过图像范围
+ * 检测框用于后续的带状区域白色像素检测，以分类路口类型
  *
- * @param cx     框中心列�?
- * @param cy     框中心行�?
- * @param top    输出参数：框顶行�?
- * @param bottom 输出参数：框底行�?
- * @param left   输出参数：框左列�?
- * @param right  输出参数：框右列�?
- */
+ * @param cx     框中心列
+ * @param cy     框中心行
+ * @param top    输出参数：框顶行
+ * @param bottom 输出参数：框底行
+ * @param left   输出参数：框左列
+ * @param right  输出参数：框右列
+  */
 static void build_inter_box(int16 cx, int16 cy,
                             int16 *top, int16 *bottom,
                             int16 *left, int16 *right)
 {
-    /* 估算当前路口处的赛道宽度 */
+    /* 估算当前路口处的赛道宽度  */
     int16 track_w = estimate_inter_track_width(cy);
-    /* 框宽�?= 赛道宽度 * 3，限制在 [28, 44] */
+    /* 框宽= 赛道宽度 * 3，限制在 [28, 44]  */
     int16 box_w = track_w;
-    /* 框高�?= 赛道宽度 * 2，限制在 [16, 24] */
+    /* 框高= 赛道宽度 * 2，限制在 [16, 24]  */
     int16 box_h = (int16)BOX_HEIGHT;
     int16 front_h = (int16)((box_h * INTER_BOX_FRONT_PCT) / 100);
     int16 b_top = cy - front_h;
     int16 b_bottom = b_top + box_h;
-    /* 框左�?= 中心�?- 半宽�?*/
+    /* 框左= 中心- 半宽 */
     int16 b_left = cx - box_w / 2;
-    /* 框右�?= 中心�?+ 半宽�?*/
+    /* 框右= 中心+ 半宽 */
     int16 b_right = cx + box_w / 2;
 
     if (b_top < 0)
@@ -3898,7 +3900,7 @@ static void build_inter_box(int16 cx, int16 cy,
         if (b_left < 0) b_left = 0;
     }
 
-    /* 输出计算后的框边�?*/
+    /* 输出计算后的框边 */
     *top = b_top;
     *bottom = b_bottom;
     *left = b_left;
@@ -3906,162 +3908,162 @@ static void build_inter_box(int16 cx, int16 cy,
 }
 
 /**
- * @brief 更新检测框锁定状�?
+ * @brief 更新检测框锁定状
  *
- * 使用帧间稳定性判断：候选框位置连续 INTER_BOX_STABLE_FRAMES �?
- * �?INTER_BOX_STABLE_DELTA(3) 像素范围内不变，则锁定�?
- * 锁定后使用稳定位置进行路口分类，避免框随噪声跳动导致误分类�?
+ * 使用帧间稳定性判断：候选框位置连续 INTER_BOX_STABLE_FRAMES 
+ * INTER_BOX_STABLE_DELTA(3) 像素范围内不变，则锁定
+ * 锁定后使用稳定位置进行路口分类，避免框随噪声跳动导致误分类
  *
  * @param cx 当前候选框中心列号
  * @param cy 当前候选框中心行号
- * @return 1=框已锁定可用�?=框未锁定
- */
+ * @return 1=框已锁定可用=框未锁定
+  */
 static uint8 update_box_lock(int16 cx, int16 cy)
 {
-    /* 若当前无活跃候选框，初始化为第一个候选框 */
+    /* 若当前无活跃候选框，初始化为第一个候选框  */
     if (!s_box_candidate_valid)
     {
-        /* 标记候选框有效 */
+        /* 标记候选框有效  */
         s_box_candidate_valid = 1u;
-        /* 初始状态未锁定 */
+        /* 初始状态未锁定  */
         s_box_lock_valid = 0u;
-        /* 稳定计数初始化为1 */
+        /* 稳定计数初始化为1  */
         s_box_stable_cnt = 1u;
-        /* 记录候选框中心位置 */
+        /* 记录候选框中心位置  */
         s_box_last_cx = cx;
         s_box_last_cy = cy;
-        /* 锁定位置初始化为当前候选位�?*/
+        /* 锁定位置初始化为当前候选位 */
         s_box_lock_cx = cx;
         s_box_lock_cy = cy;
-        /* 若只需1帧即锁定（INTER_BOX_STABLE_FRAMES=1），直接生效 */
+        /* 若只需1帧即锁定（INTER_BOX_STABLE_FRAMES=1），直接生效  */
         if (INTER_BOX_STABLE_FRAMES <= 1u)
         {
-            /* 标记框已锁定 */
+            /* 标记框已锁定  */
             s_box_lock_valid = 1u;
-            /* 返回锁定可用 */
+            /* 返回锁定可用  */
             return 1u;
         }
-        /* 需要更多帧才能锁定，暂返回未锁�?*/
+        /* 需要更多帧才能锁定，暂返回未锁 */
         return 0u;
     }
 
-    /* 检查框位置是否在稳定阈�?3像素)内未移动 */
+    /* 检查框位置是否在稳定阈3像素)内未移动  */
     if (abs_i16(cx - s_box_last_cx) <= INTER_BOX_STABLE_DELTA &&
         abs_i16(cy - s_box_last_cy) <= INTER_BOX_STABLE_DELTA)
     {
-        /* 位置稳定，累加稳定计数（上限255防止溢出�?*/
+        /* 位置稳定，累加稳定计数（上限255防止溢出 */
         if (s_box_stable_cnt < 255u)
             s_box_stable_cnt++;
     }
     else
     {
-        /* 位置移动过大，重置稳定状态和投票数据 */
+        /* 位置移动过大，重置稳定状态和投票数据  */
         s_box_stable_cnt = 1u;
-        /* 清除锁定状�?*/
+        /* 清除锁定状 */
         s_box_lock_valid = 0u;
-        /* 重置投票索引 */
+        /* 重置投票索引  */
         s_type_vote_idx = 0u;
-        /* 清除投票计数 */
+        /* 清除投票计数  */
         s_type_vote_cnt = 0u;
     }
 
-    /* 更新上一帧候选框位置记录 */
+    /* 更新上一帧候选框位置记录  */
     s_box_last_cx = cx;
     s_box_last_cy = cy;
 
-    /* 稳定帧数达到阈值且尚未锁定，执行锁�?*/
+    /* 稳定帧数达到阈值且尚未锁定，执行锁 */
     if (!s_box_lock_valid && s_box_stable_cnt >= INTER_BOX_STABLE_FRAMES)
     {
-        /* 标记框已锁定 */
+        /* 标记框已锁定  */
         s_box_lock_valid = 1u;
-        /* 记录锁定位置 */
+        /* 记录锁定位置  */
         s_box_lock_cx = cx;
         s_box_lock_cy = cy;
     }
 
-    /* 返回当前锁定状�?*/
+    /* 返回当前锁定状 */
     return s_box_lock_valid;
 }
 
 /**
  * @brief 路口类型投票机制
  *
- * 在环形缓冲区中存储最�?INTER_TYPE_VOTE_FRAMES(2) 帧的检测结果，
- * 当缓冲区满后，统计各类型出现次数，达�?INTER_TYPE_VOTE_MIN 次的类型通过投票�?
+ * 在环形缓冲区中存储最INTER_TYPE_VOTE_FRAMES(2) 帧的检测结果，
+ * 当缓冲区满后，统计各类型出现次数，达INTER_TYPE_VOTE_MIN 次的类型通过投票
  *
- * 投票机制可过滤单帧误检，提高检测可靠性�?
- * 当检测到类型0（无路口）时清空投票缓冲区，重新开始计数�?
+ * 投票机制可过滤单帧误检，提高检测可靠性
+ * 当检测到类型0（无路口）时清空投票缓冲区，重新开始计数
  *
  * @param detected 当前帧检测到的路口类型（0=无，1~5=各类型）
  * @return 投票通过的路口类型，0=未通过投票
- */
+  */
 static uint8 vote_inter_type(uint8 detected)
 {
-    /* 未检测到任何路口类型，清空投票缓冲区并返�?*/
+    /* 未检测到任何路口类型，清空投票缓冲区并返 */
     if (detected == 0u)
     {
-        /* 重置投票写入索引 */
+        /* 重置投票写入索引  */
         s_type_vote_idx = 0u;
-        /* 清除投票计数 */
+        /* 清除投票计数  */
         s_type_vote_cnt = 0u;
-        /* 返回未通过 */
+        /* 返回未通过  */
         return 0u;
     }
 
-    /* 将当前帧检测结果写入环形缓冲区 */
+    /* 将当前帧检测结果写入环形缓冲区  */
     s_type_vote[s_type_vote_idx] = detected;
-    /* 递增写入索引 */
+    /* 递增写入索引  */
     s_type_vote_idx++;
-    /* 索引到达缓冲区末尾时回绕到开�?*/
+    /* 索引到达缓冲区末尾时回绕到开 */
     if (s_type_vote_idx >= INTER_TYPE_VOTE_FRAMES)
         s_type_vote_idx = 0u;
 
-    /* 递增已存帧数（不超过缓冲区大小） */
+    /* 递增已存帧数（不超过缓冲区大小）  */
     if (s_type_vote_cnt < INTER_TYPE_VOTE_FRAMES)
         s_type_vote_cnt++;
 
-    /* 缓冲区未满，暂不进行投票（需要足够样本） */
+    /* 缓冲区未满，暂不进行投票（需要足够样本）  */
     if (s_type_vote_cnt < INTER_TYPE_VOTE_FRAMES)
         return 0u;
 
-    /* 遍历所有路口类�?1~5)，统计出现次�?*/
+    /* 遍历所有路口类1~5)，统计出现次 */
     for (uint8 type = 1u; type <= 5u; type++)
     {
-        /* 当前类型的计�?*/
+        /* 当前类型的计算  */
         uint8 count = 0u;
-        /* 遍历投票缓冲区，统计该类型出现次�?*/
+        /* 遍历投票缓冲区，统计该类型出现次 */
         for (uint8 i = 0u; i < INTER_TYPE_VOTE_FRAMES; i++)
         {
             if (s_type_vote[i] == type)
                 count++;
         }
 
-        /* 超过最低票数阈�?1)，投票通过，返回该类型 */
+        /* 超过最低票数阈1)，投票通过，返回该类型  */
         if (count >= INTER_TYPE_VOTE_MIN)
             return type;
     }
 
-    /* 无类型获得足够票数，返回未通过 */
+    /* 无类型获得足够票数，返回未通过  */
     return 0u;
 }
 
 /**
  * @brief 路口类型快速确认（跳过投票，立即确认）
  *
- * �?INTER_FAST_CONFIRM_ENABLE=1 时，强证据路口直接确认；
- * 元件误触发由直行元件保护和强侧向分支阈值提前过滤�?
+ * INTER_FAST_CONFIRM_ENABLE=1 时，强证据路口直接确认；
+ * 元件误触发由直行元件保护和强侧向分支阈值提前过滤
  *
- * 快速确认可减少1帧延迟，在高速行驶时尤为重要�?
+ * 快速确认可减少1帧延迟，在高速行驶时尤为重要
  *
- * @param detected 当前帧检测到的路口类�?
+ * @param detected 当前帧检测到的路口类
  * @return 确认的路口类型，0=未确认（需走投票流程）
- */
+  */
 static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok,
                                      uint8 type5_fast_ok,
                                      uint8 type34_fast_ok)
 {
 #if INTER_FAST_CONFIRM_ENABLE
-    /* 类型 1/2：纯直角证据成立且不是稳定直线时快速确�?*/
+    /* 类型 1/2：纯直角证据成立且不是稳定直线时快速确 */
     if ((detected == 1u || detected == 2u) &&
         pure_ra_ok &&
         !straight_inline_view_cached())
@@ -4090,37 +4092,37 @@ static uint8 fast_confirm_inter_type(uint8 detected, uint8 pure_ra_ok,
     (void)type34_fast_ok;
 #endif
 
-    /* 快速确认未启用或类型不在快速确认范围内，返�?走投票流�?*/
+    /* 快速确认未启用或类型不在快速确认范围内，返走投票流 */
     return 0u;
 }
 
 /**
- * @brief 路口检测主函数（在主循环中调用�?
+ * @brief 路口检测主函数（在主循环中调用
  *
- * 检测流程（三阶段）�?
+ * 检测流程（三阶段）
  *
  * 阶段1 - 冷却期处理：
- *   异常锁定结束后有 INTER_COOLDOWN_FRAMES 帧冷却期，正常RECOVER不额外冷�?
+ *   异常锁定结束后有 INTER_COOLDOWN_FRAMES 帧冷却期，正常RECOVER不额外冷
  *
  * 阶段2 - 锁定期处理：
- *   RA 执行期间持续更新拐点信息（用�?g_ip_max_row），超时则强制清�?
+ *   RA 执行期间持续更新拐点信息（用g_ip_max_row），超时则强制清
  *
  * 阶段3 - 正常检测流程：
- *   a. 检查是否满足检测条件（丢线/预检�?高行丢失�?
- *   b. 从丢失区域寻找拐�?
+ *   a. 检查是否满足检测条件（丢线/预检高行丢失
+ *   b. 从丢失区域寻找拐
  *   c. 从中点缓冲区选取稳定拐点列号
- *   d. 更新检测框锁定状�?
- *   e. 对锁定框进行带状区域检测分�?
+ *   d. 更新检测框锁定状
+ *   e. 对锁定框进行带状区域检测分
  *   f. 快速确认或投票确认路口类型
  *   g. 设置 g_ra_flag 触发 RA 状态机执行转弯
  *
- * 路口类型定义�?
- *   1 = 右侧有路（纯右转�?
- *   2 = 左侧有路（纯左转�?
- *   3 = �?左（T 型左转）
- *   4 = �?右（T 型右转）
- *   5 = �?右（十字路口�?
- */
+ * 路口类型定义
+ *   1 = 右侧有路（纯右转
+ *   2 = 左侧有路（纯左转
+ *   3 = 左（T 型左转）
+ *   4 = 右（T 型右转）
+ *   5 = 右（十字路口
+  */
 void detect_intersection(void)
 {
     uint8 post_turn_guard = 0u;
@@ -4143,93 +4145,93 @@ void detect_intersection(void)
         post_turn_guard = 1u;
     }
 
-    /* ---- 阶段1：冷却期处理 ---- */
-    /* 冷却期内（异常锁定结束后等待 INTER_COOLDOWN_FRAMES 帧），不进行新路口检�?*/
+    /* ---- 阶段1：冷却期处理 ----  */
+    /* 冷却期内（异常锁定结束后等待 INTER_COOLDOWN_FRAMES 帧），不进行新路口检 */
     if (s_inter_cooldown_cnt > 0u)
     {
-        /* 递增冷却计数�?*/
+        /* 递增冷却计数 */
         s_inter_cooldown_cnt++;
-        /* 冷却期结束，重置计数�?*/
+        /* 冷却期结束，重置计数 */
         if (s_inter_cooldown_cnt >= INTER_COOLDOWN_FRAMES) s_inter_cooldown_cnt = 0u;
-        /* 清除路口检测结�?*/
+        /* 清除路口检测结 */
         clear_inter_result();
-        /* 冷却期内直接返回 */
+        /* 冷却期内直接返回  */
         return;
     }
 
-    /* ---- 阶段2：锁定期处理 ---- */
-    /* 锁定期内（RA 正在执行转弯），持续更新拐点信息 */
+    /* ---- 阶段2：锁定期处理 ----  */
+    /* 锁定期内（RA 正在执行转弯），持续更新拐点信息  */
     if (s_inter_lock_cnt > 0u)
     {
-        /* 创建临时拐点结构�?*/
+        /* 创建临时拐点结构 */
         InflectionPoint_t ip;
-        /* 有路侧标�?*/
+        /* 有路侧标 */
         uint8 found_side = 0u;
-        /* 初始化拐点为无效 */
+        /* 初始化拐点为无效  */
         ip.valid = 0u; ip.row = 0; ip.col = 0;
 
-        /* 持续从丢失区域寻找拐点（用于更新 g_ip_max_row，供 RA 状态机使用�?*/
+        /* 持续从丢失区域寻找拐点（用于更新 g_ip_max_row，供 RA 状态机使用 */
         if (s_first_miss_row >= (int16)INTER_MIN_MISS_ROW)
         {
-            /* 从丢失行向上扫描寻找拐点 */
+            /* 从丢失行向上扫描寻找拐点  */
             find_ip_from_lost_row(s_first_miss_row, s_last_valid_center, &ip, &found_side);
-            /* 从中点缓冲区选取稳定的拐点列�?*/
+            /* 从中点缓冲区选取稳定的拐点列 */
             apply_ip_col_from_buffer(&ip, found_side);
         }
 
-        /* 若找到有效拐点，更新路口检测结�?*/
+        /* 若找到有效拐点，更新路口检测结 */
         if (ip.valid)
         {
-            /* 更新左拐点信�?*/
+            /* 更新左拐点信 */
             g_inter_result.left_ip = ip;
-            /* 更新右拐点信息（锁定期左右拐点相同） */
+            /* 更新右拐点信息（锁定期左右拐点相同）  */
             g_inter_result.right_ip = ip;
-            /* 拐点行号�?以兼�?PID 中的比较逻辑 */
+            /* 拐点行号以兼PID 中的比较逻辑  */
             g_ip_max_row = (uint8)(ip.row * 2);
         }
 
-        /* RA 已清除标志（通常进入RECOVER），结束锁定但不额外冷却 */
+        /* RA 已清除标志（通常进入RECOVER），结束锁定但不额外冷却  */
         if (g_ra_flag == 0u)
         {
-            /* 清除锁定计数�?*/
+            /* 清除锁定计数 */
             s_inter_lock_cnt = 0u;
-            /* RA进入RECOVER后允许下一帧立即检测近距离下一个弯 */
+            /* RA进入RECOVER后允许下一帧立即检测近距离下一个弯  */
             s_inter_cooldown_cnt = 0u;
-            /* 重置框锁定状�?*/
+            /* 重置框锁定状 */
             reset_box_lock();
-            /* 清除路口检测结�?*/
+            /* 清除路口检测结 */
             clear_inter_result();
         }
         else
         {
-            /* RA 仍在执行，递增锁定计数�?*/
+            /* RA 仍在执行，递增锁定计数 */
             s_inter_lock_cnt++;
-            /* 锁定超时保护：最多锁�?INTER_MAX_LOCK_FRAMES(300) 帧（�?.3秒） */
+            /* 锁定超时保护：最多锁INTER_MAX_LOCK_FRAMES(300) 帧（.3秒）  */
             if (s_inter_lock_cnt >= INTER_MAX_LOCK_FRAMES)
             {
-                /* 强制清除 RA 标志 */
+                /* 强制清除 RA 标志  */
                 g_ra_flag = 0u;
-                /* 清除锁定计数�?*/
+                /* 清除锁定计数 */
                 s_inter_lock_cnt = 0u;
-                /* 启动冷却�?*/
+                /* 启动冷却 */
                 s_inter_cooldown_cnt = 1u;
-                /* 重置框锁定状�?*/
+                /* 重置框锁定状 */
                 reset_box_lock();
-                /* 清除路口检测结�?*/
+                /* 清除路口检测结 */
                 clear_inter_result();
             }
         }
-        /* 锁定期内直接返回，不进入正常检测流�?*/
+        /* 锁定期内直接返回，不进入正常检测流 */
         return;
     }
 
-    /* ---- 阶段3：正常检测流�?---- */
+    /* ---- 阶段3：正常检测流----  */
 
-    /* 创建拐点结构�?*/
+    /* 创建拐点结构 */
     InflectionPoint_t ip;
-    /* 初始化拐点为无效 */
+    /* 初始化拐点为无效  */
     ip.valid = 0u; ip.row = 0; ip.col = 0;
-    /* 有路侧标志：1=右侧有路, 2=左侧有路, 3=双侧有路 */
+    /* 有路侧标志：1=右侧有路, 2=左侧有路, 3=双侧有路  */
     uint8 found_side = 0u;
     InflectionPoint_t probe_ip;
     uint8 probe_side = 0u;
@@ -4250,23 +4252,23 @@ void detect_intersection(void)
         return;
     }
 
-    /* 去掉straight_inline_view()拦截�?
-     * 原因：直道上也可能遇到路口，此检查会导致路口漏检�?
-     * 误报由分类阈值和对称分量过滤控制�?*/
+    /* 去掉straight_inline_view()拦截
+     * 原因：直道上也可能遇到路口，此检查会导致路口漏检
+     * 误报由分类阈值和对称分量过滤控制 */
 
-    /* 不满足检测条件：无丢�?�?无预检�?�?无高行丢�?-> 清除并返�?*/
+    /* 不满足检测条件：无丢无预检无高行丢-> 清除并返 */
     if (!probe_trigger &&
         route_single_edge_dir == 0u)
     {
-        /* 重置框锁定状�?*/
+        /* 重置框锁定状 */
         reset_box_lock();
-        /* 清除路口检测结�?*/
+        /* 清除路口检测结 */
         clear_inter_result();
-        /* 不满足检测条件，直接返回 */
+        /* 不满足检测条件，直接返回  */
         return;
     }
 
-    /* 从丢失区域寻找拐点（仅当有高行丢失时�?*/
+    /* 从丢失区域寻找拐点（仅当有高行丢失时 */
     if (s_first_miss_row >= (int16)INTER_MIN_MISS_ROW)
         find_ip_from_lost_row(s_first_miss_row, s_last_valid_center, &ip, &found_side);
 
@@ -4286,7 +4288,7 @@ void detect_intersection(void)
         found_side = route_single_edge_dir;
     }
 
-    /* 用倒数第N个有效行的中点作为稳定的拐点列号 */
+    /* 用倒数第N个有效行的中点作为稳定的拐点列号  */
     apply_ip_col_from_buffer(&ip, found_side);
 
     if (route_single_edge_dir == 0u && inline_component_ip_guard(&ip))
@@ -4300,83 +4302,83 @@ void detect_intersection(void)
         return;
     }
 
-    /* 更新路口检测结果中的左右拐�?*/
+    /* 更新路口检测结果中的左右拐 */
     g_inter_result.left_ip = ip;
     g_inter_result.right_ip = ip;
 
-    /* 更新拐点最大行号（�?兼容 PID 比较），无效拐点则清�?*/
+    /* 更新拐点最大行号（兼容 PID 比较），无效拐点则清 */
     g_ip_max_row = ip.valid ? (uint8)(ip.row * 2) : 0u;
 
-    /* 拐点无效，清除并返回 */
+    /* 拐点无效，清除并返回  */
     if (!ip.valid)
     {
-        /* 重置框锁定状�?*/
+        /* 重置框锁定状 */
         reset_box_lock();
-        /* 清除路口检测结�?*/
+        /* 清除路口检测结 */
         clear_inter_result();
-        /* 拐点无效，返�?*/
+        /* 拐点无效，返 */
         return;
     }
 
-    /* 拐点行太远，跳过框绘�?*/
+    /* 拐点行太远，跳过框绘 */
     if (ip.row < INTER_BOX_START_ROW && !probe_trigger)
     {
-        /* 重置框锁定状�?*/
+        /* 重置框锁定状 */
         reset_box_lock();
-        /* 清除路口检测结�?*/
+        /* 清除路口检测结 */
         clear_inter_result();
-        /* 拐点太远，返�?*/
+        /* 拐点太远，返 */
         return;
     }
 
-    /* 更新框锁定状态（需要位置稳定才锁定，防止噪声导致框跳动�?*/
+    /* 更新框锁定状态（需要位置稳定才锁定，防止噪声导致框跳动 */
     if (!update_box_lock(ip.col, ip.row))
     {
-        /* 框未锁定，仅绘制候选框用于调试显示，不进行路口分类 */
+        /* 框未锁定，仅绘制候选框用于调试显示，不进行路口分类  */
         int16 dbg_top, dbg_bottom, dbg_left, dbg_right;
 
-        /* 构建候选框（用于TFT调试显示�?*/
+        /* 构建候选框（用于TFT调试显示 */
         build_inter_box(ip.col, ip.row, &dbg_top, &dbg_bottom, &dbg_left, &dbg_right);
-        /* 更新检测框边界（调试用�?*/
+        /* 更新检测框边界（调试用 */
         g_inter_result.box_top = (uint8)dbg_top;
         g_inter_result.box_bottom = (uint8)dbg_bottom;
         g_inter_result.box_left = (uint8)dbg_left;
         g_inter_result.box_right = (uint8)dbg_right;
-        /* 框未锁定，检测类型设�?（无路口�?*/
+        /* 框未锁定，检测类型设（无路口 */
         g_inter_result.detected_type = 0u;
-        /* 框未锁定，返回等待稳�?*/
+        /* 框未锁定，返回等待稳 */
         return;
     }
 
-    /* ---- 框已锁定，使用稳定位置进行路口分�?---- */
-    /* 当前帧检测到的路口类型（初始�?=无） */
+    /* ---- 框已锁定，使用稳定位置进行路口分----  */
+    /* 当前帧检测到的路口类型（初始=无）  */
     uint8 detected = 0u;
 
-    /* 检测框的四条边�?*/
+    /* 检测框的四条边 */
     int16 b_top, b_bottom, b_left, b_right;
 
-    /* 使用锁定后的稳定框位置构建检测框（避免使用移动中的候选位置） */
+    /* 使用锁定后的稳定框位置构建检测框（避免使用移动中的候选位置）  */
     build_inter_box(s_box_lock_cx, s_box_lock_cy, &b_top, &b_bottom, &b_left, &b_right);
 
-    /* 更新检测结果中的框边界 */
+    /* 更新检测结果中的框边界  */
     g_inter_result.box_top = (uint8)b_top;
     g_inter_result.box_bottom = (uint8)b_bottom;
     g_inter_result.box_left = (uint8)b_left;
     g_inter_result.box_right = (uint8)b_right;
 
-    /* ---- 检查框的四条边带和两侧分支是否有白色道�?---- */
-    /* 检查框上边带是否有足够白色像素（上方有路） */
+    /* ---- 检查框的四条边带和两侧分支是否有白色道----  */
+    /* 检查框上边带是否有足够白色像素（上方有路）  */
     uint8 top_has = inter_horizontal_band_has_road(
         b_top, b_left, b_right, INTER_TOP_MIN_WHITE, INTER_BAND_MIN_STREAK);
-    /* 检查框左边带是否有足够白色像素（左侧有路） */
+    /* 检查框左边带是否有足够白色像素（左侧有路）  */
     uint8 left_has = inter_vertical_band_has_road(
         b_left, b_top, b_bottom, INTER_SIDE_MIN_WHITE, INTER_BAND_MIN_STREAK);
-    /* 检查框右边带是否有足够白色像素（右侧有路） */
+    /* 检查框右边带是否有足够白色像素（右侧有路）  */
     uint8 right_has = inter_vertical_band_has_road(
         b_right, b_top, b_bottom, INTER_SIDE_MIN_WHITE, INTER_BAND_MIN_STREAK);
-    /* 检查左侧是否有足够长的分支道路（纯侧路检测） */
+    /* 检查左侧是否有足够长的分支道路（纯侧路检测）  */
     uint8 left_branch_has = inter_side_branch_has_road(ip.row, ip.col, 2u);
-    /* 检查右侧是否有足够长的分支道路（纯侧路检测） */
+    /* 检查右侧是否有足够长的分支道路（纯侧路检测）  */
     uint8 right_branch_has = inter_side_branch_has_road(ip.row, ip.col, 1u);
     uint8 center_forward_has = inter_vertical_band_has_road(
         ip.col,
@@ -4495,8 +4497,7 @@ void detect_intersection(void)
         (left_box_road && right_box_road && side_cross_ok) ? 1u : 0u;
     uint8 route_expected_type = route_next_expected_flag();
     uint8 route_expected_complex =
-        (g_post_edge_side == EDGE_BOTH &&
-         route_expected_type >= 3u && route_expected_type <= 5u) ? 1u : 0u;
+        (route_expected_type >= 3u && route_expected_type <= 5u) ? 1u : 0u;
     uint8 top_complex_evidence =
         (top_road_has && center_forward_has) ? 1u : 0u;
     uint8 left_complex_evidence =
@@ -4562,8 +4563,20 @@ void detect_intersection(void)
          abs_i16(g_tf.error_trend) <= INTER_INLINE_STRAIGHT_TREND_LIMIT &&
          ((g_tf.valid_row_count >= INTER_INLINE_STRAIGHT_VALID_ROWS &&
            top_valid_rows >= INTER_INLINE_STRAIGHT_TOP_VALID_MIN) ||
-          (ip.row <= (int16)INTER_INLINE_STRAIGHT_IP_ROW_MAX &&
+         (ip.row <= (int16)INTER_INLINE_STRAIGHT_IP_ROW_MAX &&
            lower_valid_rows >= INTER_INLINE_STRAIGHT_LOWER_VALID_MIN))) ? 1u : 0u;
+    uint8 route_expected_early_evidence =
+        (route_expected_complex != 0u &&
+         g_tf.line_lost == 0u &&
+         g_ip_max_row >= INTER_ROUTE_EARLY_IP_ROW &&
+         g_tf.valid_row_count >= RA_INTER_COMPLEX_ROUTE_VALID_ROWS &&
+         g_tf.valid_row_count <= INTER_ROUTE_EARLY_VALID_ROWS &&
+         !inline_component_candidate &&
+         !inline_straight_guard &&
+         !straight_inline_view_cached() &&
+         (abs_i16(g_tf.lookahead_error) >= INTER_ROUTE_EARLY_LA_MIN ||
+          abs_i16(g_tf.error_trend) >= INTER_ROUTE_EARLY_TREND_MIN ||
+          route_expected_side_evidence != 0u)) ? 1u : 0u;
 
     if (single_edge_ra_dir == 0u && inline_component_candidate)
     {
@@ -4601,8 +4614,8 @@ void detect_intersection(void)
         return;
     }
 
-    /* ---- 路口类型分类逻辑 ---- */
-    /* Final RA classification must use box-edge / crossing evidence. */
+    /* ---- 路口类型分类逻辑 ----  */
+    /* Final RA classification must use box-edge / crossing evidence.  */
     if (single_edge_ra_dir == 1u && right_direct_evidence &&
         !(abs_i16(g_tf.error) < 12 && abs_i16(g_tf.lookahead_error) < 12))
         detected = 1u;
@@ -4627,7 +4640,8 @@ void detect_intersection(void)
         detected = 2u;
 
     if (g_post_edge_side != EDGE_BOTH &&
-        detected >= 3u && detected <= 5u)
+        detected >= 3u && detected <= 5u &&
+        !route_next_flag_is(detected))
     {
         g_ra_flag = 0u;
         g_ra_pre_flag = 0u;
@@ -4692,22 +4706,21 @@ void detect_intersection(void)
         (g_ip_max_row >= INTER_ROUTE_REMAP_IP_ROW ||
          (g_ip_max_row >= RA_INTER_COMPLEX_LAST_CHANCE_ROW &&
           g_tf.valid_row_count < INTER_ROUTE_REMAP_VALID_ROWS) ||
-         g_tf.line_lost != 0u) &&
+         g_tf.line_lost != 0u ||
+         route_expected_early_evidence != 0u) &&
         !inline_component_candidate &&
         (detected == 0u || !route_next_flag_is(detected) ||
          detected == route_expected_type) &&
         (route_expected_complex_evidence != 0u ||
-         route_expected_cutoff_evidence != 0u))
+         route_expected_cutoff_evidence != 0u ||
+         route_expected_early_evidence != 0u))
     {
         detected = route_expected_type;
         route_expected_fast_ok = 1u;
     }
 
-    /* 记录原始检测类型到结果结构�?*/
-    g_inter_result.detected_type = detected;
-
-    /* ---- 确认路口类型：快速确�?-> 投票确认 ---- */
-    /* 首先尝试快速确认（跳过投票，对高置信度类型直接确认�?*/
+    /* ---- 确认路口类型：快速确-> 投票确认 ----  */
+    /* 首先尝试快速确认（跳过投票，对高置信度类型直接确认 */
     uint8 type5_fast_ok =
         (detected == 5u &&
          left_frame_has && right_frame_has &&
@@ -4719,10 +4732,64 @@ void detect_intersection(void)
          !straight_inline_view_cached() &&
          ((detected == 3u && left_complex_evidence) ||
           (detected == 4u && right_complex_evidence))) ? 1u : 0u;
+    uint8 inter_evidence = 0u;
+    uint8 inter_confidence = 0u;
+
+    if (top_road_has)
+        inter_evidence |= INTER_EVID_TOP;
+    if (center_forward_has)
+        inter_evidence |= INTER_EVID_CENTER;
+    if (left_strong_dir_has)
+        inter_evidence |= INTER_EVID_LEFT;
+    if (right_strong_dir_has)
+        inter_evidence |= INTER_EVID_RIGHT;
+    if (left_edge_reach_has || right_edge_reach_has ||
+        left_box_edge_has || right_box_edge_has)
+        inter_evidence |= INTER_EVID_EDGE;
+    if (route_expected_fast_ok)
+        inter_evidence |= INTER_EVID_ROUTE;
+    if (route_expected_cutoff_evidence)
+        inter_evidence |= INTER_EVID_CUTOFF;
+    if (type5_fast_ok || type34_fast_ok || direct_fast_late ||
+        route_expected_early_evidence)
+        inter_evidence |= INTER_EVID_FAST;
+
+    if (detected == 1u || detected == 2u)
+    {
+        inter_confidence = pure_ra_ok ? 70u : 45u;
+    }
+    else if (detected == 3u)
+    {
+        inter_confidence = left_complex_evidence ? 75u : 45u;
+    }
+    else if (detected == 4u)
+    {
+        inter_confidence = right_complex_evidence ? 75u : 45u;
+    }
+    else if (detected == 5u)
+    {
+        inter_confidence = cross_complex_evidence ? 82u :
+                           (route_type5_soft_ok ? 68u : 45u);
+    }
+
+    if (route_expected_fast_ok && detected == route_expected_type &&
+        inter_confidence < 62u)
+        inter_confidence = 62u;
+    if (route_expected_cutoff_evidence && inter_confidence < 50u)
+        inter_confidence = 50u;
+    if ((inter_evidence & INTER_EVID_EDGE) != 0u &&
+        inter_confidence < 48u)
+        inter_confidence = 48u;
+
+    /* 记录原始检测类型到结果结构 */
+    g_inter_result.detected_type = detected;
+    g_inter_result.confidence = inter_confidence;
+    g_inter_result.evidence = inter_evidence;
+
     uint8 voted_type = fast_confirm_inter_type(detected, pure_ra_ok,
                                                type5_fast_ok,
                                                type34_fast_ok);
-    /* 快速确认未通过，走投票确认流程 */
+    /* 快速确认未通过，走投票确认流程  */
     if (voted_type == 0u && route_expected_fast_ok)
         voted_type = detected;
     if (voted_type == 0u)
@@ -4759,7 +4826,8 @@ void detect_intersection(void)
     }
 
     if (g_post_edge_side != EDGE_BOTH &&
-        voted_type >= 3u && voted_type <= 5u)
+        voted_type >= 3u && voted_type <= 5u &&
+        !route_next_flag_is(voted_type))
     {
         g_ra_flag = 0u;
         g_ra_pre_flag = 0u;
@@ -4813,16 +4881,24 @@ void detect_intersection(void)
     if (post_turn_guard && voted_type != 0u)
         s_inter_post_turn_suppress_cnt = 0u;
 
-    /* 投票/快速确认通过，设�?RA 标志，触�?RA 状态机执行转弯 */
+    /* 投票/快速确认通过，设RA 标志，触RA 状态机执行转弯  */
     if (voted_type != 0u)
     {
-        /* 设置路口类型标志�?~5），Pid.c 中的 RA 状态机据此执行转弯 */
+        /* 设置路口类型标志~5），Pid.c 中的 RA 状态机据此执行转弯  */
         g_ra_flag = voted_type;
-        /* 更新检测结果中的类型为投票确认后的类型 */
+        /* 更新检测结果中的类型为投票确认后的类型  */
         g_inter_result.detected_type = voted_type;
-        /* 进入锁定期（计数器设�?�?*/
+        if (route_expected_complex != 0u &&
+            voted_type == route_expected_type &&
+            inter_confidence < 62u)
+        {
+            inter_confidence = 62u;
+            g_inter_result.confidence = inter_confidence;
+            g_inter_result.evidence |= INTER_EVID_ROUTE;
+        }
+        /* 进入锁定期（计数器设 */
         s_inter_lock_cnt = 1u;
-        /* 重置框锁定状态（为下次检测做准备�?*/
+        /* 重置框锁定状态（为下次检测做准备 */
         reset_box_lock();
     }
 }

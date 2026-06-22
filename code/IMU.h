@@ -1,25 +1,80 @@
+/**
+ * ========================================================================
+ * IMU.h - IMU惯性测量单元模块头文件
+ * ========================================================================
+ * 提供IMU660RC陀螺仪的偏航角（yaw）测量接口。
+ *
+ * 传感器：IMU660RC 六轴IMU（本工程仅使用陀螺仪Z轴）
+ * 通信接口：SPI0（P20_11/P20_12/P20_13/P20_14）
+ * 更新周期：5ms（由CCU60_CH1 PIT中断驱动）
+ *
+ * 输出约定：
+ *   yaw_angle > 0：左转（逆时针偏航角增大）
+ *   yaw_angle < 0：右转（顺时针偏航角减小）
+ *
+ * 本模块仅负责测量偏航角，不直接驱动电机。
+ * 偏航角用于直角弯HARD阶段的角度退出判断（转过90度退出）。
+ * ======================================================================== */
 #ifndef CODE_IMU_H_
 #define CODE_IMU_H_
 
 #include "zf_common_headfile.h"
 
-/*
- * Yaw-only IMU interface.
+/* ========================================================================
+ * 全局变量声明
+ * ======================================================================== */
+
+extern volatile float yaw_angle;    /* 当前偏航角（度），归一化到 [-180, 180] */
+                                    /* 正值=左转，负值=右转 */
+extern volatile float yaw_rate;     /* 当前滤波后的偏航角速度（度/秒） */
+                                    /* 用于调试显示和串级PID内环 */
+extern volatile uint8 imu_ready;    /* IMU就绪标志：0=未初始化完成，1=初始化成功可使用 */
+extern volatile uint8 imu_error;    /* IMU错误标志：0=校准正常，1=校准失败（方差过大） */
+extern volatile int16 imu_offset_dps10; /* 陀螺仪零偏值（单位：0.1度/秒），用于TFT显示调试 */
+
+/* ========================================================================
+ * 接口函数声明
+ * ======================================================================== */
+
+/**
+ * @brief IMU模块初始化
  *
- * yaw_angle: degrees, normalized to [-180, 180]
- * yaw_rate : degrees per second
- * imu_ready: 1 after IMU660RC init succeeds and the 5ms PIT is started
- * imu_error: 1 when init failed or zero calibration variance was high
+ * 初始化流程：
+ *   1. 清除模块状态变量
+ *   2. 初始化IMU660RC硬件（SPI通信，最多重试3次）
+ *   3. 零偏校准（静止状态采样约1秒，多次重试取方差最小结果）
+ *   4. 启动5ms周期PIT中断（CCU60_CH1）
+ *
+ * 即使校准失败（方差过大），仍启用偏航角输出，让TFT能暴露问题。
+ * 在系统启动时调用一次。
  */
-
-extern volatile float yaw_angle;
-extern volatile float yaw_rate;
-extern volatile uint8 imu_ready;
-extern volatile uint8 imu_error;
-extern volatile int16 imu_offset_dps10;
-
 void imu_init(void);
+
+/**
+ * @brief IMU周期性更新函数（5ms PIT中断调用）
+ *
+ * 每5ms执行一次：
+ *   1. 读取陀螺仪Z轴角速度并减去零偏
+ *   2. 限幅到 [-1200, 1200] 度/秒
+ *   3. 死区滤波（<0.35度/秒归零）
+ *   4. 一阶低通滤波（alpha=0.65）
+ *   5. 积分累加到偏航角
+ *   6. 归一化到 [-180, 180] 度
+ *
+ * 由CCU60_CH1 PIT中断自动调用，无需手动调用。
+ */
 void imu_update(void);
+
+/**
+ * @brief 重置偏航角为零
+ *
+ * 清除偏航角、角速度、滤波器状态，并设置跳过标志
+ * 使下一个IMU周期不执行积分（防止重置后立即被覆盖）。
+ *
+ * 由以下场景调用：
+ *   - 直角弯HARD阶段退出时（为下一次转弯做准备）
+ *   - 比赛准备阶段（imu_reset_yaw）
+ */
 void imu_reset_yaw(void);
 
 #endif /* CODE_IMU_H_ */
