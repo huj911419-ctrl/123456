@@ -684,7 +684,7 @@ static uint16 ra_slow_limit_for_speed(void)
 }
 static uint16 ra_approach_frames_for_speed(uint8 turn_row)
 {
-    uint16 frames = (ra_approach_frames < 1) ? 1u : (uint16)ra_approach_frames;
+    uint16 frames = (ra_approach_frames <= 0) ? 0u : (uint16)ra_approach_frames;
     int16 ref = ra_speed_ref();
     uint16 cap = frames;
 

@@ -108,11 +108,16 @@ int core0_main(void)
         /* 在等待期间执行非实时任务：自动调参日志、按键处理、菜单显示 */
         while (!mt9v03x_finish_flag)
         {
-            auto_tune_log_task();            /* 自动调参日志：停止时dump数据到PC */
-            ui_process_keys();               /* 按键扫描和菜单参数调节 */
-            menu_show();                     /* TFT菜单页面刷新显示 */
+            race_control_process();
+#if !RACE_MODE
+            if (motor_enable == 0 || !run_quiet_active())
+            {
+                ui_process_keys();
+                menu_show();
+            }
+#endif
         }
-       mt9v03x_finish_flag = 0;              /* 清除帧完成标志，准备接收下一帧 */
+        mt9v03x_finish_flag = 0;              /* 清除帧完成标志，准备接收下一帧 */
 
         if (motor_enable != 0)
         {
@@ -135,7 +140,6 @@ int core0_main(void)
         /* 步骤1：赛道融合处理（压缩->Otsu->二值化->降噪->边缘扫描->误差计算） */
         system_start();                      /* 开始计时 */
        track_fusion_update();                 /* 执行完整的视觉处理流水线 */
-        track_fusion_publish();              /* 将结果发布到全局结构体（中断安全） */
         prof_tf_us = system_getval_us();     /* 记录耗时（微秒） */
 
         /* 步骤2：直角/弯道预检测（远场检测，用于提前减速） */
@@ -144,28 +148,30 @@ int core0_main(void)
 
         /* 步骤3：路口检测（拐点扫描 + 检测框 + 类型分类） */
         detect_intersection();               /* 检测路口类型，设置g_ra_flag */
-        track_fusion_publish();              /* 再次发布，确保路口检测结果可见 */
-       prof_inter_us = system_getval_us();    /* 记录耗时（微秒） */
+        prof_inter_us = system_getval_us();    /* 记录耗时（微秒） */
+
+        /* 步骤4：发布完整结果（一次publish，避免PID读到半成品） */
+        track_fusion_publish();
 
         /* ---- 调试数据传输（非比赛模式） ---- */
 #if !RACE_MODE
         /* 通过UART0发送图像、边线坐标、参数到PC调试软件 */
         /* 静默模式或自动调参正在dump时跳过，避免串口冲突 */
-        if (!run_quiet_active() && !auto_tune_log_busy())
+        if (motor_enable == 0 && !run_quiet_active() && !auto_tune_log_busy())
         {
-           send_image_uart0();               /* 发送二值化图像 + 边线 + 参数 */
+           send_image_uart0();               /* 只有停车调试才发图传 */
         }
 #endif
 
         /* ---- 用户交互 ---- */
-
-        /* 按键处理：比赛控制状态机 + 菜单导航/参数调节 */
-        ui_process_keys();
-        /* 自动调参日志：运行时记录每帧状态，停止时dump到PC */
-        auto_tune_log_task();
-
-        /* TFT菜单显示：主页显示图像+调试信息，其他页显示参数列表 */
-        menu_show();
+        race_control_process();
+#if !RACE_MODE
+        if (motor_enable == 0 || !run_quiet_active())
+        {
+            ui_process_keys();
+            menu_show();
+        }
+#endif
     }
 }
 
