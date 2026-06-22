@@ -644,6 +644,12 @@ static uint8 ra_turn_trigger_row(void)
         turn_row <= (uint8)(255u - RA_COMPLEX_TURN_ROW_OFFSET))
     {
         turn_row = (uint8)(turn_row + RA_COMPLEX_TURN_ROW_OFFSET);
+
+        if (ra_speed_ref() <= RA_LOW_SPEED_START &&
+            turn_row <= (uint8)(255u - RA_LOW_TURN_ROW_DELAY))
+        {
+            turn_row = (uint8)(turn_row + RA_LOW_TURN_ROW_DELAY);
+        }
     }
     else if (s_ra_orig_flag < 3u &&
              turn_row <= (uint8)(255u - RA_DIRECT_TURN_ROW_OFFSET))
@@ -1980,7 +1986,27 @@ static void ra_start(uint8 dir, uint8 orig_flag, uint8 straight,
     s_ra_state = RA_ST_ACTIVE;              /* 状�切�为活� */
     /* 直��过不需要等�点；真�转�� WAIT，避免远场路口刚识别就硬�� */
     s_ra_ip_row = g_ip_max_row;
-    s_ra_phase = straight ? RA_PH_SLOW : RA_PH_WAIT;
+    if (straight)
+    {
+        s_ra_phase = RA_PH_SLOW;
+    }
+    else
+    {
+        if ((orig_flag == 1u || orig_flag == 2u) &&
+            g_ip_max_row >= RA_VERY_LATE_DIRECT_IP_ROW)
+        {
+            s_ra_phase = RA_PH_APPROACH;
+        }
+        else if ((orig_flag == 1u || orig_flag == 2u) &&
+                 g_ip_max_row >= RA_LATE_DIRECT_IP_ROW)
+        {
+            s_ra_phase = RA_PH_SLOW;
+        }
+        else
+        {
+            s_ra_phase = RA_PH_WAIT;
+        }
+    }
     s_ra_straight = straight;               /* 设置直�标� */
     s_ra_post_edge_side = post_edge_side;   /* 设置结束后单边方�?*/
     s_ra_post_edge_ms = post_edge_ms;       /* 设置结束后单边时�?*/
@@ -3343,6 +3369,45 @@ static RouteDecision select_intersection_decision(uint8 flag)
     return d;
 }
 
+static uint8 ra_try_start_from_pre_direct(void)
+{
+#if RA_PRE_DIRECT_EARLY_ENABLE
+    uint8 expected;
+    uint8 dir;
+
+    if (s_ra_state != RA_ST_NONE)
+        return 0u;
+
+    expected = route_next_expected_flag();
+    if (expected != 1u && expected != 2u)
+        return 0u;
+
+    dir = (expected == 1u) ? 1u : 2u;
+
+    if (g_ra_pre_flag == 0u)
+        return 0u;
+    if (g_ra_pre_dir != dir)
+        return 0u;
+    if (g_tf.valid_row_count < RA_PRE_DIRECT_MIN_VALID_ROWS)
+        return 0u;
+    if (abs_i16(g_tf.error) > RA_PRE_DIRECT_MAX_ERR)
+        return 0u;
+
+    if (s_ra_pre_direct_match_cnt < RA_PRE_DIRECT_MIN_FRAMES &&
+        g_ra_pre_slow_flag == 0u)
+    {
+        return 0u;
+    }
+
+    ra_start(dir, expected, 0u, EDGE_AUTO, 0u);
+    s_ra_phase = RA_PH_SLOW;
+    s_ra_phase_cnt = 0u;
+    return 1u;
+#else
+    return 0u;
+#endif
+}
+
 static uint8 ra_try_start_direct_flag(void);
 
 static uint8 ra_try_start_route_direct_early_flag(void)
@@ -4454,8 +4519,25 @@ static uint8 ra_handle_yaw_lock_phase(RaResult *r)
     return 1u;
 }
 
+static uint8 ra_is_real_turn(void)
+{
+    return (s_ra_straight == 0u &&
+            (s_ra_dir == 1u || s_ra_dir == 2u)) ? 1u : 0u;
+}
+
 static uint8 ra_step_wait_slow_approach(RaResult *r)
 {
+    if (ra_is_real_turn())
+    {
+        if ((s_ra_phase == RA_PH_WAIT ||
+             s_ra_phase == RA_PH_SLOW ||
+             s_ra_phase == RA_PH_APPROACH) &&
+            s_ra_timer >= RA_REAL_TURN_FORCE_HARD_FRAMES)
+        {
+            ra_enter_hard();
+            return 0u;
+        }
+    }
     if (s_ra_phase == RA_PH_WAIT)
     {
         uint8 slow_row = ra_slow_trigger_row();
@@ -4551,6 +4633,40 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
     return 0u;
 }
 
+static int16 ra_dynamic_yaw_target(void)
+{
+    int16 yaw = ra_hard_yaw;
+
+    if (s_ra_straight == 0u && (s_ra_dir == 1u || s_ra_dir == 2u))
+    {
+        if (yaw > RA_OVERSHOOT_YAW_LIMIT)
+            yaw = RA_OVERSHOOT_YAW_LIMIT;
+    }
+
+    if (yaw < RA_REAL_TURN_MIN_YAW)
+        yaw = RA_REAL_TURN_MIN_YAW;
+
+    return yaw;
+}
+
+static int16 ra_dynamic_outer_cmd(void)
+{
+    int32 outer = ra_hard_outer;
+
+    if (s_ra_straight == 0u && (s_ra_dir == 1u || s_ra_dir == 2u))
+    {
+        if (s_ra_ip_row >= RA_VERY_LATE_DIRECT_IP_ROW)
+            outer = outer * RA_VERY_LATE_OUTER_PCT / 100;
+        else
+            outer = outer * RA_OVERSHOOT_OUTER_PCT / 100;
+    }
+
+    if (outer < RA_REAL_TURN_MIN_OUTER)
+        outer = RA_REAL_TURN_MIN_OUTER;
+
+    return (int16)outer;
+}
+
 static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
 {
     if (s_ra_phase != RA_PH_HARD)
@@ -4568,7 +4684,7 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
                      g_tf.valid_row_count >= RA_EXIT_VALID_ROWS &&
                      pos_err_abs <= RA_EXIT_ERROR_MAX) ? 1u : 0u;
     float hard_yaw_target =
-        ra_hard_target_limit((float)ra_hard_yaw +
+        ra_hard_target_limit((float)ra_dynamic_yaw_target() +
                              (direct_fast ? RA_FAST_DIRECT_YAW_OFFSET : 0.0f));
     s_ra_hard_yaw_target = hard_yaw_target;
     ra_dbg_hard_target10 = (int16)(hard_yaw_target * 10.0f);
@@ -4648,7 +4764,7 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         }
     }
 
-    outer = (float)ra_hard_outer *
+    outer = (float)ra_dynamic_outer_cmd() *
             (float)(direct_fast ? RA_FAST_HARD_OUTER_PCT : RA_HARD_OUTER_PCT) * 0.01f;
     inner = (float)ra_hard_inner;
     if (inner < 0.0f)
@@ -5317,6 +5433,11 @@ void line_pid_control(void)                  /* 主PID控制入口 */
     int16 pos_err_abs = abs_i16(pos_err);   /* 位置��绝��?*/
 
     /* ===== RA状�机 ===== */
+    if (ra_try_start_from_pre_direct())
+    {
+        ra_debug_update();
+    }
+
     RaResult ra = ra_state_machine_step(pos_err_abs); /* 执�RA状�机 */
     /* HARD阶�RA已直接输出电机，�帧不再执行PID */
     if (ra.should_return)                    /* RA已直接输出电�?*/

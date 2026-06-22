@@ -488,7 +488,24 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_PRE_DIRECT_NO_IP_ENABLE 1u       /* allow strong pre-turn without IP row */
 #define RA_PRE_DIRECT_NO_IP_ROW 12u         /* equivalent row for no-IP pre-turn */
 #define RA_PRE_DIRECT_NO_IP_VALID_ROWS 45u  /* no-IP pre-turn max valid rows */
-#define RA_PRE_DIRECT_NO_IP_LA_MIN 1        /* no-IP pre-turn min lookahead */
+#define RA_PRE_DIRECT_NO_IP_LA_MIN 1
+
+/* ================= RA high-speed patches ================= */
+#define RA_PRE_DIRECT_EARLY_ENABLE       1u
+#define RA_PRE_DIRECT_MIN_FRAMES         2u
+#define RA_PRE_DIRECT_MIN_VALID_ROWS     18u
+#define RA_PRE_DIRECT_MAX_ERR            90
+#define RA_PRE_DIRECT_START_SLOW         1u
+#define RA_LATE_DIRECT_IP_ROW            58u
+#define RA_VERY_LATE_DIRECT_IP_ROW       70u
+#define RA_OVERSHOOT_YAW_LIMIT           80
+#define RA_OVERSHOOT_OUTER_PCT           92
+#define RA_VERY_LATE_OUTER_PCT           95
+#define RA_REAL_TURN_FORCE_HARD_FRAMES   26u
+#define RA_REAL_TURN_MIN_YAW             70
+#define RA_REAL_TURN_MIN_OUTER           1600
+#define RA_COMPLEX_TURN_ROW_OFFSET       8u
+#define RA_LOW_TURN_ROW_DELAY            6u        /* no-IP pre-turn min lookahead */
 #define RA_PRE_DIRECT_STRAIGHT_VALID_ROWS 48u
 #define RA_PRE_DIRECT_STRAIGHT_ERR_MAX 16
 #define RA_PRE_DIRECT_STRAIGHT_LA_MAX 14
