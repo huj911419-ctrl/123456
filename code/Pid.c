@@ -1137,8 +1137,76 @@ static void pid_set_duty(int16 left, int16 right)
 /* ======================== RA状�机复位 ======================== */
 
 /* ra_reset - 复位RA状�机�有变量到初�状�? * 无参数，无返回�? * 调用时机：RA结束、电机使能关�、初始化�?*/
+static float s_ra_complex_ip_f = 0.0f;
+static float s_ra_complex_ip_v = 0.0f;
+static uint8 s_ra_complex_ip_valid = 0u;
+
+static void ra_complex_predict_reset(void)
+{
+    s_ra_complex_ip_f = 0.0f;
+    s_ra_complex_ip_v = 0.0f;
+    s_ra_complex_ip_valid = 0u;
+}
+
+static uint8 ra_complex_row_now(void)
+{
+    uint8 row = g_ip_max_row;
+
+    if (s_ra_pending_complex_cnt > 0u &&
+        s_ra_pending_complex_ip_row > row)
+    {
+        row = s_ra_pending_complex_ip_row;
+    }
+
+    return row;
+}
+
+static uint8 ra_complex_predict_ready(uint8 row_now)
+{
+#if RA_COMPLEX_PREDICT_ENABLE
+    float ip;
+    float v;
+    float pred;
+
+    if (row_now >= RA_COMPLEX_FORCE_ROW)
+        return 1u;
+
+    if (g_tf.line_lost != 0u && row_now >= RA_COMPLEX_COMMIT_ROW)
+        return 1u;
+
+    if (row_now < RA_COMPLEX_PREDICT_MIN_ROW)
+        return 0u;
+
+    ip = (float)row_now;
+
+    if (s_ra_complex_ip_valid == 0u)
+    {
+        s_ra_complex_ip_f = ip;
+        s_ra_complex_ip_v = 0.0f;
+        s_ra_complex_ip_valid = 1u;
+        return (row_now >= RA_COMPLEX_COMMIT_ROW) ? 1u : 0u;
+    }
+
+    v = ip - s_ra_complex_ip_f;
+    if (v < 0.0f)
+        v = 0.0f;
+    if (v > RA_COMPLEX_IP_V_MAX)
+        v = RA_COMPLEX_IP_V_MAX;
+
+    s_ra_complex_ip_f = s_ra_complex_ip_f * 0.55f + ip * 0.45f;
+    s_ra_complex_ip_v = s_ra_complex_ip_v * 0.65f + v * 0.35f;
+
+    pred = s_ra_complex_ip_f + s_ra_complex_ip_v * RA_COMPLEX_LEAD_FRAMES;
+
+    return (pred >= (float)RA_COMPLEX_COMMIT_ROW) ? 1u : 0u;
+#else
+    return (row_now >= RA_FIXED_COMPLEX_HARD_ROW) ? 1u : 0u;
+#endif
+}
+
 static void ra_reset(void)                  /* RA状�机全��?*/
 {
+    ra_complex_predict_reset();
     s_ra_state = RA_ST_NONE;                /* 状�重�为空� */
     s_ra_phase = RA_PH_WAIT;                /* 阶�重�为等�?*/
     s_ra_dir = 0u;                          /* 方向重置为直�?*/
@@ -3268,77 +3336,6 @@ static RouteDecision select_intersection_decision(uint8 flag)
     return d;
 }
 
-static uint8 ra_start_expected_route_now(uint8 expected, uint8 hard_now)
-{
-    uint8 ip_row = g_ip_max_row;
-    RouteDecision d;
-
-    if (expected < 1u || expected > 5u)
-        return 0u;
-    if (s_ra_state != RA_ST_NONE)
-        return 0u;
-
-    d = select_intersection_decision(expected);
-    if (!d.valid)
-        return 0u;
-
-    g_ra_flag = expected;
-    if (s_ra_pending_complex_cnt > 0u &&
-        s_ra_pending_complex_flag == expected &&
-        s_ra_pending_complex_ip_row > ip_row)
-    {
-        ip_row = s_ra_pending_complex_ip_row;
-    }
-
-    if (d.action == ACT_RIGHT || d.action == ACT_LEFT)
-    {
-        ra_start((d.action == ACT_RIGHT) ? 1u : 2u,
-                 expected,
-                 0u,
-                 d.post_edge_side,
-                 d.post_edge_ms);
-        if (hard_now != 0u &&
-            s_ra_state == RA_ST_ACTIVE &&
-            s_ra_straight == 0u)
-        {
-            uint8 hard_row = (expected >= 3u) ?
-                             RA_FIXED_COMPLEX_HARD_ROW :
-                             ra_direct_fixed_turn_trigger_row();
-            s_ra_ip_row = (ip_row > hard_row) ? ip_row : hard_row;
-            ra_enter_hard();
-            s_speed_integral = 0.0f;
-        }
-    }
-    else
-    {
-        ra_start(0u,
-                 expected,
-                 1u,
-                 d.post_edge_side,
-                 d.post_edge_ms);
-    }
-
-    ra_pending_complex_clear();
-    ra_clear_pre_flags();
-    return 1u;
-}
-
-static uint8 ra_try_start_expected_after_recover(void)
-{
-    uint8 expected;
-
-    if (s_ra_state != RA_ST_NONE)
-        return 0u;
-    if (s_ra_post_recover_cnt == 0u &&
-        s_ra_pending_complex_cnt == 0u)
-        return 0u;
-    if (ra_any_route_candidate_seen() == 0u)
-        return 0u;
-
-    expected = route_next_expected_flag();
-    return ra_start_expected_route_now(expected, 0u);
-}
-
 static uint8 ra_try_start_direct_flag(void);
 
 static uint8 ra_try_start_route_direct_early_flag(void)
@@ -3785,7 +3782,7 @@ static uint8 ra_intersection_start_ready(void)
             return 1u;
         }
 #if RA_FIXED_HARD_ROW_ENABLE
-        if (g_ip_max_row < RA_FIXED_COMPLEX_HARD_ROW)
+        if (ra_complex_predict_ready(ra_complex_row_now()) == 0u)
         {
             s_ra_complex_lost_match_cnt = 0u;
             return 0u;
@@ -3920,7 +3917,7 @@ static uint8 ra_try_start_intersection_flag(void)
         if (s_ra_state == RA_ST_ACTIVE &&
             s_ra_straight == 0u &&
             s_ra_orig_flag >= 3u &&
-            s_ra_ip_row >= RA_FIXED_COMPLEX_HARD_ROW)
+            ra_complex_predict_ready(s_ra_ip_row) != 0u)
         {
             ra_enter_hard();
             s_speed_integral = 0.0f;

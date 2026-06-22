@@ -454,6 +454,13 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_FIXED_HARD_ROW_ENABLE 1u         /* 固定HARD行开关 */
 #define RA_FIXED_HARD_ROW        28u        /* 固定HARD行（直角） */
 #define RA_FIXED_COMPLEX_HARD_ROW        58u       /* 固定复杂HARD行 */
+
+#define RA_COMPLEX_PREDICT_ENABLE 1u
+#define RA_COMPLEX_COMMIT_ROW 72u
+#define RA_COMPLEX_LEAD_FRAMES 4.0f
+#define RA_COMPLEX_IP_V_MAX 14.0f
+#define RA_COMPLEX_FORCE_ROW 92u
+#define RA_COMPLEX_PREDICT_MIN_ROW 40u
 #define RA_DIRECT_TURN_ROW_OFFSET 0u        /* 直接转弯行偏移 */
 #define RA_COMPLEX_TURN_ROW_OFFSET 12u      /* 复杂转弯行偏移 */
 #define RA_FAST_TURN_ROW_ADVANCE 0u        /* 高速转弯行提前 */
