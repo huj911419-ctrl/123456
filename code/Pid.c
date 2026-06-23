@@ -2207,7 +2207,19 @@ static uint8 visual_exit_ready(uint8 use_strict)
     la = abs_i16(g_tf.lookahead_error);
     tr = abs_i16(g_tf.error_trend);
 
-    if (use_strict)
+    if (use_strict == 0u)
+    {
+        /* 正常条件 */
+        if (g_tf.line_lost == 0u &&
+            vrows >= RA_VISUAL_EXIT_VALID_ROWS &&
+            e <= RA_VISUAL_EXIT_ERR_MAX &&
+            la <= RA_VISUAL_EXIT_LA_MAX &&
+            tr <= RA_VISUAL_EXIT_TREND_MAX)
+        {
+            stable = 1u;
+        }
+    }
+    else if (use_strict == 1u)
     {
         /* 严格条件 */
         if (g_tf.line_lost == 0u &&
@@ -2221,12 +2233,12 @@ static uint8 visual_exit_ready(uint8 use_strict)
     }
     else
     {
-        /* 正常条件 */
+        /* 非常严格条件 */
         if (g_tf.line_lost == 0u &&
-            vrows >= RA_VISUAL_EXIT_VALID_ROWS &&
-            e <= RA_VISUAL_EXIT_ERR_MAX &&
-            la <= RA_VISUAL_EXIT_LA_MAX &&
-            tr <= RA_VISUAL_EXIT_TREND_MAX)
+            vrows >= RA_VISUAL_EXIT_VERY_STRICT_VALID_ROWS &&
+            e <= RA_VISUAL_EXIT_VERY_STRICT_ERR_MAX &&
+            la <= RA_VISUAL_EXIT_VERY_STRICT_LA_MAX &&
+            tr <= RA_VISUAL_EXIT_VERY_STRICT_TREND_MAX)
         {
             stable = 1u;
         }
