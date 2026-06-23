@@ -2186,6 +2186,8 @@ static uint8 ra_line_takeover_ready(void)
  * 普通直角1/2出弯视觉判断，用于HARD/YAW_LOCK/RECOVER阶段。
  * 第一版宽松条件，可收紧到严格条件。
  */
+static uint8 s_visual_count_done = 0u;       /* Item 3: per-PID-cycle counting gate */
+
 static uint8 visual_exit_ready(uint8 use_strict)
 {
     uint8 stable = 0u;
@@ -2245,23 +2247,32 @@ static uint8 visual_exit_ready(uint8 use_strict)
     {
         if (use_strict)
         {
-            if (s_visual_strict_cnt < 255u)
-                s_visual_strict_cnt++;
+            /* strict (1) / very-strict (2): 只读取，不累加计数 */
             valid = (s_visual_strict_cnt >= RA_VISUAL_EXIT_VERY_STRICT_FRAMES) ? 1u : 0u;
         }
         else
         {
-            if (s_visual_stable_cnt < 255u)
-                s_visual_stable_cnt++;
+            /* normal: 每 PID 周期只允许计数一次 */
+            if (s_visual_count_done == 0u)
+            {
+                s_visual_count_done = 1u;
+                if (s_visual_stable_cnt < 255u)
+                    s_visual_stable_cnt++;
+            }
             valid = (s_visual_stable_cnt >= RA_VISUAL_EXIT_STABLE_FRAMES) ? 1u : 0u;
         }
     }
     else
     {
         if (use_strict)
+        {
             s_visual_strict_cnt = 0u;
+        }
         else
+        {
             s_visual_stable_cnt = 0u;
+            s_visual_count_done = 0u;
+        }
         valid = 0u;
     }
 
@@ -2275,6 +2286,7 @@ static void visual_reset_stable(void)
 {
     s_visual_stable_cnt = 0u;
     s_visual_strict_cnt = 0u;
+    s_visual_count_done = 0u;
 }
 
 /* ==================== 普通直角补线模式 (item 3) ====================
@@ -5311,6 +5323,14 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
                             RA_WAIT_TIMEOUT;
         uint8 wait_timeout = (s_ra_phase_cnt >= wait_limit) ? 1u : 0u;
         uint16 late_row = (uint16)turn_row + RA_LATE_APPROACH_SKIP_ROW_MARGIN;
+        uint16 row_for_wait = (uint16)s_ra_ip_row;
+
+        if (s_ra_orig_flag < 3u && s_ra_straight == 0u &&
+            g_ip_ctrl_dir == s_ra_dir &&
+            (uint16)g_ip_ctrl_row > row_for_wait)
+        {
+            row_for_wait = (uint16)g_ip_ctrl_row;
+        }
 
         if (s_ra_straight == 0u &&
             (s_ra_dir == 1u || s_ra_dir == 2u) &&
@@ -5330,16 +5350,24 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
             s_ra_phase_cnt = 0u;
             s_speed_integral = 0.0f;
         }
+        else if (s_ra_orig_flag < 3u && s_ra_straight == 0u &&
+                 row_for_wait >= (uint16)turn_row)
+        {
+            s_ra_ip_row = ra_direct_fixed_turn_trigger_row();
+            ra_enter_hard();
+            s_speed_integral = 0.0f;
+            return 0u;
+        }
         else if (s_ra_straight == 0u &&
             (s_ra_dir == 1u || s_ra_dir == 2u) &&
-            (uint16)s_ra_ip_row >= late_row)
+            row_for_wait >= late_row)
         {
             s_ra_phase = RA_PH_APPROACH;
             s_ra_approach_cnt = 0u;
             s_ra_phase_cnt = 0u;
             s_speed_integral = 0.0f;
         }
-        else if (s_ra_ip_row >= slow_row || wait_timeout)
+        else if (row_for_wait >= (uint16)slow_row || wait_timeout)
         {
             s_ra_phase = RA_PH_SLOW;
             s_ra_phase_cnt = 0u;
@@ -5506,6 +5534,8 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         uint8 vis_very_strict_ok;
 
         turn_assist_apply();  /* Item 3: apply turn assist line */
+
+        s_visual_count_done = 0u;  /* Item 3: reset per-frame counting gate */
 
         vis_ok = visual_exit_ready(0u);
         vis_strict_ok = visual_exit_ready(1u);
@@ -5817,11 +5847,40 @@ direct_hard_continue:
         yaw_progress >= 30.0f &&
         yaw_progress < hard_yaw_target - 15.0f)
     {
-        inner = -RA_DIRECT_FAST_REVERSE_DUTY;
-        outer = 1500.0f;
-        direct_inner_reverse_allowed = 1u;
-        if (direct_inner_reverse_limit < RA_DIRECT_FAST_REVERSE_DUTY)
-            direct_inner_reverse_limit = RA_DIRECT_FAST_REVERSE_DUTY;
+        if (direct_fast || ra_direct_reverse_allowed() == 0u)
+        {
+            /* 高速或反转不允许: forward diff-limit bias, no reverse */
+            direct_inner_reverse_allowed = 0u;
+            inner = outer * 0.35f;
+            {
+                float nominal_outer = (float)ra_fast_hard_outer_cmd();
+                float outer_ceiling = nominal_outer * 1.15f;
+                if (outer > outer_ceiling)
+                    outer = outer_ceiling;
+            }
+        }
+        else
+        {
+            /* 低速救车反转: 允许短暂反转, 执行后重新套用 diff-limit */
+            inner = -RA_DIRECT_FAST_REVERSE_DUTY;
+            outer = 1500.0f;
+            direct_inner_reverse_allowed = 1u;
+            if (direct_inner_reverse_limit < RA_DIRECT_FAST_REVERSE_DUTY)
+                direct_inner_reverse_limit = RA_DIRECT_FAST_REVERSE_DUTY;
+            /* Re-apply diff-limit after reverse override */
+            {
+                float inner_min_pct_f = (float)ra_direct_diff_inner_pct() * 0.01f;
+                float inner_min_duty = outer * inner_min_pct_f;
+                float outer_boost_pct_f = (float)ra_direct_diff_outer_boost_pct() * 0.01f;
+                float outer_ceiling = (float)ra_fast_hard_outer_cmd() * (1.0f + outer_boost_pct_f);
+                if (outer > outer_ceiling)
+                    outer = outer_ceiling;
+                if (inner >= 0.0f && inner < inner_min_duty)
+                    inner = inner_min_duty;
+                else if (inner < 0.0f && (-inner) > inner_min_duty)
+                    inner = -inner_min_duty;
+            }
+        }
         if (s_ra_dir == 1u)
         {
             out_l = inner;
