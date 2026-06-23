@@ -467,6 +467,8 @@ static uint8 s_route_pending_action = ACT_STRAIGHT; /* 待提交动�?*/
 
 /* 前向声明：更新RA调试信息 */
 static void ra_debug_update(void);         /* 前向声明：更新RA调试变量 */
+static void visual_reset_stable(void);     /* 前向声明：复位视觉稳定计数 */
+static void turn_assist_reset(void);       /* 前向声明：复位补线模式 */
 
 /* ======================== RA状�机返回结构�?======================== */
 
