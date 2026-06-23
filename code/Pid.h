@@ -142,6 +142,14 @@ extern uint8 ra_dbg_outer_boost_pct;
 extern uint8 ra_dbg_continuous_turn_mode;
 extern uint8 ra_dbg_exit_reason_verbose;
 extern uint8 ra_dbg_inner_min_pct;
+extern int16 ra_dbg_turn_assist_found_row;
+extern uint8 ra_dbg_front_short_flag;
+extern uint8 ra_dbg_front_short_score;
+extern uint8 ra_dbg_front_short_dir;
+extern uint8 ra_dbg_front_short_confirm;
+extern uint8 ra_dbg_pre_turn_active;
+extern int16 ra_dbg_pre_turn_steer;
+extern uint8 ra_dbg_recover_lost_extend;
 
 /* ========================================================================
  * 转向PD控制参数
@@ -342,7 +350,7 @@ extern uint8 ra_dbg_inner_min_pct;
 #define RA_EXIT_LOOKAHEAD_MAX    38         /* 退出最大前瞻误差 */
 #define RA_EXIT_TREND_MAX        45         /* 退出最大趋势误差 */
 #define RA_EXIT_CONFIRM_FRAMES   2u         /* 退出确认帧数 */
-#define RA_DIRECT_LINE_EXIT_MIN_YAW_DEG 70.0f /* direct turn can follow line after enough yaw */
+#define RA_DIRECT_LINE_EXIT_MIN_YAW_DEG 76.0f /* direct turn can follow line after enough yaw */
 #define RA_RECOVER_FIXED_FRAMES  2u         /* RECOVER固定帧数 */
 #define RA_RECOVER_SPEED_PCT     92         /* RECOVER速度百分比 */
 #define RA_RECOVER_LOST_SPEED_PCT 75        /* RECOVER丢线速度百分比 */
@@ -488,14 +496,14 @@ extern uint8 ra_dbg_inner_min_pct;
 #define RA_FIXED_COMPLEX_HARD_ROW        58u       /* 固定复杂HARD行 */
 
 #define RA_COMPLEX_PREDICT_ENABLE 1u
-#define RA_COMPLEX_COMMIT_ROW 78u
+#define RA_COMPLEX_COMMIT_ROW 64u
 #define RA_COMPLEX_LEAD_FRAMES 2.5f
 #define RA_COMPLEX_IP_V_MAX 14.0f
-#define RA_COMPLEX_FORCE_ROW 92u
+#define RA_COMPLEX_FORCE_ROW 82u
 #define RA_COMPLEX_PREDICT_MIN_ROW 40u
 #define RA_DIRECT_ENTRY_REVERSE_FRAMES 6u
 #define RA_DIRECT_ENTRY_REVERSE_DUTY   120.0f
-#define RA_DIRECT_ENTRY_OUTER_DUTY_MAX 2200.0f
+#define RA_DIRECT_ENTRY_OUTER_DUTY_MAX 2600.0f
 #define RA_DIRECT_TURN_ROW_OFFSET 0u        /* 直接转弯行偏移 */
 #define RA_FAST_TURN_ROW_ADVANCE 8u        /* 高速转弯行提前 */
 #define RA_FAST_TURN_ROW_ADVANCE_MAX 16u    /* 高速转弯行提前最大值 */
@@ -509,14 +517,14 @@ extern uint8 ra_dbg_inner_min_pct;
 #define RA_ROUTE_DIRECT_EARLY_ENABLE 1u
 #define RA_ROUTE_DIRECT_EARLY_FIRST_ONLY 1u
 #define RA_ROUTE_DIRECT_EARLY_VALID_ROWS_MIN 28u
-#define RA_ROUTE_DIRECT_EARLY_VALID_ROWS_MAX 44u
+#define RA_ROUTE_DIRECT_EARLY_VALID_ROWS_MAX 54u
 #define RA_ROUTE_DIRECT_EARLY_ERR_MAX 18
 #define RA_ROUTE_DIRECT_EARLY_LA_MIN 0
 #define RA_ROUTE_DIRECT_EARLY_IP_ROW 56u
-#define RA_ROUTE_DIRECT_EARLY_MIN_TICKS PID_MS_TO_TICKS(500u)
+#define RA_ROUTE_DIRECT_EARLY_MIN_TICKS PID_MS_TO_TICKS(120u)
 #define RA_PRE_DIRECT_HARD_IP_ROW 10u       /* 预直接HARD最小拐点行 */
 #define RA_PRE_DIRECT_HARD_FRAMES 1u        /* 预直接HARD帧数 */
-#define RA_PRE_DIRECT_NO_IP_ENABLE 1u       /* allow strong pre-turn without IP row */
+#define RA_PRE_DIRECT_NO_IP_ENABLE 0u       /* no-IP direct turn is too easy to false-trigger */
 #define RA_PRE_DIRECT_NO_IP_ROW 12u         /* equivalent row for no-IP pre-turn */
 #define RA_PRE_DIRECT_NO_IP_VALID_ROWS 45u  /* no-IP pre-turn max valid rows */
 #define RA_PRE_DIRECT_NO_IP_LA_MIN 0
@@ -526,7 +534,7 @@ extern uint8 ra_dbg_inner_min_pct;
 /* HARD front strong, rear taper */
 #define RA_HARD_PREDICT_EXIT_ENABLE      1u
 #define RA_HARD_PREDICT_TIME_S           0.030f
-#define RA_HARD_TARGET_YAW_MAX           80.0f
+#define RA_HARD_TARGET_YAW_MAX           84.0f
 #define RA_HARD_REMAIN_FULL              30.0f
 #define RA_HARD_REMAIN_MID               18.0f
 #define RA_HARD_REMAIN_LOW               8.0f
@@ -538,7 +546,7 @@ extern uint8 ra_dbg_inner_min_pct;
 
 /* line takeover after turn exit */
 #define RA_LINE_TAKEOVER_ENABLE          1u
-#define RA_LINE_TAKEOVER_MIN_YAW_DEG     55.0f
+#define RA_LINE_TAKEOVER_MIN_YAW_DEG     62.0f
 #define RA_LINE_TAKEOVER_RATE_MAX        650.0f
 #define RA_LINE_TAKEOVER_VALID_ROWS      16u
 #define RA_LINE_TAKEOVER_ERR_MAX         32
@@ -547,8 +555,8 @@ extern uint8 ra_dbg_inner_min_pct;
 #define RA_LINE_TAKEOVER_CONFIRM_FRAMES  1u
 
 /* takeover speed and steering smoothing */
-#define RA_LINE_TAKEOVER_SPEED_PCT       82
-#define RA_LINE_TAKEOVER_STEER_KEEP_PCT  25
+#define RA_LINE_TAKEOVER_SPEED_PCT       96
+#define RA_LINE_TAKEOVER_STEER_KEEP_PCT  5
 
 /* exit boost */
 #define RA_EXIT_BOOST_ENABLE             1u
@@ -558,13 +566,13 @@ extern uint8 ra_dbg_inner_min_pct;
 #define RA_EXIT_BOOST_VALID_ROWS         22u
 
 /* direct RA fast reverse */
-#define RA_DIRECT_FAST_REVERSE_FRAMES    2u
-#define RA_DIRECT_FAST_REVERSE_DUTY      80.0f
+#define RA_DIRECT_FAST_REVERSE_FRAMES    14u
+#define RA_DIRECT_FAST_REVERSE_DUTY      520.0f
 
 /* ==================== Direct turn diff-limit (item 6) ==================== */
-#define RA_DIRECT_INNER_MIN_PCT          35u
-#define RA_DIRECT_OUTER_MAX_BOOST_PCT    15u
-#define RA_DIRECT_REVERSE_ENABLE_SPEED_LOW_ONLY 1u
+#define RA_DIRECT_INNER_MIN_PCT          20u
+#define RA_DIRECT_OUTER_MAX_BOOST_PCT    25u
+#define RA_DIRECT_REVERSE_ENABLE_SPEED_LOW_ONLY 0u
 
 /* ==================== Visual exit thresholds (item 2) ==================== */
 #define RA_VISUAL_EXIT_VALID_ROWS       22u
@@ -595,6 +603,23 @@ extern uint8 ra_dbg_inner_min_pct;
 #define RA_TURN_ASSIST_WEIGHT_FRAME3    70u
 #define RA_TURN_ASSIST_WEIGHT_MAX       85u
 #define RA_TURN_ASSIST_WEIGHT_RECOVER   25u
+#define RA_TURN_ASSIST_HOLD_FRAMES      6u
+
+/* ==================== Front-short detection (前方变短预警) ==================== */
+#define RA_FRONT_SHORT_VALID_ROWS_1     40u
+#define RA_FRONT_SHORT_VALID_ROWS_2     34u
+#define RA_FRONT_SHORT_CONFIRM_FRAMES   2u
+#define RA_FRONT_SHORT_SPEED_PCT        76u
+#define RA_FRONT_SHORT_STEER_MAX        900
+#define RA_FRONT_SHORT_STEER_SLEW       180
+#define RA_FRONT_SHORT_STEER_FRAME1     300
+#define RA_FRONT_SHORT_STEER_FRAME2     500
+#define RA_FRONT_SHORT_STEER_FRAME3     700
+
+/* ==================== Recover lost extend ==================== */
+#define RA_RECOVER_LOST_EXTEND_FRAMES   25u
+#define RA_RECOVER_LOST_EXTEND_VALID_ROWS 16u
+#define RA_RECOVER_LOST_EXTEND_ERR_MAX  40
 
 /* ==================== Yaw thresholds (item 4/5) ==================== */
 #define RA_TOTAL_YAW_EXIT_MIN           65.0f
@@ -604,8 +629,8 @@ extern uint8 ra_dbg_inner_min_pct;
 #define RA_LOW_YAW_SPEED_CAP_PCT        78
 
 /* ==================== Takeover speed (item 7) ==================== */
-#define RA_TAKEOVER_SPEED_CAP_PCT       78
-#define RA_TAKEOVER_SPEED_CAP_FRAMES    3u
+#define RA_TAKEOVER_SPEED_CAP_PCT       92
+#define RA_TAKEOVER_SPEED_CAP_FRAMES    1u
 #define RA_TAKEOVER_RECOVER_SPEED_PCT   95
 
 /* ==================== Continuous turn (item 8) ==================== */
@@ -628,8 +653,8 @@ extern uint8 ra_dbg_inner_min_pct;
 #define RA_OVERSHOOT_OUTER_PCT           92
 #define RA_VERY_LATE_OUTER_PCT           95
 #define RA_REAL_TURN_FORCE_HARD_FRAMES   26u
-#define RA_REAL_TURN_MIN_YAW             70
-#define RA_REAL_TURN_MIN_OUTER           1600
+#define RA_REAL_TURN_MIN_YAW             78
+#define RA_REAL_TURN_MIN_OUTER           1850
 #define RA_COMPLEX_TURN_ROW_OFFSET       8u
 #define RA_PRE_DIRECT_STRAIGHT_VALID_ROWS 48u
 #define RA_PRE_DIRECT_STRAIGHT_ERR_MAX 16
@@ -680,35 +705,35 @@ extern uint8 ra_dbg_inner_min_pct;
 #define RA_INTER_COMPLEX_ROUTE_ERR_MAX 42
 #define RA_INTER_COMPLEX_ROUTE_LA_MAX 42
 #define RA_INTER_COMPLEX_ROUTE_TREND_MAX 46
-#define RA_INTER_COMPLEX_LAST_CHANCE_ROW 42u
+#define RA_INTER_COMPLEX_LAST_CHANCE_ROW 36u
 #define RA_INTER_COMPLEX_LAST_ERR_MAX 56
 #define RA_INTER_COMPLEX_LAST_LA_MAX 38
 #define RA_INTER_COMPLEX_LAST_TREND_MAX 58
 #define RA_INTER_COMPLEX_LOST_FALLBACK_ENABLE 1u
-#define RA_INTER_COMPLEX_LOST_IP_ROW 70u
+#define RA_INTER_COMPLEX_LOST_IP_ROW 58u
 #define RA_INTER_COMPLEX_LOST_FRAMES 1u
-#define RA_INTER_COMPLEX_CONF_MIN 60u       /* 复杂路口最小置信度 */
-#define RA_INTER_COMPLEX_CONF_LAST_MIN 48u
-#define RA_INTER_COMPLEX_CONF_CUTOFF_MIN 38u
-#define RA_INTER_COMPLEX_CONF_PENDING_MIN 45u
+#define RA_INTER_COMPLEX_CONF_MIN 50u       /* 复杂路口最小置信度 */
+#define RA_INTER_COMPLEX_CONF_LAST_MIN 38u
+#define RA_INTER_COMPLEX_CONF_CUTOFF_MIN 32u
+#define RA_INTER_COMPLEX_CONF_PENDING_MIN 35u
 #define RA_INTER_COMPLEX_START_VALID_ROWS 18u
 #define RA_INTER_COMPLEX_START_ERR_MAX 56
 #define RA_INTER_COMPLEX_START_LA_MAX 58
 #define RA_INTER_COMPLEX_START_TREND_MAX 80
 #define RA_INTER_COMPLEX_RECENT_LOST_FRAMES 8u
-#define RA_INTER_COMPLEX_RECOVER_VALID_ROWS 36u
-#define RA_INTER_COMPLEX_RECOVER_ERR_MAX 36
-#define RA_INTER_COMPLEX_RECOVER_LA_MAX 40
-#define RA_INTER_COMPLEX_RECOVER_TREND_MAX 48
-#define RA_ROUTE_COMPLEX_PRE_ENABLE 0u
-#define RA_ROUTE_COMPLEX_PRE_VALID_ROWS 42u
-#define RA_ROUTE_COMPLEX_PRE_ERR_MAX 36
-#define RA_ROUTE_COMPLEX_PRE_LA_MIN 18
-#define RA_ROUTE_COMPLEX_PRE_TREND_MIN 12
+#define RA_INTER_COMPLEX_RECOVER_VALID_ROWS 24u
+#define RA_INTER_COMPLEX_RECOVER_ERR_MAX 48
+#define RA_INTER_COMPLEX_RECOVER_LA_MAX 56
+#define RA_INTER_COMPLEX_RECOVER_TREND_MAX 62
+#define RA_ROUTE_COMPLEX_PRE_ENABLE 1u
+#define RA_ROUTE_COMPLEX_PRE_VALID_ROWS 30u
+#define RA_ROUTE_COMPLEX_PRE_ERR_MAX 48
+#define RA_ROUTE_COMPLEX_PRE_LA_MIN 8
+#define RA_ROUTE_COMPLEX_PRE_TREND_MIN 6
 #define RA_ROUTE_COMPLEX_PRE_IP_ROW 52u
 #define RA_PENDING_COMPLEX_HOLD_FRAMES 20u  /* 待定复杂保持帧数 */
 #define RA_PENDING_COMPLEX_BRIDGE_RECOVER_FRAMES 4u
-#define RA_PENDING_COMPLEX_IP_ROW 64u       /* 待定复杂拐点行 */
+#define RA_PENDING_COMPLEX_IP_ROW 56u       /* 待定复杂拐点行 */
 #define RA_PENDING_COMPLEX_VALID_ROWS 18u   /* 待定复杂有效行数 */
 #define RA_PENDING_COMPLEX_ERR_MAX 56       /* 待定复杂最大误差 */
 #define RA_PENDING_COMPLEX_LA_MAX 70        /* 待定复杂最大前瞻误差 */

@@ -81,6 +81,14 @@ uint8 ra_dbg_outer_boost_pct = 0u;
 uint8 ra_dbg_continuous_turn_mode = 0u;
 uint8 ra_dbg_exit_reason_verbose = 0u;
 uint8 ra_dbg_inner_min_pct = 100u;
+int16 ra_dbg_turn_assist_found_row = -1;
+uint8 ra_dbg_front_short_flag = 0u;
+uint8 ra_dbg_front_short_score = 0u;
+uint8 ra_dbg_front_short_dir = 0u;
+uint8 ra_dbg_front_short_confirm = 0u;
+uint8 ra_dbg_pre_turn_active = 0u;
+int16 ra_dbg_pre_turn_steer = 0;
+uint8 ra_dbg_recover_lost_extend = 0u;
 
 
 /* ======================== �向PD控制静�变�?======================== */
@@ -350,11 +358,27 @@ static uint8 s_ra_exit_boost_active = 0u;
 /* === New static variables for improved direct turn === */
 static float s_ra_total_yaw_base = 0.0f;     /* total yaw base, set in ra_start, never reset */
 
+/* Front-short (前方变短) detection */
+static uint8 s_front_short_flag = 0u;
+static uint8 s_front_short_score = 0u;
+static uint8 s_front_short_rows = 0u;
+static uint8 s_front_short_dir = 0u;
+static uint8 s_front_short_confirm = 0u;
+static uint8 s_front_short_pre_turn_active = 0u;
+static int16 s_front_short_pre_turn_steer = 0;
+static uint16 s_prev_valid_row_count = 0u;
+static uint8 s_prev_valid_dec_frames = 0u;
+
 /* Turn assist (补线) state */
 static uint8 s_turn_assist_active = 0u;
 static uint8 s_turn_assist_weight = 0u;
 static int16 s_turn_assist_found_col = -1;
+static int16 s_turn_assist_found_row = -1;
 static uint8 s_turn_assist_frame_cnt = 0u;
+static uint8 s_turn_assist_hold_cnt = 0u;
+
+/* Yaw exit recovery extend (RECOVER_LOST) */
+static uint8 s_recover_lost_extend = 0u;
 
 /* Visual exit stable count */
 static uint8 s_visual_stable_cnt = 0u;
@@ -469,6 +493,8 @@ static uint8 s_route_pending_action = ACT_STRAIGHT; /* 待提交动�?*/
 static void ra_debug_update(void);         /* 前向声明：更新RA调试变量 */
 static void visual_reset_stable(void);     /* 前向声明：复位视觉稳定计数 */
 static void turn_assist_reset(void);       /* 前向声明：复位补线模式 */
+static uint8 front_short_detect(void);     /* 前向声明：前方变短检测 */
+static int16 front_short_pre_turn_steer(void); /* 前向声明：前方变短预转 */
 
 /* ======================== RA状�机返回结构�?======================== */
 
@@ -1419,6 +1445,15 @@ static void ra_reset(void)                  /* RA状�机全��?*/
     s_line_takeover_speed_cap_frames = 0u;
     s_continuous_turn_mode = 0u;
     s_continuous_turn_remnant_frames = 0u;
+    s_front_short_flag = 0u;
+    s_front_short_score = 0u;
+    s_front_short_rows = 0u;
+    s_front_short_dir = 0u;
+    s_front_short_confirm = 0u;
+    s_front_short_pre_turn_active = 0u;
+    s_front_short_pre_turn_steer = 0;
+    s_prev_valid_dec_frames = 0u;
+    s_recover_lost_extend = 0u;
     ra_debug_update();                      /* 更新调试变量 */
 }
 
@@ -2260,7 +2295,12 @@ static uint8 visual_exit_ready(uint8 use_strict)
         if (use_strict)
         {
             /* strict (1) / very-strict (2): 只读取，不累加计数 */
-            valid = (s_visual_strict_cnt >= RA_VISUAL_EXIT_VERY_STRICT_FRAMES) ? 1u : 0u;
+            if (s_visual_strict_cnt < 255u)
+                s_visual_strict_cnt++;
+            valid = (s_visual_strict_cnt >=
+                     ((use_strict == 1u) ?
+                      RA_VISUAL_EXIT_STRICT_FRAMES :
+                      RA_VISUAL_EXIT_VERY_STRICT_FRAMES)) ? 1u : 0u;
         }
         else
         {
@@ -2301,6 +2341,152 @@ static void visual_reset_stable(void)
     s_visual_count_done = 0u;
 }
 
+/* ==================== 前方变短快速预警 (front_short) ==================== */
+static uint8 front_short_detect(void)
+{
+    uint8 flag = 0u;
+    uint8 expected_dir = 0u;
+    uint16 vrows = g_tf.valid_row_count;
+
+    /* Reset if line is lost */
+    if (g_tf.line_lost != 0u)
+    {
+        s_prev_valid_dec_frames = 0u;
+        s_prev_valid_row_count = vrows;
+        s_front_short_flag = 0u;
+        s_front_short_score = 0u;
+        s_front_short_rows = 0u;
+        s_front_short_dir = 0u;
+        s_front_short_confirm = 0u;
+        s_front_short_pre_turn_active = 0u;
+        s_front_short_pre_turn_steer = 0;
+        return 0u;
+    }
+
+    /* Track decreasing valid_row_count */
+    if (vrows < s_prev_valid_row_count)
+    {
+        uint8 dec = (uint8)(s_prev_valid_row_count - vrows);
+        if (dec <= 3u && s_prev_valid_dec_frames < 255u)
+            s_prev_valid_dec_frames++;
+    }
+    else if (vrows > s_prev_valid_row_count)
+    {
+        if (s_prev_valid_dec_frames > 0u)
+            s_prev_valid_dec_frames--;
+    }
+    else
+    {
+        /* Equal: hold dec_frames */
+    }
+    s_prev_valid_row_count = vrows;
+
+    /* Check conditions */
+    if (vrows <= RA_FRONT_SHORT_VALID_ROWS_1 &&
+        s_prev_valid_dec_frames >= 2u &&
+        abs_i16(g_tf.error) <= 40)
+    {
+        /* Determine expected direction from route table */
+        expected_dir = route_next_turn_dir(0u);
+        if (expected_dir == 0u && (g_ra_pre_dir == 1u || g_ra_pre_dir == 2u))
+            expected_dir = g_ra_pre_dir;
+
+        if (expected_dir == 1u || expected_dir == 2u)
+        {
+            s_front_short_dir = expected_dir;
+            s_front_short_rows = (uint8)vrows;
+            s_front_short_score = (vrows <= RA_FRONT_SHORT_VALID_ROWS_2) ? 2u : 1u;
+
+            if (s_front_short_confirm < 255u)
+                s_front_short_confirm++;
+            if (s_front_short_confirm >= RA_FRONT_SHORT_CONFIRM_FRAMES)
+            {
+                s_front_short_flag = 1u;
+                flag = 1u;
+            }
+        }
+    }
+    else
+    {
+        /* Conditions not met: decay */
+        if (s_front_short_confirm > 0u)
+            s_front_short_confirm--;
+        if (s_front_short_confirm == 0u)
+        {
+            s_front_short_flag = 0u;
+            s_front_short_score = 0u;
+            s_front_short_dir = 0u;
+            s_front_short_pre_turn_active = 0u;
+            s_front_short_pre_turn_steer = 0;
+        }
+    }
+
+    ra_dbg_front_short_flag = s_front_short_flag;
+    ra_dbg_front_short_score = s_front_short_score;
+    ra_dbg_front_short_dir = s_front_short_dir;
+    ra_dbg_front_short_confirm = s_front_short_confirm;
+    return flag;
+}
+
+/* Compute front_short pre-turn steering bias */
+static int16 front_short_pre_turn_steer(void)
+{
+    int16 steer_bias = 0;
+
+    if (!s_front_short_flag || s_front_short_dir == 0u)
+    {
+        s_front_short_pre_turn_active = 0u;
+        s_front_short_pre_turn_steer = 0;
+        ra_dbg_pre_turn_active = 0u;
+        ra_dbg_pre_turn_steer = 0;
+        return 0;
+    }
+
+    /* Only active when RA is not in HARD or later */
+    if (s_ra_state == RA_ST_ACTIVE &&
+        (s_ra_phase == RA_PH_HARD || s_ra_phase == RA_PH_YAW_LOCK ||
+         s_ra_phase == RA_PH_RECOVER))
+    {
+        s_front_short_pre_turn_active = 0u;
+        ra_dbg_pre_turn_active = 0u;
+        ra_dbg_pre_turn_steer = 0;
+        return 0;
+    }
+
+    /* Compute progressive steer bias */
+    if (s_front_short_confirm >= 3u)
+        steer_bias = RA_FRONT_SHORT_STEER_FRAME3;
+    else if (s_front_short_confirm >= 2u)
+        steer_bias = RA_FRONT_SHORT_STEER_FRAME2;
+    else if (s_front_short_confirm >= 1u)
+        steer_bias = RA_FRONT_SHORT_STEER_FRAME1;
+    else
+        steer_bias = 0;
+
+    if (steer_bias > RA_FRONT_SHORT_STEER_MAX)
+        steer_bias = RA_FRONT_SHORT_STEER_MAX;
+
+    /* Apply direction: right turn = positive steer, left turn = negative steer */
+    if (s_front_short_dir == 2u)
+        steer_bias = -steer_bias;
+
+    /* Slew limit */
+    {
+        int16 delta = steer_bias - s_front_short_pre_turn_steer;
+        if (delta > RA_FRONT_SHORT_STEER_SLEW)
+            delta = RA_FRONT_SHORT_STEER_SLEW;
+        else if (delta < -RA_FRONT_SHORT_STEER_SLEW)
+            delta = -RA_FRONT_SHORT_STEER_SLEW;
+        steer_bias = s_front_short_pre_turn_steer + delta;
+    }
+
+    s_front_short_pre_turn_active = 1u;
+    s_front_short_pre_turn_steer = steer_bias;
+    ra_dbg_pre_turn_active = 1u;
+    ra_dbg_pre_turn_steer = steer_bias;
+    return steer_bias;
+}
+
 /* ==================== 普通直角补线模式 (item 3) ====================
  * 参考补线/拉线方法：
  *   右直角：在图像右侧固定列范围(78~88)找白线跳变
@@ -2313,7 +2499,9 @@ static void turn_assist_reset(void)
     s_turn_assist_active = 0u;
     s_turn_assist_weight = 0u;
     s_turn_assist_found_col = -1;
+    s_turn_assist_found_row = -1;
     s_turn_assist_frame_cnt = 0u;
+    s_turn_assist_hold_cnt = 0u;
 }
 
 static uint8 turn_assist_is_direct(void)
@@ -2356,8 +2544,8 @@ static int16 turn_assist_scan_column(uint8 col, uint8 start_row, uint8 end_row)
     return -1;
 }
 
-/* Find the best white point for turn assist */
-static int16 turn_assist_find_point(void)
+/* Find the best white point for turn assist, store both row & col in statics */
+static uint8 turn_assist_find_point(void)
 {
     uint8 col_start, col_end;
     uint8 start_row = (TF_IMG_H > 4u) ? (uint8)(TF_IMG_H - 4u) : (uint8)(TF_IMG_H - 1u);
@@ -2368,19 +2556,17 @@ static int16 turn_assist_find_point(void)
 
     if (s_ra_dir == 1u)
     {
-        /* Right turn: scan right side 78~88 */
         col_start = RA_TURN_ASSIST_RIGHT_START;
         col_end = RA_TURN_ASSIST_RIGHT_END;
     }
     else if (s_ra_dir == 2u)
     {
-        /* Left turn: scan left side 6~16 */
         col_start = RA_TURN_ASSIST_LEFT_START;
         col_end = RA_TURN_ASSIST_LEFT_END;
     }
     else
     {
-        return -1;
+        return 0u;
     }
 
     if (col_end >= TF_IMG_W)
@@ -2398,22 +2584,27 @@ static int16 turn_assist_find_point(void)
         }
     }
 
-    return (best_row >= 0) ? (int16)best_col : -1;
+    if (best_row >= 0)
+    {
+        s_turn_assist_found_row = best_row;
+        s_turn_assist_found_col = (int16)best_col;
+        return 1u;
+    }
+    return 0u;
 }
 
 /* Apply turn assist: replace center_line with a fake line from bottom-center to found point */
 static uint8 turn_assist_apply(void)
 {
-    int16 found_col;
     uint8 new_weight;
-    uint8 center = TF_IMG_CENTER;
+    uint8 bottom_col = TF_IMG_CENTER;
     uint8 bottom_row = (uint8)(TF_IMG_H - 1u);
+    uint8 point_found;
 
     if (!turn_assist_is_direct())
     {
         if (s_turn_assist_active)
         {
-            /* Gradually reduce weight when exiting turn assist */
             if (s_turn_assist_weight > RA_TURN_ASSIST_WEIGHT_RECOVER)
                 s_turn_assist_weight -= RA_TURN_ASSIST_WEIGHT_RECOVER;
             else
@@ -2426,17 +2617,13 @@ static uint8 turn_assist_apply(void)
         return s_turn_assist_active;
     }
 
-    found_col = turn_assist_find_point();
-    s_turn_assist_found_col = found_col;
-    ra_dbg_turn_assist_found_col = found_col;
+    point_found = turn_assist_find_point();
 
-    if (found_col >= 0)
+    if (point_found)
     {
-        /* Found a white point - compute fake center line */
-        uint8 r;
+        s_turn_assist_hold_cnt = 0u;
         s_turn_assist_frame_cnt++;
 
-        /* Progressive weight */
         if (s_turn_assist_frame_cnt == 1u)
             new_weight = RA_TURN_ASSIST_WEIGHT_FRAME1;
         else if (s_turn_assist_frame_cnt == 2u)
@@ -2452,28 +2639,78 @@ static uint8 turn_assist_apply(void)
             s_turn_assist_weight = 0u;
         }
         s_turn_assist_weight = new_weight;
-
-        /* Build fake center line: bottom-center to found point */
-        for (r = 0u; r < TF_IMG_H; r++)
+    }
+    else
+    {
+        /* No white point found this frame */
+        if (s_turn_assist_active && s_turn_assist_hold_cnt < RA_TURN_ASSIST_HOLD_FRAMES)
         {
-            int16 fake_center;
-            float row_t;
-
-            if (r >= (uint8)found_col || bottom_row <= 0u)
+            /* Hold last known position, weight stays or slowly decays */
+            s_turn_assist_hold_cnt++;
+            if (s_turn_assist_hold_cnt >= 3u && s_turn_assist_weight > RA_TURN_ASSIST_WEIGHT_RECOVER)
+                s_turn_assist_weight -= RA_TURN_ASSIST_WEIGHT_RECOVER;
+        }
+        else
+        {
+            /* Hold expired: fallback to single-edge */
+            s_turn_assist_frame_cnt = 0u;
+            if (s_turn_assist_active)
             {
-                fake_center = (int16)center;
+                if (s_turn_assist_weight > RA_TURN_ASSIST_WEIGHT_RECOVER)
+                    s_turn_assist_weight -= RA_TURN_ASSIST_WEIGHT_RECOVER;
+                else
+                    s_turn_assist_weight = 0u;
+                if (s_turn_assist_weight == 0u)
+                    turn_assist_reset();
+            }
+
+            if (s_ra_dir == 1u)
+            {
+                if (g_post_edge_side != EDGE_LEFT)
+                    g_post_edge_side = EDGE_LEFT;
             }
             else
             {
-                row_t = (float)r / (float)bottom_row;
-                fake_center = (int16)((float)center * (1.0f - row_t) +
-                                      (float)found_col * row_t);
+                if (g_post_edge_side != EDGE_RIGHT)
+                    g_post_edge_side = EDGE_RIGHT;
+            }
+        }
+    }
+
+    /* Build fake center line if active */
+    if (s_turn_assist_active && s_turn_assist_found_row >= 0 && s_turn_assist_found_col >= 0)
+    {
+        int16 target_row = s_turn_assist_found_row;
+        int16 target_col = s_turn_assist_found_col;
+        uint8 r;
+
+        for (r = 0u; r < TF_IMG_H; r++)
+        {
+            int16 fake_center;
+
+            if ((int16)r >= target_row)
+            {
+                if (target_row < (int16)bottom_row)
+                {
+                    float alpha = (float)((int16)bottom_row - (int16)r) /
+                                  (float)((int16)bottom_row - target_row);
+                    fake_center = (int16)((float)bottom_col * (1.0f - alpha) +
+                                           (float)target_col * alpha);
+                }
+                else
+                {
+                    fake_center = target_col;
+                }
+            }
+            else
+            {
+                /* Above target point: extend the line upward */
+                fake_center = target_col;
             }
 
             if (fake_center < 0) fake_center = 0;
             if (fake_center >= (int16)TF_IMG_W) fake_center = (int16)(TF_IMG_W - 1);
 
-            /* Only override if assist weight is meaningful */
             if (g_tf.center_line[r] >= 0)
             {
                 int16 blended = (int16)((float)g_tf.center_line[r] * (100u - (uint16)s_turn_assist_weight) / 100.0f +
@@ -2486,37 +2723,11 @@ static uint8 turn_assist_apply(void)
             }
         }
     }
-    else
-    {
-        /* No white point found: fallback to single-edge */
-        s_turn_assist_frame_cnt = 0u;
-        if (s_turn_assist_active)
-        {
-            if (s_turn_assist_weight > RA_TURN_ASSIST_WEIGHT_RECOVER)
-                s_turn_assist_weight -= RA_TURN_ASSIST_WEIGHT_RECOVER;
-            else
-                s_turn_assist_weight = 0u;
-            if (s_turn_assist_weight == 0u)
-                turn_assist_reset();
-        }
-
-        /* Fallback: use single edge on the opposite side */
-        if (s_ra_dir == 1u)
-        {
-            /* Right turn: use left edge only */
-            if (g_post_edge_side != EDGE_LEFT)
-                g_post_edge_side = EDGE_LEFT;
-        }
-        else
-        {
-            /* Left turn: use right edge only */
-            if (g_post_edge_side != EDGE_RIGHT)
-                g_post_edge_side = EDGE_RIGHT;
-        }
-    }
 
     ra_dbg_turn_assist_active = s_turn_assist_active;
     ra_dbg_turn_assist_weight = s_turn_assist_weight;
+    ra_dbg_turn_assist_found_row = s_turn_assist_found_row;
+    ra_dbg_turn_assist_found_col = s_turn_assist_found_col;
     return s_turn_assist_active;
 }
 
@@ -4192,6 +4403,7 @@ static uint8 ra_try_start_route_direct_early_flag(void)
 {
 #if RA_ROUTE_DIRECT_EARLY_ENABLE
     uint8 expected;
+    uint8 evidence_ok = 0u;
     RouteDecision d;
 
     if (s_ra_state != RA_ST_NONE || g_ra_flag != 0u)
@@ -4207,6 +4419,16 @@ static uint8 ra_try_start_route_direct_early_flag(void)
 
     expected = route_next_expected_flag();
     if (expected != 1u && expected != 2u)
+        return 0u;
+
+    if (g_ra_pre_flag != 0u && g_ra_pre_dir == expected)
+        evidence_ok = 1u;
+    if (g_ip_ctrl_dir == expected &&
+        g_ip_ctrl_row >= RA_ROUTE_DIRECT_EARLY_IP_ROW)
+        evidence_ok = 1u;
+    if (g_fast_ra_type == expected)
+        evidence_ok = 1u;
+    if (evidence_ok == 0u)
         return 0u;
 
     if (g_tf.line_lost != 0u || g_sym_component_flag != 0u)
@@ -4712,6 +4934,8 @@ static uint8 ra_intersection_start_ready(void)
 
 static uint8 ra_try_start_intersection_flag(void)
 {
+    uint8 expected;
+
     if (s_ra_state == RA_ST_NONE &&
         (g_ra_flag == 0u || !route_next_flag_is((uint8)g_ra_flag)) &&
         s_ra_pending_complex_cnt > 0u &&
@@ -4725,6 +4949,16 @@ static uint8 ra_try_start_intersection_flag(void)
 
     if ((g_ra_flag < 3u || g_ra_flag > 5u) || s_ra_state != RA_ST_NONE)
         return 0u;
+
+    expected = route_next_expected_flag();
+    if (expected >= 3u && expected <= 5u &&
+        (uint8)g_ra_flag != expected)
+    {
+        g_ra_flag = 0u;
+        ra_pending_complex_clear();
+        ra_debug_update();
+        return 1u;
+    }
 
     if (!ra_intersection_start_ready())
     {
@@ -5145,6 +5379,22 @@ static uint8 ra_handle_recover_phase(RaResult *r)
         return 0u;
 
     s_ra_recover_cnt++;
+
+    /* Item 7: Recover lost extension - after yaw exit, extend RECOVER if line is still lost */
+    if (s_recover_lost_extend > 0u)
+    {
+        /* Decrement extension each frame */
+        s_recover_lost_extend--;
+
+        /* If line conditions improve enough, release early */
+        if (g_tf.line_lost == 0u &&
+            g_tf.valid_row_count >= RA_RECOVER_LOST_EXTEND_VALID_ROWS &&
+            abs_i16(g_tf.error) <= RA_RECOVER_LOST_EXTEND_ERR_MAX)
+        {
+            s_recover_lost_extend = 0u;
+        }
+        ra_dbg_recover_lost_extend = s_recover_lost_extend;
+    }
     recover_seen = ra_recover_line_seen();
     recover_visible = ra_recover_line_visible();
     recover_stable = ra_recover_line_stable(recover_visible);
@@ -5199,11 +5449,18 @@ static uint8 ra_handle_recover_phase(RaResult *r)
         return 1u;
     }
 
+    /* Item 7: Don't finish RECOVER early if recover_lost_extend is active */
     if (s_ra_recover_good_cnt >= RA_RECOVER_CONFIRM_FRAMES)
     {
-        ra_dbg_exit_reason = RA_EXIT_RECOVER;
-        ra_finish_ex(keep_flag);
-        return 1u;
+        if (s_recover_lost_extend == 0u ||
+            (g_tf.line_lost == 0u &&
+             g_tf.valid_row_count >= RA_RECOVER_LOST_EXTEND_VALID_ROWS &&
+             abs_i16(g_tf.error) <= RA_RECOVER_LOST_EXTEND_ERR_MAX))
+        {
+            ra_dbg_exit_reason = RA_EXIT_RECOVER;
+            ra_finish_ex(keep_flag);
+            return 1u;
+        }
     }
 
     if (ra_recover_visual_allowed(recover_seen,
@@ -5217,11 +5474,16 @@ static uint8 ra_handle_recover_phase(RaResult *r)
         ra_output_recover_lost_drive();
     }
 
-    if (s_ra_recover_cnt >= RA_RECOVER_MAX_FRAMES)
     {
-        ra_dbg_exit_reason = RA_EXIT_TIMEOUT;
-        ra_finish_ex(keep_flag);
-        return 1u;
+        uint16 max_frames = (uint16)RA_RECOVER_MAX_FRAMES;
+        if (s_recover_lost_extend > 0u)
+            max_frames += (uint16)s_recover_lost_extend;
+        if (s_ra_recover_cnt >= max_frames)
+        {
+            ra_dbg_exit_reason = RA_EXIT_TIMEOUT;
+            ra_finish_ex(keep_flag);
+            return 1u;
+        }
     }
 
     r->should_return = 1u;
@@ -5342,6 +5604,37 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
             (uint16)g_ip_ctrl_row > row_for_wait)
         {
             row_for_wait = (uint16)g_ip_ctrl_row;
+        }
+
+        /* Item 3: Front-short early action in WAIT phase */
+        if (s_ra_orig_flag < 3u && s_ra_straight == 0u &&
+            s_front_short_dir == s_ra_dir && s_front_short_flag)
+        {
+            if (s_front_short_confirm >= 3u &&
+                g_tf.valid_row_count <= RA_FRONT_SHORT_VALID_ROWS_2)
+            {
+                /* Strong front-short: skip to APPROACH or enter HARD if row ready */
+                if (row_for_wait >= (uint16)turn_row)
+                {
+                    s_ra_ip_row = ra_direct_fixed_turn_trigger_row();
+                    ra_enter_hard();
+                    s_speed_integral = 0.0f;
+                    return 0u;
+                }
+                s_ra_phase = RA_PH_SLOW;
+                s_ra_phase_cnt = 0u;
+                s_speed_integral = 0.0f;
+            }
+            else if (s_front_short_confirm >= 2u)
+            {
+                /* Confirmed front-short: enter SLOW with speed reduction */
+                if (s_ra_phase != RA_PH_SLOW)
+                {
+                    s_ra_phase = RA_PH_SLOW;
+                    s_ra_phase_cnt = 0u;
+                    s_speed_integral = 0.0f;
+                }
+            }
         }
 
         if (s_ra_straight == 0u &&
@@ -5580,14 +5873,8 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
             ra_dbg_yaw_guard_active = 1u;
             ra_dbg_exit_reason_verbose = RA_EXIT_VERBOSE_YAW_GUARD;
 
-            /* Only allow finish if very strict visual confirms */
-            if (vis_very_strict_ok || (vis_strict_ok && s_visual_strict_cnt >= RA_VISUAL_EXIT_VERY_STRICT_FRAMES))
-            {
-                /* Visual very stable despite low yaw - allow line takeover */
-                ra_dbg_exit_reason = RA_EXIT_LINE;
-                ra_finish_by_line_takeover();
-                return 1u;
-            }
+            (void)vis_strict_ok;
+            (void)vis_very_strict_ok;
             /* Otherwise continue HARD, don't check normal exit logic */
         }
         else
@@ -5668,6 +5955,12 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
                     ra_enter_recover();
                     r->speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f;
                     r->should_return = 1u;
+                    /* Item 7: extend RECOVER if line is lost after yaw exit */
+                    if (g_tf.line_lost != 0u || g_tf.valid_row_count < RA_RECOVER_LOST_EXTEND_VALID_ROWS)
+                    {
+                        s_recover_lost_extend = RA_RECOVER_LOST_EXTEND_FRAMES;
+                        ra_dbg_recover_lost_extend = s_recover_lost_extend;
+                    }
                     ra_debug_update();
                 }
                 else
@@ -6334,6 +6627,7 @@ static void normal_pid_step(int16 pos_err, int16 pos_err_abs) /* 正常PID控制
         speed_factor = SPEED_FACTOR_MAX;    /* 限幅 */
 
     steer *= speed_factor;                  /* �向乘以�度因子 */
+    steer += (float)front_short_pre_turn_steer();
     steer += ra_pre_turn_steer_ff();
     steer += ra_curve_steer_assist();
     steer = ra_yaw_guard_steer(steer);
@@ -6535,6 +6829,9 @@ void line_pid_control(void)                  /* 主PID控制入口 */
         return;                              /* 跳过��PID */
     }
 
+    /* ===== 前方变短快速预警 (front_short) ===== */
+    front_short_detect();
+
     /* ===== 速度规划 ===== */
     /* 原�目标�度 = 菜单速度 * 8 * RA速度缩放 */
     int16 target_base_speed = (int16)((float)motor_speed * 8.0f * ra.speed_scale); /* 原�目标�度 */
@@ -6623,6 +6920,17 @@ void line_pid_control(void)                  /* 主PID控制入口 */
         }
 
         speed_dbg_pre_lock = s_pre_lock;     /* 记录预减速锁状�?*/
+    }
+
+    /* ===== front_short 前减速 ===== */
+    if (s_front_short_flag && s_ra_state == RA_ST_NONE)
+    {
+        target_base_speed = (int16)((int32)target_base_speed * RA_FRONT_SHORT_SPEED_PCT / 100);
+    }
+    else if (s_front_short_flag && s_ra_state == RA_ST_ACTIVE &&
+             (s_ra_phase == RA_PH_WAIT || s_ra_phase == RA_PH_SLOW))
+    {
+        target_base_speed = (int16)((int32)target_base_speed * RA_FRONT_SHORT_SPEED_PCT / 100);
     }
 
     /* 规划基�速度（含各�降�?加�策略） */

@@ -43,6 +43,7 @@ RECORD_SIZE_V4 = 74
 RECORD_SIZE_V5 = 83
 RECORD_SIZE = 101
 RECORD_SIZE_V6 = 117
+RECORD_SIZE_V7 = 127
 LIVE_SIZE_V2 = 28
 LIVE_SIZE_V3 = 29
 LIVE_SIZE = 31
@@ -171,6 +172,15 @@ class Record:
     continuous_turn_mode: int = 0
     exit_reason_verbose: int = 0
     extra_raw_101_117: str = ""
+    # V7 fields (record_size == 127)
+    turn_assist_found_row: int = 0
+    front_short_flag: int = 0
+    front_short_score: int = 0
+    front_short_dir: int = 0
+    front_short_confirm: int = 0
+    pre_turn_active: int = 0
+    pre_turn_steer: int = 0
+    recover_lost_extend: int = 0
 
 
 @dataclass
@@ -255,18 +265,27 @@ def unpack_summary(payload: bytes) -> Summary:
 #        inner_min_pct, outer_boost_pct                       (4 B)
 RECORD_FMT_V6_BODY = ">HH16h5H31B3h2B3h5BH3B"   # first 101 bytes
 RECORD_FMT_V6_SUFFIX = ">hhBBBBBBhBBBB"         # last 16 bytes
+# V7 suffix extension (10 bytes at offset 117):
+#   h  = turn_assist_found_row
+#   4B = front_short_flag, score, dir, confirm
+#   B  = pre_turn_active
+#   h  = pre_turn_steer
+#   B  = recover_lost_extend
+RECORD_FMT_V7_EXT = ">h4BBhB"
 
 
 def unpack_records(payload: bytes, summary: Summary) -> list[Record]:
     record_size = summary.record_size
-    if record_size not in (RECORD_SIZE_V6, RECORD_SIZE, RECORD_SIZE_V5,
+    if record_size not in (RECORD_SIZE_V7, RECORD_SIZE_V6, RECORD_SIZE, RECORD_SIZE_V5,
                            RECORD_SIZE_V4, RECORD_SIZE_V3,
                            RECORD_SIZE_V2, LEGACY_RECORD_SIZE):
         raise ValueError(f"unsupported record size {record_size}")
     if len(payload) % record_size != 0:
         raise ValueError(f"record packet length {len(payload)} is not multiple of {record_size}")
     records: list[Record] = []
-    if record_size == RECORD_SIZE_V6:
+    if record_size == RECORD_SIZE_V7:
+        fmt = RECORD_FMT_V6_BODY + RECORD_FMT_V6_SUFFIX.lstrip(">") + RECORD_FMT_V7_EXT.lstrip(">")
+    elif record_size == RECORD_SIZE_V6:
         fmt = RECORD_FMT_V6_BODY + RECORD_FMT_V6_SUFFIX.lstrip(">")
     elif record_size == RECORD_SIZE:
         fmt = ">HH16h5H31B3h2B3h5BH3B"
@@ -366,14 +385,14 @@ def unpack_records(payload: bytes, summary: Summary) -> list[Record]:
 
         seq = vals[0]
         pid_tick = vals[1]
-        is_v6_or_v5 = record_size in (RECORD_SIZE_V6, RECORD_SIZE, RECORD_SIZE_V5, RECORD_SIZE_V4)
+        is_v6_or_v5 = record_size in (RECORD_SIZE_V7, RECORD_SIZE_V6, RECORD_SIZE, RECORD_SIZE_V5, RECORD_SIZE_V4)
         byte_base = 23 if is_v6_or_v5 else 22
-        extra_base = (67 if record_size in (RECORD_SIZE_V6, RECORD_SIZE)
+        extra_base = (67 if record_size in (RECORD_SIZE_V7, RECORD_SIZE_V6, RECORD_SIZE)
                       else 55 if record_size == RECORD_SIZE_V5
                       else 46 if record_size == RECORD_SIZE_V4
                       else 45 if record_size == RECORD_SIZE_V3
                       else 0)
-        is_big = record_size in (RECORD_SIZE_V6, RECORD_SIZE)
+        is_big = record_size in (RECORD_SIZE_V7, RECORD_SIZE_V6, RECORD_SIZE)
 
         rec = Record(
             seq=seq,
@@ -450,8 +469,8 @@ def unpack_records(payload: bytes, summary: Summary) -> list[Record]:
             pre_seen_frames=vals[extra_base + 3] if record_size in (RECORD_SIZE_V6, RECORD_SIZE, RECORD_SIZE_V5, RECORD_SIZE_V3) else 0,
         )
 
-        # Parse V6 suffix (16 bytes at offset 101)
-        if record_size == RECORD_SIZE_V6:
+        # Parse V6/V7 suffix (16 bytes at offset 101, plus V7 extension 10 bytes at offset 117)
+        if record_size in (RECORD_SIZE_V7, RECORD_SIZE_V6):
             suffix = struct.unpack_from(RECORD_FMT_V6_SUFFIX, payload, off + 101)
             rec.yaw_total_progress = suffix[0]  # int16, x10
             rec.yaw_hard_progress = suffix[1]   # int16, x10
@@ -471,6 +490,18 @@ def unpack_records(payload: bytes, summary: Summary) -> list[Record]:
             rec.visual_stable_cnt = 0
             # Save raw hex for debugging
             rec.extra_raw_101_117 = payload[off + 101:off + 117].hex()
+
+            # Parse V7 extension (10 bytes at offset 117)
+            if record_size == RECORD_SIZE_V7:
+                ext = struct.unpack_from(RECORD_FMT_V7_EXT, payload, off + 117)
+                rec.turn_assist_found_row = ext[0]
+                rec.front_short_flag = ext[1]
+                rec.front_short_score = ext[2]
+                rec.front_short_dir = ext[3]
+                rec.front_short_confirm = ext[4]
+                rec.pre_turn_active = ext[5]
+                rec.pre_turn_steer = ext[6]
+                rec.recover_lost_extend = ext[7]
 
         records.append(rec)
     return records

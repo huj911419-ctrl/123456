@@ -107,6 +107,15 @@ typedef struct
     uint8 exit_reason_verbose;         /* verbose exit reason (from ra_dbg_exit_reason_verbose) */
     uint8 inner_min_pct;               /* inner min duty pct (from ra_dbg_inner_min_pct) */
     uint8 outer_boost_pct;             /* outer boost pct (from ra_dbg_outer_boost_pct) */
+    /* V7 new fields */
+    int16 turn_assist_found_row;       /* turn_assist found row (from ra_dbg_turn_assist_found_row) */
+    uint8 front_short_flag;            /* front_short active flag (from ra_dbg_front_short_flag) */
+    uint8 front_short_score;           /* front_short severity score (from ra_dbg_front_short_score) */
+    uint8 front_short_dir;             /* front_short direction (from ra_dbg_front_short_dir) */
+    uint8 front_short_confirm;         /* front_short confirm count (from ra_dbg_front_short_confirm) */
+    uint8 pre_turn_active;             /* front_short pre-turn active (from ra_dbg_pre_turn_active) */
+    int16 pre_turn_steer;              /* front_short pre-turn steer (from ra_dbg_pre_turn_steer) */
+    uint8 recover_lost_extend;         /* recover_lost_extend counter (from ra_dbg_recover_lost_extend) */
 } AutoTuneRecord;
 
 #if AUTO_TUNE_LOG_ENABLE
@@ -271,6 +280,15 @@ static void at_pack_record(uint8 *p, const AutoTuneRecord *r)
     p[idx++] = r->exit_reason_verbose;
     p[idx++] = r->inner_min_pct;
     p[idx++] = r->outer_boost_pct;
+    /* V7 new fields */
+    at_put_i16(p, &idx, r->turn_assist_found_row);
+    p[idx++] = r->front_short_flag;
+    p[idx++] = r->front_short_score;
+    p[idx++] = r->front_short_dir;
+    p[idx++] = r->front_short_confirm;
+    p[idx++] = r->pre_turn_active;
+    at_put_i16(p, &idx, r->pre_turn_steer);
+    p[idx++] = r->recover_lost_extend;
 }
 
 static void at_pack_live(uint8 *p, const AutoTuneRecord *r)
@@ -571,6 +589,15 @@ void auto_tune_log_pid_tick(void)
     r->exit_reason_verbose = ra_dbg_exit_reason_verbose;
     r->inner_min_pct = ra_dbg_inner_min_pct;
     r->outer_boost_pct = ra_dbg_outer_boost_pct;
+    /* V7 new fields */
+    r->turn_assist_found_row = ra_dbg_turn_assist_found_row;
+    r->front_short_flag = ra_dbg_front_short_flag;
+    r->front_short_score = ra_dbg_front_short_score;
+    r->front_short_dir = ra_dbg_front_short_dir;
+    r->front_short_confirm = ra_dbg_front_short_confirm;
+    r->pre_turn_active = ra_dbg_pre_turn_active;
+    r->pre_turn_steer = ra_dbg_pre_turn_steer;
+    r->recover_lost_extend = ra_dbg_recover_lost_extend;
 
     s_at_prev_phase = r->ra_phase;
 
