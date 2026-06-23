@@ -534,7 +534,7 @@ extern uint8 ra_dbg_recover_lost_extend;
 /* HARD front strong, rear taper */
 #define RA_HARD_PREDICT_EXIT_ENABLE      1u
 #define RA_HARD_PREDICT_TIME_S           0.030f
-#define RA_HARD_TARGET_YAW_MAX           84.0f
+#define RA_HARD_TARGET_YAW_MAX           92.0f
 #define RA_HARD_REMAIN_FULL              30.0f
 #define RA_HARD_REMAIN_MID               18.0f
 #define RA_HARD_REMAIN_LOW               8.0f
@@ -555,8 +555,8 @@ extern uint8 ra_dbg_recover_lost_extend;
 #define RA_LINE_TAKEOVER_CONFIRM_FRAMES  1u
 
 /* takeover speed and steering smoothing */
-#define RA_LINE_TAKEOVER_SPEED_PCT       96
-#define RA_LINE_TAKEOVER_STEER_KEEP_PCT  5
+#define RA_LINE_TAKEOVER_SPEED_PCT       80
+#define RA_LINE_TAKEOVER_STEER_KEEP_PCT  20
 
 /* exit boost */
 #define RA_EXIT_BOOST_ENABLE             1u
@@ -566,13 +566,13 @@ extern uint8 ra_dbg_recover_lost_extend;
 #define RA_EXIT_BOOST_VALID_ROWS         22u
 
 /* direct RA fast reverse */
-#define RA_DIRECT_FAST_REVERSE_FRAMES    14u
-#define RA_DIRECT_FAST_REVERSE_DUTY      520.0f
+#define RA_DIRECT_FAST_REVERSE_FRAMES    2u
+#define RA_DIRECT_FAST_REVERSE_DUTY      80.0f
 
 /* ==================== Direct turn diff-limit (item 6) ==================== */
-#define RA_DIRECT_INNER_MIN_PCT          20u
-#define RA_DIRECT_OUTER_MAX_BOOST_PCT    25u
-#define RA_DIRECT_REVERSE_ENABLE_SPEED_LOW_ONLY 0u
+#define RA_DIRECT_INNER_MIN_PCT          35u
+#define RA_DIRECT_OUTER_MAX_BOOST_PCT    15u
+#define RA_DIRECT_REVERSE_ENABLE_SPEED_LOW_ONLY 1u
 
 /* ==================== Visual exit thresholds (item 2) ==================== */
 #define RA_VISUAL_EXIT_VALID_ROWS       22u
@@ -629,8 +629,8 @@ extern uint8 ra_dbg_recover_lost_extend;
 #define RA_LOW_YAW_SPEED_CAP_PCT        78
 
 /* ==================== Takeover speed (item 7) ==================== */
-#define RA_TAKEOVER_SPEED_CAP_PCT       92
-#define RA_TAKEOVER_SPEED_CAP_FRAMES    1u
+#define RA_TAKEOVER_SPEED_CAP_PCT       78
+#define RA_TAKEOVER_SPEED_CAP_FRAMES    3u
 #define RA_TAKEOVER_RECOVER_SPEED_PCT   95
 
 /* ==================== Continuous turn (item 8) ==================== */

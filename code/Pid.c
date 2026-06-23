@@ -357,6 +357,7 @@ static uint8 s_ra_exit_boost_active = 0u;
 
 /* === New static variables for improved direct turn === */
 static float s_ra_total_yaw_base = 0.0f;     /* total yaw base, set in ra_start, never reset */
+static float s_ra_hard_yaw_base = 0.0f;      /* HARD yaw base, set only in ra_enter_hard */
 
 /* Front-short (前方变短) detection */
 static uint8 s_front_short_flag = 0u;
@@ -974,7 +975,7 @@ static float normalize_angle(float angle)   /* 角度归一化函�?*/
 /* ra_yaw_progress - 计算RA HARD阶�的yaw�动进度（正�，单位：度�? * 右转时直接用yaw_angle（�=右转），左转时取�? * �返回正�（负�表示还没开始转或方向错�，�为0�? * 返回: yaw�动进度（正�度�?*/
 static float ra_yaw_progress(void)          /* 计算RA偏航进度 */
 {
-    float delta = normalize_angle(yaw_angle - s_ra_yaw_base);
+    float delta = normalize_angle(yaw_angle - s_ra_hard_yaw_base);
 
     /* 右转方向：yaw_angle为负值，取反得到正进�?*/
     if (s_ra_dir == 1u)                     /* 右转方向 */
@@ -1018,7 +1019,7 @@ static float ra_yaw_progress_rate(void)
 
 static float ra_abs_yaw_progress(void)
 {
-    float yaw_now = normalize_angle(yaw_angle - s_ra_yaw_base);
+    float yaw_now = normalize_angle(yaw_angle - s_ra_hard_yaw_base);
 
     if (yaw_now < 0.0f)
         yaw_now = -yaw_now;
@@ -2911,6 +2912,7 @@ static void ra_start(uint8 dir, uint8 orig_flag, uint8 straight,
     s_ra_phase_cnt = 0u;                    /* 阶��数清零 */
     s_ra_yaw_base = normalize_angle(yaw_angle);
     s_ra_total_yaw_base = s_ra_yaw_base;       /* Item 1: total yaw base, never reset during RA */
+    s_ra_hard_yaw_base = s_ra_yaw_base;
     s_ra_hard_yaw_target = 0.0f;
     s_ra_hard_speed_seed = 0.0f;            /* 速度种子清零 */
     s_ra_hard_steer_seed = 0.0f;            /* �向�子清零 */
@@ -2971,7 +2973,8 @@ static void ra_enter_hard(void)             /* 进入HARD���阶�?*/
         return;                             /* 避免重�进� */
 
     s_ra_phase = RA_PH_HARD;
-    s_ra_yaw_base = normalize_angle(yaw_angle);                /* 切换到HARD阶� */
+    s_ra_hard_yaw_base = normalize_angle(yaw_angle);           /* HARD阶�yaw基准 */
+    s_ra_yaw_base = s_ra_hard_yaw_base;
     s_ra_phase_cnt = 0u;                    /* 阶��数清零 */
     s_ra_hard_cnt = 0u;                     /* HARD帧�数清�?*/
     s_ra_exit_good_cnt = 0u;                /* �出确认�数清�?*/
@@ -5926,6 +5929,37 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
                 uint8 need_yaw_lock = 0u;
 
                 ra_dbg_exit_reason = exit_reason;
+
+                /* 普通直角视觉优先：没有稳定线时，yaw到旧目标并不代表转弯完成。
+                 * 1) yaw_total < 约88°：继续HARD补角，不准退出。
+                 * 2) yaw_total 约88~100°：停止硬拧，低速RECOVER找线，不准满速冲。
+                 */
+                if (!vis_ok)
+                {
+                    if (yaw_total < (RA_HARD_TARGET_YAW_MAX - 4.0f))
+                    {
+                        s_yaw_guard_active = 1u;
+                        ra_dbg_yaw_guard_active = 1u;
+                        ra_dbg_exit_reason_verbose = RA_EXIT_VERBOSE_YAW_GUARD;
+                        goto direct_hard_continue;
+                    }
+
+                    if (yaw_total <= RA_TOTAL_YAW_OVERSHOOT)
+                    {
+                        ra_dbg_exit_reason_verbose = RA_EXIT_VERBOSE_YAW_GUARD;
+                        s_line_takeover_speed_cap_frames = RA_TAKEOVER_SPEED_CAP_FRAMES;
+                        ra_dbg_line_takeover_speed_cap = s_line_takeover_speed_cap_frames;
+                        s_recover_lost_extend = RA_RECOVER_LOST_EXTEND_FRAMES;
+                        ra_dbg_recover_lost_extend = s_recover_lost_extend;
+                        ra_enter_recover();
+                        r->speed_scale = (float)RA_TAKEOVER_SPEED_CAP_PCT * 0.01f;
+                        r->should_return = 1u;
+                        ra_output_recover_lost_drive();
+                        ra_debug_update();
+                        return 1u;
+                    }
+                }
+
                 if (exit_reason == RA_EXIT_EMERGENCY ||
                     exit_reason == RA_EXIT_TIMEOUT ||
                     exit_reason == RA_EXIT_NO_IMU ||
@@ -6405,10 +6439,15 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状�机主�辑
         s_ra_phase == RA_PH_YAW_LOCK ||
         s_ra_phase == RA_PH_RECOVER)
     {
-        if (ra_line_takeover_ready())
+        /* 普通直角1/2必须走 visual_exit_ready + yaw_total 保护，
+         * 不允许旧线接管在这里提前 finish。复杂路口继续保留旧逻辑。 */
+        if (!(s_ra_orig_flag < 3u && s_ra_straight == 0u))
         {
-            ra_finish_by_line_takeover();
-            return r;
+            if (ra_line_takeover_ready())
+            {
+                ra_finish_by_line_takeover();
+                return r;
+            }
         }
     }
 
