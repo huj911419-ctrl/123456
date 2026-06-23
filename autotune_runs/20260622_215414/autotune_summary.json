@@ -1,0 +1,29 @@
+{
+  "summary": {
+    "version": 4,
+    "record_size": 74,
+    "count": 128,
+    "overflow": 1,
+    "pid_period_ms": 8,
+    "sample_period_ms": 32,
+    "motor_speed": 380,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 85
+  },
+  "analysis": [
+    "records=128 duration=1016ms overflow=1 dt_min/max=8/8ms",
+    "err avg/max=0.0/0 lookahead avg/max=0.0/0 valid_rows min=0",
+    "time max: tf=7941us inter=59us, avg_speed_lag=218.5",
+    "battery_x10 min/max=119/119 (11.9V..11.9V)",
+    "line_lost samples=128, ra_pre samples=0, pre_dir=0, pre_slow=0, sym_component samples=0",
+    "turn_segments=1",
+    "turn#1 R t=1704->1704ms route=0 ip=96 slow/turn=38/18 ra_yaw_max=91.6 hard=0 lock=0 rec=1 target=80.0 outer=1210 yaw_rate_max=63 exit=yaw stall=0/0 hard_ip/t=96/1704 yaw_start=-1 duty_start=-1 pre_frames=0 rec_block=0",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run."
+  ],
+  "record_count": 128
+}

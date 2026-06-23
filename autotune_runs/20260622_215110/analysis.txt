@@ -1,0 +1,9 @@
+records=128 duration=1016ms overflow=1 dt_min/max=8/8ms
+err avg/max=0.0/0 lookahead avg/max=0.0/0 valid_rows min=0
+time max: tf=6407us inter=187us, avg_speed_lag=220.5
+battery_x10 min/max=119/120 (11.9V..12.0V)
+line_lost samples=128, ra_pre samples=0, pre_dir=0, pre_slow=0, sym_component samples=0
+turn_segments=0
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run.

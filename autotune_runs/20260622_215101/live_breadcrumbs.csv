@@ -1,0 +1,1 @@
+seq,t_ms,speed_plan,err,lookahead,yaw10,ra_yaw10,yaw_rate_dps,battery_x10,duty_left,duty_right,valid_rows,ra_flag,ra_phase,ra_dir,ra_ip_row,route_step,post_edge_side,speed_reason,line_lost,inter_type,ip_max_row

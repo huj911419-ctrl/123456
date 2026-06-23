@@ -1,0 +1,13 @@
+records=360 duration=3520ms overflow=0 dt_min/max=8/48ms
+err avg/max=9.0/86 lookahead avg/max=6.2/66 valid_rows min=0
+time max: tf=9925us inter=4013us, avg_speed_lag=540.1
+battery_x10 min/max=117/118 (11.7V..11.8V)
+line_lost samples=240, ra_pre samples=88, pre_dir=75, pre_slow=84, sym_component samples=21
+turn_segments=2
+turn#1 R t=592->1616ms route=0 ip=0 slow/turn=38/18 ra_yaw_max=95.6 hard=61 lock=14 rec=16 target=80.0 outer=1918 yaw_rate_max=422 exit=yaw stall=0/0 hard_ip/t=18/656 yaw_start=688 duty_start=656 pre_frames=8 rec_block=1
+  WARN turn#1: hard phase still logged coarser than PID tick.
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 R t=1736->2040ms route=0 ip=12 slow/turn=38/18 ra_yaw_max=91.8 hard=25 lock=6 rec=8 target=80.0 outer=1897 yaw_rate_max=464 exit=yaw stall=0/0 hard_ip/t=12/1736 yaw_start=1736 duty_start=1736 pre_frames=0 rec_block=0
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.
