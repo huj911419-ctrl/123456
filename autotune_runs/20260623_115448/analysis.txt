@@ -1,0 +1,22 @@
+records=512 duration=5344ms overflow=1 dt_min/max=8/48ms
+err avg/max=9.7/82 lookahead avg/max=9.7/82 valid_rows min=0
+time max: tf=10009us inter=4730us, avg_speed_lag=559.7
+battery_x10 min/max=118/119 (11.8V..11.9V)
+line_lost samples=338, ra_pre samples=114, pre_dir=95, pre_slow=104, sym_component samples=30
+turn_stall samples=4, wheel_stall samples=0
+turn_segments=5
+turn#1 R t=752->872ms route=0 ip=62 slow/turn=38/18 ra_yaw_max=78.3 hard=1 lock=11 rec=4 target=80.0 outer=2012 yaw_rate_max=389 exit=yaw stall=0/0 hard_ip/t=12/536 yaw_start=-1 duty_start=-1 pre_frames=0 rec_block=0
+turn#2 R t=1272->1592ms route=1 ip=82 slow/turn=50/58 ra_yaw_max=103.2 hard=30 lock=10 rec=1 target=80.0 outer=1850 yaw_rate_max=432 exit=yaw stall=2/0 hard_ip/t=82/1272 yaw_start=1328 duty_start=1272 pre_frames=0 rec_block=0
+  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#3 L t=1872->2008ms route=2 ip=64 slow/turn=38/18 ra_yaw_max=53.6 hard=18 lock=0 rec=0 target=80.0 outer=2799 yaw_rate_max=521 exit=none stall=0/0 hard_ip/t=64/1872 yaw_start=1888 duty_start=1872 pre_frames=19 rec_block=0
+  WARN turn#3: yaw too small, likely exits early or turn force is not enough.
+turn#4 L t=2096->2480ms route=3 ip=88 slow/turn=50/58 ra_yaw_max=116.4 hard=30 lock=11 rec=8 target=80.0 outer=1850 yaw_rate_max=467 exit=yaw stall=1/0 hard_ip/t=88/2096 yaw_start=2152 duty_start=2096 pre_frames=3 rec_block=0
+  WARN turn#4: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#4: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#5 R t=2616->2952ms route=4 ip=88 slow/turn=50/58 ra_yaw_max=91.4 hard=29 lock=6 rec=8 target=80.0 outer=1850 yaw_rate_max=476 exit=yaw stall=1/0 hard_ip/t=88/2616 yaw_start=2656 duty_start=2616 pre_frames=0 rec_block=0
+  WARN turn#5: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.
+WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run.

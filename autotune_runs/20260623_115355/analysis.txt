@@ -1,0 +1,21 @@
+records=512 duration=4088ms overflow=1 dt_min/max=8/8ms
+err avg/max=5.3/84 lookahead avg/max=4.3/84 valid_rows min=0
+time max: tf=9798us inter=4795us, avg_speed_lag=358.7
+battery_x10 min/max=119/119 (11.9V..11.9V)
+line_lost samples=434, ra_pre samples=79, pre_dir=66, pre_slow=75, sym_component samples=14
+turn_stall samples=8, wheel_stall samples=0
+turn_segments=4
+turn#1 L t=2528->2696ms route=3 ip=108 slow/turn=50/58 ra_yaw_max=104.1 hard=4 lock=10 rec=8 target=80.0 outer=1506 yaw_rate_max=463 exit=yaw stall=0/0 hard_ip/t=78/2320 yaw_start=-1 duty_start=-1 pre_frames=2 rec_block=8
+  WARN turn#1: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+turn#2 R t=2848->3200ms route=4 ip=104 slow/turn=50/58 ra_yaw_max=96.8 hard=29 lock=8 rec=8 target=80.0 outer=1850 yaw_rate_max=455 exit=yaw stall=1/0 hard_ip/t=104/2848 yaw_start=2888 duty_start=2848 pre_frames=6 rec_block=2
+  WARN turn#2: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#2: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#3 R t=4920->5280ms route=5 ip=98 slow/turn=50/58 ra_yaw_max=96.6 hard=31 lock=7 rec=8 target=80.0 outer=1850 yaw_rate_max=459 exit=yaw stall=2/0 hard_ip/t=98/4920 yaw_start=4976 duty_start=4920 pre_frames=2 rec_block=1
+  WARN turn#3: yaw overshoot, reduce outer or yaw target / increase recovery damping.
+  WARN turn#3: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+turn#4 R t=5296->5696ms route=6 ip=92 slow/turn=50/58 ra_yaw_max=86.0 hard=38 lock=5 rec=8 target=80.0 outer=1850 yaw_rate_max=450 exit=timeout stall=5/0 hard_ip/t=92/5296 yaw_start=5344 duty_start=5296 pre_frames=0 rec_block=0
+  WARN turn#4: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.
+WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.
+WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.
+WARN straight tracking is unstable; tune Kp/Kd before raising speed more.
+WARN buffer overflow: only the newest records were kept. Increase capacity or shorten run.

@@ -1,0 +1,31 @@
+{
+  "summary": {
+    "version": 6,
+    "record_size": 101,
+    "count": 472,
+    "overflow": 0,
+    "pid_period_ms": 8,
+    "sample_period_ms": 48,
+    "motor_speed": 380,
+    "pid_kp": 11,
+    "pid_kd": 20,
+    "ra_turn_row": 112,
+    "ra_hard_outer": 1850,
+    "ra_hard_yaw": 85
+  },
+  "analysis": [
+    "records=472 duration=4296ms overflow=0 dt_min/max=8/48ms",
+    "err avg/max=0.6/58 lookahead avg/max=0.3/52 valid_rows min=0",
+    "time max: tf=9041us inter=4365us, avg_speed_lag=288.6",
+    "battery_x10 min/max=120/122 (12.0V..12.2V)",
+    "line_lost samples=439, ra_pre samples=30, pre_dir=30, pre_slow=26, sym_component samples=1",
+    "turn_stall samples=1, wheel_stall samples=0",
+    "turn_segments=1",
+    "turn#1 R t=544->968ms route=0 ip=0 slow/turn=38/18 ra_yaw_max=75.2 hard=27 lock=11 rec=8 target=80.0 outer=2865 yaw_rate_max=462 exit=yaw stall=1/0 hard_ip/t=18/608 yaw_start=640 duty_start=608 pre_frames=8 rec_block=0",
+    "  WARN turn#1: hard command had weak yaw response; check traction, vacuum, current limit, or physical binding.",
+    "WARN line_lost appeared during run; check exposure, threshold, or high-speed blur first.",
+    "WARN processing time spike found; runtime debug/vision cost may affect high-speed recognition.",
+    "WARN straight tracking is unstable; tune Kp/Kd before raising speed more."
+  ],
+  "record_count": 472
+}
