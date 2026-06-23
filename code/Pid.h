@@ -322,7 +322,10 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_CROSS_HARD_MIN_FRAMES 4u         /* 十字HARD最小帧数 */
 #define RA_EXIT_VALID_ROWS       10u        /* 退出有效行数 */
 #define RA_EXIT_ERROR_MAX        28         /* 退出最大误差 */
+#define RA_EXIT_LOOKAHEAD_MAX    38         /* 退出最大前瞻误差 */
+#define RA_EXIT_TREND_MAX        45         /* 退出最大趋势误差 */
 #define RA_EXIT_CONFIRM_FRAMES   2u         /* 退出确认帧数 */
+#define RA_DIRECT_LINE_EXIT_MIN_YAW_DEG 70.0f /* direct turn can follow line after enough yaw */
 #define RA_RECOVER_FIXED_FRAMES  2u         /* RECOVER固定帧数 */
 #define RA_RECOVER_SPEED_PCT     92         /* RECOVER速度百分比 */
 #define RA_RECOVER_LOST_SPEED_PCT 75        /* RECOVER丢线速度百分比 */

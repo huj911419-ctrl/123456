@@ -3253,7 +3253,8 @@ static uint8 ra_hard_exit_reason(uint8 direct_fast,
     if (line_ok &&
         s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES)
     {
-        if (s_ra_orig_flag < 3u)
+        if (s_ra_orig_flag < 3u &&
+            yaw_progress >= RA_DIRECT_LINE_EXIT_MIN_YAW_DEG)
             return RA_EXIT_LINE;
         if (yaw_progress >= hard_yaw_target - 8.0f)
             return RA_EXIT_LINE;
@@ -4971,7 +4972,9 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
                        (direct_fast ? RA_FAST_HARD_TIMEOUT : RA_HARD_TIMEOUT);
     uint8 line_ok = (g_tf.line_lost == 0u &&
                      g_tf.valid_row_count >= RA_EXIT_VALID_ROWS &&
-                     pos_err_abs <= RA_EXIT_ERROR_MAX) ? 1u : 0u;
+                     pos_err_abs <= RA_EXIT_ERROR_MAX &&
+                     abs_i16(g_tf.lookahead_error) <= RA_EXIT_LOOKAHEAD_MAX &&
+                     abs_i16(g_tf.error_trend) <= RA_EXIT_TREND_MAX) ? 1u : 0u;
     float hard_yaw_target =
         ra_hard_target_limit((float)ra_dynamic_yaw_target() +
                              (direct_fast ? RA_FAST_DIRECT_YAW_OFFSET : 0.0f));
