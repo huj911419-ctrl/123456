@@ -65,6 +65,23 @@ int16 ra_dbg_takeover_error = 0;
 int16 ra_dbg_takeover_lookahead = 0;
 int16 ra_dbg_takeover_trend = 0;
 
+/* === New debug variables for improved direct turn === */
+int16 ra_dbg_yaw_total_progress10 = 0;
+int16 ra_dbg_yaw_hard_progress10 = 0;
+uint8 ra_dbg_visual_exit_ready = 0u;
+uint8 ra_dbg_visual_stable_cnt = 0u;
+uint8 ra_dbg_yaw_guard_active = 0u;
+uint8 ra_dbg_over_turn_guard = 0u;
+uint8 ra_dbg_line_takeover_speed_cap = 0u;
+uint8 ra_dbg_turn_assist_active = 0u;
+uint8 ra_dbg_turn_assist_weight = 0u;
+int16 ra_dbg_turn_assist_found_col = -1;
+uint8 ra_dbg_inner_speed_pct = 100u;
+uint8 ra_dbg_outer_boost_pct = 0u;
+uint8 ra_dbg_continuous_turn_mode = 0u;
+uint8 ra_dbg_exit_reason_verbose = 0u;
+uint8 ra_dbg_inner_min_pct = 100u;
+
 
 /* ======================== �向PD控制静�变�?======================== */
 
@@ -329,6 +346,31 @@ static uint8 s_ra_exit_pd_ready = 0u;
 static uint8 s_ra_line_takeover_cnt = 0u;
 static uint8 s_ra_exit_boost_cnt = 0u;
 static uint8 s_ra_exit_boost_active = 0u;
+
+/* === New static variables for improved direct turn === */
+static float s_ra_total_yaw_base = 0.0f;     /* total yaw base, set in ra_start, never reset */
+
+/* Turn assist (补线) state */
+static uint8 s_turn_assist_active = 0u;
+static uint8 s_turn_assist_weight = 0u;
+static int16 s_turn_assist_found_col = -1;
+static uint8 s_turn_assist_frame_cnt = 0u;
+
+/* Visual exit stable count */
+static uint8 s_visual_stable_cnt = 0u;
+static uint8 s_visual_strict_cnt = 0u;
+
+/* Yaw / over-turn guards */
+static uint8 s_yaw_guard_active = 0u;
+static uint8 s_over_turn_guard = 0u;
+
+/* Line takeover speed cap */
+static uint8 s_line_takeover_speed_cap_frames = 0u;
+
+/* Consecutive turn mode */
+static uint8 s_continuous_turn_mode = 0u;
+static uint8 s_continuous_turn_remnant_frames = 0u;
+static uint8 s_continuous_turn_post_dir = 0u;
 
 /* 前向声明：int16取绝对�?*/
 static int16 abs_i16(int16 v)
@@ -913,6 +955,29 @@ static float ra_yaw_progress(void)          /* 计算RA偏航进度 */
     return (delta > 0.0f) ? delta : 0.0f;  /* 返回正�，负���? */
 }
 
+/* ra_total_yaw_progress - 从RA开始到现在的总转角（item 1）
+ * 使用 s_ra_total_yaw_base（在ra_start中记录，不被ra_enter_hard覆盖）
+ * 返回: 总转角（度，正数）
+ */
+static float ra_total_yaw_progress(void)
+{
+    float delta = normalize_angle(yaw_angle - s_ra_total_yaw_base);
+
+    if (s_ra_dir == 1u)
+        delta = -delta;
+
+    return (delta > 0.0f) ? delta : 0.0f;
+}
+
+/* ra_hard_yaw_progress - HARD阶�的转角（item 1）
+ * 使用 s_ra_yaw_base（在ra_enter_hard中记录），与原有ra_yaw_progress一致
+ * 返回: HARD阶�转角（度，正数）
+ */
+static float ra_hard_yaw_progress(void)
+{
+    return ra_yaw_progress();
+}
+
 static float ra_yaw_progress_rate(void)
 {
     float rate = (float)yaw_rate;
@@ -1345,6 +1410,13 @@ static void ra_reset(void)                  /* RA状�机全��?*/
     ra_dbg_hard_target10 = 0;
     ra_dbg_outer_cmd = 0;
     s_route_pending_valid = 0u;             /* 待提交标志清�?*/
+    visual_reset_stable();
+    turn_assist_reset();
+    s_yaw_guard_active = 0u;
+    s_over_turn_guard = 0u;
+    s_line_takeover_speed_cap_frames = 0u;
+    s_continuous_turn_mode = 0u;
+    s_continuous_turn_remnant_frames = 0u;
     ra_debug_update();                      /* 更新调试变量 */
 }
 
@@ -1995,7 +2067,19 @@ static void ra_finish_ex(uint8 keep_flag) /* RA结束扩展 */
  * 无参数，无返回�?*/
 static void ra_finish(void)                 /* RA正常结束 */
 {
+    uint8 saved_dir = s_ra_dir;
+    uint8 saved_orig_flag = s_ra_orig_flag;
+    uint8 saved_straight = s_ra_straight;
+
     ra_finish_ex(0u);                   /* 清除flag，启动转�屏�?*/
+
+    /* Item 8: Set continuous turn remnant frames for direct turns,
+     * so a closely-following same-direction RA gets turn-assist priming */
+    if (saved_orig_flag < 3u && saved_straight == 0u)
+    {
+        s_continuous_turn_remnant_frames = RA_CONTINUOUS_TURN_REMNANT_FRAMES;
+        s_continuous_turn_post_dir = saved_dir;
+    }
 }
 
 static uint8 ra_line_takeover_ready(void)
@@ -2096,6 +2180,357 @@ static uint8 ra_line_takeover_ready(void)
 #endif
 }
 
+/* ==================== visual_exit_ready (item 2) ====================
+ * 普通直角1/2出弯视觉判断，用于HARD/YAW_LOCK/RECOVER阶段。
+ * 第一版宽松条件，可收紧到严格条件。
+ */
+static uint8 visual_exit_ready(uint8 use_strict)
+{
+    uint8 stable = 0u;
+    uint8 valid;
+    uint16 vrows;
+    int16 e, la, tr;
+
+    if (s_ra_straight != 0u)
+        return 0u;
+    if (s_ra_orig_flag >= 3u)
+        return 0u;
+    if (s_ra_dir != 1u && s_ra_dir != 2u)
+        return 0u;
+
+    vrows = g_tf.valid_row_count;
+    e = abs_i16(g_tf.error);
+    la = abs_i16(g_tf.lookahead_error);
+    tr = abs_i16(g_tf.error_trend);
+
+    if (use_strict)
+    {
+        /* 严格条件 */
+        if (g_tf.line_lost == 0u &&
+            vrows >= RA_VISUAL_EXIT_STRICT_VALID_ROWS &&
+            e <= RA_VISUAL_EXIT_STRICT_ERR_MAX &&
+            la <= RA_VISUAL_EXIT_STRICT_LA_MAX &&
+            tr <= RA_VISUAL_EXIT_STRICT_TREND_MAX)
+        {
+            stable = 1u;
+        }
+    }
+    else
+    {
+        /* 正常条件 */
+        if (g_tf.line_lost == 0u &&
+            vrows >= RA_VISUAL_EXIT_VALID_ROWS &&
+            e <= RA_VISUAL_EXIT_ERR_MAX &&
+            la <= RA_VISUAL_EXIT_LA_MAX &&
+            tr <= RA_VISUAL_EXIT_TREND_MAX)
+        {
+            stable = 1u;
+        }
+    }
+
+    /* 检查是否与新的路口候选冲突 */
+    if (stable && g_fast_ra_type != 0u)
+    {
+        uint8 conflict = 0u;
+        if (g_fast_ra_type == 1u && s_ra_dir == 2u) conflict = 1u;
+        if (g_fast_ra_type == 2u && s_ra_dir == 1u) conflict = 1u;
+        if (g_fast_ra_type >= 3u) conflict = 1u;
+        if (conflict)
+            stable = 0u;
+    }
+
+    if (stable)
+    {
+        if (use_strict)
+        {
+            if (s_visual_strict_cnt < 255u)
+                s_visual_strict_cnt++;
+            valid = (s_visual_strict_cnt >= RA_VISUAL_EXIT_VERY_STRICT_FRAMES) ? 1u : 0u;
+        }
+        else
+        {
+            if (s_visual_stable_cnt < 255u)
+                s_visual_stable_cnt++;
+            valid = (s_visual_stable_cnt >= RA_VISUAL_EXIT_STABLE_FRAMES) ? 1u : 0u;
+        }
+    }
+    else
+    {
+        if (use_strict)
+            s_visual_strict_cnt = 0u;
+        else
+            s_visual_stable_cnt = 0u;
+        valid = 0u;
+    }
+
+    if (use_strict == 0u)
+        ra_dbg_visual_stable_cnt = s_visual_stable_cnt;
+
+    return valid;
+}
+
+static void visual_reset_stable(void)
+{
+    s_visual_stable_cnt = 0u;
+    s_visual_strict_cnt = 0u;
+}
+
+/* ==================== 普通直角补线模式 (item 3) ====================
+ * 参考补线/拉线方法：
+ *   右直角：在图像右侧固定列范围(78~88)找白线跳变
+ *   左直角：在图像左侧固定列范围(6~16)找白线跳变
+ *   从图像底部中心向找到的白点拉临时中线
+ *   补线权重渐进增加，出弯稳定后回落
+ */
+static void turn_assist_reset(void)
+{
+    s_turn_assist_active = 0u;
+    s_turn_assist_weight = 0u;
+    s_turn_assist_found_col = -1;
+    s_turn_assist_frame_cnt = 0u;
+}
+
+static uint8 turn_assist_is_direct(void)
+{
+    if (s_ra_state != RA_ST_ACTIVE)
+        return 0u;
+    if (s_ra_straight != 0u)
+        return 0u;
+    if (s_ra_orig_flag >= 3u)
+        return 0u;
+    if (s_ra_dir != 1u && s_ra_dir != 2u)
+        return 0u;
+    if (s_ra_phase != RA_PH_HARD &&
+        s_ra_phase != RA_PH_YAW_LOCK &&
+        s_ra_phase != RA_PH_RECOVER)
+        return 0u;
+    /* Check g_fast_ra_type doesn't conflict */
+    if (g_fast_ra_type != 0u)
+    {
+        if (g_fast_ra_type == 1u && s_ra_dir != 1u) return 0u;
+        if (g_fast_ra_type == 2u && s_ra_dir != 2u) return 0u;
+        if (g_fast_ra_type >= 3u) return 0u;
+    }
+    return 1u;
+}
+
+/* Scan binarized image for white transition at a fixed column */
+static int16 turn_assist_scan_column(uint8 col, uint8 start_row, uint8 end_row)
+{
+    int16 r;
+    uint8 prev = Image_Binarize[start_row][col];
+
+    for (r = (int16)start_row - 1; r >= (int16)end_row; r--)
+    {
+        uint8 cur = Image_Binarize[(uint8)r][col];
+        if (prev == Image_BLACK && cur == Image_WHITE)
+            return r;
+        prev = cur;
+    }
+    return -1;
+}
+
+/* Find the best white point for turn assist */
+static int16 turn_assist_find_point(void)
+{
+    uint8 col_start, col_end;
+    uint8 start_row = (TF_IMG_H > 4u) ? (uint8)(TF_IMG_H - 4u) : (uint8)(TF_IMG_H - 1u);
+    uint8 end_row = TF_SEARCH_END_ROW;
+    int16 best_row = -1;
+    uint8 best_col = 0;
+    uint8 c;
+
+    if (s_ra_dir == 1u)
+    {
+        /* Right turn: scan right side 78~88 */
+        col_start = RA_TURN_ASSIST_RIGHT_START;
+        col_end = RA_TURN_ASSIST_RIGHT_END;
+    }
+    else if (s_ra_dir == 2u)
+    {
+        /* Left turn: scan left side 6~16 */
+        col_start = RA_TURN_ASSIST_LEFT_START;
+        col_end = RA_TURN_ASSIST_LEFT_END;
+    }
+    else
+    {
+        return -1;
+    }
+
+    if (col_end >= TF_IMG_W)
+        col_end = (uint8)(TF_IMG_W - 1u);
+    if (col_start >= TF_IMG_W)
+        col_start = (uint8)(TF_IMG_W - 1u);
+
+    for (c = col_start; c <= col_end; c++)
+    {
+        int16 row = turn_assist_scan_column(c, start_row, end_row);
+        if (row > best_row)
+        {
+            best_row = row;
+            best_col = c;
+        }
+    }
+
+    return (best_row >= 0) ? (int16)best_col : -1;
+}
+
+/* Apply turn assist: replace center_line with a fake line from bottom-center to found point */
+static uint8 turn_assist_apply(void)
+{
+    int16 found_col;
+    uint8 new_weight;
+    uint8 center = TF_IMG_CENTER;
+    uint8 bottom_row = (uint8)(TF_IMG_H - 1u);
+
+    if (!turn_assist_is_direct())
+    {
+        if (s_turn_assist_active)
+        {
+            /* Gradually reduce weight when exiting turn assist */
+            if (s_turn_assist_weight > RA_TURN_ASSIST_WEIGHT_RECOVER)
+                s_turn_assist_weight -= RA_TURN_ASSIST_WEIGHT_RECOVER;
+            else
+                s_turn_assist_weight = 0u;
+            if (s_turn_assist_weight == 0u)
+                turn_assist_reset();
+        }
+        ra_dbg_turn_assist_active = s_turn_assist_active;
+        ra_dbg_turn_assist_weight = s_turn_assist_weight;
+        return s_turn_assist_active;
+    }
+
+    found_col = turn_assist_find_point();
+    s_turn_assist_found_col = found_col;
+    ra_dbg_turn_assist_found_col = found_col;
+
+    if (found_col >= 0)
+    {
+        /* Found a white point - compute fake center line */
+        uint8 r;
+        s_turn_assist_frame_cnt++;
+
+        /* Progressive weight */
+        if (s_turn_assist_frame_cnt == 1u)
+            new_weight = RA_TURN_ASSIST_WEIGHT_FRAME1;
+        else if (s_turn_assist_frame_cnt == 2u)
+            new_weight = RA_TURN_ASSIST_WEIGHT_FRAME2;
+        else if (s_turn_assist_frame_cnt == 3u)
+            new_weight = RA_TURN_ASSIST_WEIGHT_FRAME3;
+        else
+            new_weight = RA_TURN_ASSIST_WEIGHT_MAX;
+
+        if (!s_turn_assist_active)
+        {
+            s_turn_assist_active = 1u;
+            s_turn_assist_weight = 0u;
+        }
+        s_turn_assist_weight = new_weight;
+
+        /* Build fake center line: bottom-center to found point */
+        for (r = 0u; r < TF_IMG_H; r++)
+        {
+            int16 fake_center;
+            float row_t;
+
+            if (r >= (uint8)found_col || bottom_row <= 0u)
+            {
+                fake_center = (int16)center;
+            }
+            else
+            {
+                row_t = (float)r / (float)bottom_row;
+                fake_center = (int16)((float)center * (1.0f - row_t) +
+                                      (float)found_col * row_t);
+            }
+
+            if (fake_center < 0) fake_center = 0;
+            if (fake_center >= (int16)TF_IMG_W) fake_center = (int16)(TF_IMG_W - 1);
+
+            /* Only override if assist weight is meaningful */
+            if (g_tf.center_line[r] >= 0)
+            {
+                int16 blended = (int16)((float)g_tf.center_line[r] * (100u - (uint16)s_turn_assist_weight) / 100.0f +
+                                        (float)fake_center * (float)s_turn_assist_weight / 100.0f);
+                g_tf.center_line[r] = blended;
+            }
+            else
+            {
+                g_tf.center_line[r] = fake_center;
+            }
+        }
+    }
+    else
+    {
+        /* No white point found: fallback to single-edge */
+        s_turn_assist_frame_cnt = 0u;
+        if (s_turn_assist_active)
+        {
+            if (s_turn_assist_weight > RA_TURN_ASSIST_WEIGHT_RECOVER)
+                s_turn_assist_weight -= RA_TURN_ASSIST_WEIGHT_RECOVER;
+            else
+                s_turn_assist_weight = 0u;
+            if (s_turn_assist_weight == 0u)
+                turn_assist_reset();
+        }
+
+        /* Fallback: use single edge on the opposite side */
+        if (s_ra_dir == 1u)
+        {
+            /* Right turn: use left edge only */
+            if (g_post_edge_side != EDGE_LEFT)
+                g_post_edge_side = EDGE_LEFT;
+        }
+        else
+        {
+            /* Left turn: use right edge only */
+            if (g_post_edge_side != EDGE_RIGHT)
+                g_post_edge_side = EDGE_RIGHT;
+        }
+    }
+
+    ra_dbg_turn_assist_active = s_turn_assist_active;
+    ra_dbg_turn_assist_weight = s_turn_assist_weight;
+    return s_turn_assist_active;
+}
+
+/* ==================== Direct turn diff-limit helpers (item 6) ==================== */
+static uint8 ra_direct_diff_inner_pct(void)
+{
+    return RA_DIRECT_INNER_MIN_PCT;
+}
+
+static uint8 ra_direct_diff_outer_boost_pct(void)
+{
+    float rate_abs = ra_abs_yaw_rate();
+    uint8 pct = RA_DIRECT_OUTER_MAX_BOOST_PCT;
+
+    if (rate_abs > RA_YAW_RATE_OVER_LIMIT * 0.7f)
+    {
+        /* Reduce outer boost when yaw rate is high */
+        uint8 reduction = (uint8)((rate_abs - RA_YAW_RATE_OVER_LIMIT * 0.7f) /
+                                   (RA_YAW_RATE_OVER_LIMIT * 0.3f) * (float)RA_DIRECT_OUTER_MAX_BOOST_PCT);
+        if (reduction > pct)
+            pct = 0u;
+        else
+            pct -= reduction;
+    }
+    return pct;
+}
+
+static uint8 ra_direct_reverse_allowed(void)
+{
+#if RA_DIRECT_REVERSE_ENABLE_SPEED_LOW_ONLY
+    if (ra_speed_ref() > RA_LOW_SPEED_START)
+        return 0u;
+#endif
+    if (s_ra_orig_flag >= 3u)
+        return 0u;
+    if (s_over_turn_guard)
+        return 0u;
+    return 1u;
+}
+
 static void ra_finish_by_line_takeover(void)
 {
     float keep_steer = s_ra_hard_steer_seed;
@@ -2126,6 +2561,10 @@ static void ra_finish_by_line_takeover(void)
     ra_dbg_exit_boost_active = 1u;
     ra_dbg_exit_boost_cnt = 0u;
 #endif
+
+    /* Item 7: speed cap for first N frames after line takeover */
+    s_line_takeover_speed_cap_frames = RA_TAKEOVER_SPEED_CAP_FRAMES;
+    ra_dbg_line_takeover_speed_cap = s_line_takeover_speed_cap_frames;
 }
 
 static void ra_enter_yaw_lock(void)
@@ -2234,6 +2673,7 @@ static void ra_start(uint8 dir, uint8 orig_flag, uint8 straight,
     s_ra_yaw_lock_cnt = 0u;
     s_ra_phase_cnt = 0u;                    /* 阶��数清零 */
     s_ra_yaw_base = normalize_angle(yaw_angle);
+    s_ra_total_yaw_base = s_ra_yaw_base;       /* Item 1: total yaw base, never reset during RA */
     s_ra_hard_yaw_target = 0.0f;
     s_ra_hard_speed_seed = 0.0f;            /* 速度种子清零 */
     s_ra_hard_steer_seed = 0.0f;            /* �向�子清零 */
@@ -2248,6 +2688,36 @@ static void ra_start(uint8 dir, uint8 orig_flag, uint8 straight,
     s_speed_integral *= 0.70f;
     reset_speed_planner();                  /* 复位速度规划�?*/
     lost_search_reset();                    /* 复位丢线搜索 */
+
+    /* Item 8: Check continuous turn before resetting */
+    s_continuous_turn_mode = 0u;
+    if (s_continuous_turn_remnant_frames > 0u &&
+        s_continuous_turn_post_dir == dir &&
+        !straight && orig_flag < 3u)
+    {
+        s_continuous_turn_mode = 1u;
+    }
+    /* Reset new improved direct turn state */
+    visual_reset_stable();
+    if (s_continuous_turn_mode == 0u)
+        turn_assist_reset();
+    s_yaw_guard_active = 0u;
+    s_over_turn_guard = 0u;
+    s_line_takeover_speed_cap_frames = 0u;
+    s_continuous_turn_remnant_frames = 0u;
+    s_continuous_turn_post_dir = dir;
+    ra_dbg_visual_exit_ready = 0u;
+    ra_dbg_yaw_guard_active = 0u;
+    ra_dbg_over_turn_guard = 0u;
+    ra_dbg_line_takeover_speed_cap = 0u;
+    ra_dbg_turn_assist_active = 0u;
+    ra_dbg_turn_assist_weight = 0u;
+    ra_dbg_turn_assist_found_col = -1;
+    ra_dbg_inner_speed_pct = 100u;
+    ra_dbg_outer_boost_pct = 0u;
+    ra_dbg_continuous_turn_mode = s_continuous_turn_mode;
+    ra_dbg_exit_reason_verbose = 0u;
+    ra_dbg_inner_min_pct = 100u;
 
     /* 非直行模式点亮LED指示 */
     if (!straight)                          /* 非直行（�要转�� */
@@ -3341,6 +3811,17 @@ static int16 plan_base_speed(int16 target, int16 pos_err_abs, uint8 pre_slow_act
         }
 
         return speed_ramp_apply_reason(target, 1u); /* 直接用目标�度，原�?RA */
+    }
+
+    /* Item 7: Line takeover speed cap (higher priority than exit boost) */
+    if (s_line_takeover_speed_cap_frames > 0u)
+    {
+        s_line_takeover_speed_cap_frames--;
+        target = apply_speed_pct(target, RA_LINE_TAKEOVER_SPEED_PCT);
+        ra_dbg_line_takeover_speed_cap = s_line_takeover_speed_cap_frames;
+        s_straight_cnt = 0u;
+        s_straight_hold = 0u;
+        return speed_ramp_apply_reason(target, 12u);
     }
 
 #if RA_EXIT_BOOST_ENABLE
@@ -5012,7 +5493,157 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         (void)ra_handle_yaw_lock_phase(r);
         return 1u;
     }
+
+    /* ========== Item 4/5: Visual-first exit checks for direct turns ========== */
+    if (s_ra_orig_flag < 3u && s_ra_straight == 0u)
     {
+        float yaw_total = ra_total_yaw_progress();
+        float yaw_rate_abs = ra_abs_yaw_rate();
+        uint8 vis_ok;
+        uint8 vis_strict_ok;
+        uint8 vis_very_strict_ok;
+
+        turn_assist_apply();  /* Item 3: apply turn assist line */
+
+        vis_ok = visual_exit_ready(0u);
+        vis_strict_ok = visual_exit_ready(1u);
+        vis_very_strict_ok = visual_exit_ready(2u);  /* very strict = use_strict=2 means very-strict path below */
+
+        /* Update debug */
+        ra_dbg_visual_exit_ready = vis_ok;
+        ra_dbg_yaw_total_progress10 = (int16)(yaw_total * 10.0f);
+        ra_dbg_yaw_hard_progress10 = (int16)(yaw_progress * 10.0f);
+
+        /* Item 5 Priority 5: over-turn guard */
+        if (yaw_total > RA_TOTAL_YAW_OVERSHOOT || yaw_rate_abs > RA_YAW_RATE_OVER_LIMIT)
+        {
+            s_over_turn_guard = 1u;
+            ra_dbg_over_turn_guard = 1u;
+            ra_dbg_exit_reason_verbose = RA_EXIT_VERBOSE_OVERTURN;
+            ra_dbg_exit_reason = RA_EXIT_EMERGENCY;
+            ra_enter_recover();
+            r->speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f;
+            r->should_return = 1u;
+            ra_output_recover_lost_drive();
+            ra_debug_update();
+            return 1u;
+        }
+
+        /* Item 5 Priority 4: yaw < 45° guard */
+        if (yaw_total < RA_TOTAL_YAW_EXIT_LOW)
+        {
+            s_yaw_guard_active = 1u;
+            ra_dbg_yaw_guard_active = 1u;
+            ra_dbg_exit_reason_verbose = RA_EXIT_VERBOSE_YAW_GUARD;
+
+            /* Only allow finish if very strict visual confirms */
+            if (vis_very_strict_ok || (vis_strict_ok && s_visual_strict_cnt >= RA_VISUAL_EXIT_VERY_STRICT_FRAMES))
+            {
+                /* Visual very stable despite low yaw - allow line takeover */
+                ra_dbg_exit_reason = RA_EXIT_LINE;
+                ra_finish_by_line_takeover();
+                return 1u;
+            }
+            /* Otherwise continue HARD, don't check normal exit logic */
+        }
+        else
+        {
+            s_yaw_guard_active = 0u;
+            ra_dbg_yaw_guard_active = 0u;
+        }
+
+        /* Item 5 Priority 1/2/3: visual-first exit */
+        if (vis_ok && yaw_total >= RA_TOTAL_YAW_EXIT_LOW && !s_yaw_guard_active)
+        {
+            if (yaw_total >= RA_TOTAL_YAW_EXIT_MIN)
+            {
+                /* Priority 1: normal line takeover */
+                ra_dbg_exit_reason = RA_EXIT_LINE;
+                ra_finish_by_line_takeover();
+                return 1u;
+            }
+            else
+            {
+                /* Priority 2: speed-limited line takeover */
+                ra_dbg_exit_reason_verbose = RA_EXIT_VERBOSE_VISUAL_LOW_YAW;
+                ra_dbg_exit_reason = RA_EXIT_LINE;
+                s_line_takeover_speed_cap_frames = (uint8)((uint16)RA_TAKEOVER_SPEED_CAP_FRAMES + 2u);
+                ra_dbg_line_takeover_speed_cap = s_line_takeover_speed_cap_frames;
+                ra_finish_by_line_takeover();
+                return 1u;
+            }
+        }
+
+        /* Item 5 Priority 3: yaw_guard active - don't allow normal finish */
+        if (s_yaw_guard_active)
+        {
+            /* Skip standard exit_reason check, continue HARD */
+            goto direct_hard_continue;
+        }
+
+        /* Normal exit_reason check for direct turns (only when yaw_total >= 65 or visual ok) */
+        {
+            uint8 exit_reason = ra_hard_exit_reason(direct_fast,
+                                                      min_hard,
+                                                      hard_limit,
+                                                      line_ok,
+                                                      hard_yaw_target,
+                                                      yaw_progress,
+                                                      yaw_progress_rate);
+            if (exit_reason != RA_EXIT_NONE)
+            {
+                uint8 need_yaw_lock = 0u;
+
+                ra_dbg_exit_reason = exit_reason;
+                if (exit_reason == RA_EXIT_EMERGENCY ||
+                    exit_reason == RA_EXIT_TIMEOUT ||
+                    exit_reason == RA_EXIT_NO_IMU ||
+                    exit_reason == RA_EXIT_RA_TO ||
+                    exit_reason == RA_EXIT_COAST)
+                {
+                    need_yaw_lock = 1u;
+                }
+
+                if (need_yaw_lock)
+                {
+                    /* Timeout with yaw < 65: go to YAW_LOCK */
+                    if ((exit_reason == RA_EXIT_TIMEOUT || exit_reason == RA_EXIT_EMERGENCY) &&
+                        yaw_total < RA_TOTAL_YAW_EXIT_LOW)
+                    {
+                        ra_enter_yaw_lock();
+                        (void)ra_handle_yaw_lock_phase(r);
+                    }
+                    else
+                    {
+                        ra_enter_yaw_lock();
+                        (void)ra_handle_yaw_lock_phase(r);
+                    }
+                }
+                else if (exit_reason == RA_EXIT_YAW && yaw_total >= RA_TOTAL_YAW_EXIT_LOW)
+                {
+                    ra_enter_recover();
+                    r->speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f;
+                    r->should_return = 1u;
+                    ra_debug_update();
+                }
+                else
+                {
+                    ra_enter_recover();
+                    r->speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f;
+                    if (exit_reason == RA_EXIT_LINE)
+                        ra_output_recover_visual_drive();
+                    else
+                        ra_output_recover_lost_drive();
+                    r->should_return = 1u;
+                    ra_debug_update();
+                }
+                return 1u;
+            }
+        }
+    }
+    else
+    {
+        /* Complex intersections (3/4/5): existing logic unchanged */
         uint8 exit_reason = ra_hard_exit_reason(direct_fast,
                                                   min_hard,
                                                   hard_limit,
@@ -5059,6 +5690,8 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
             return 1u;
         }
     }
+
+direct_hard_continue:
 
     if (s_ra_orig_flag < 3u)
     {
@@ -5125,6 +5758,28 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
 
     if (outer > MAX_DUTY)
         outer = MAX_DUTY;
+
+    /* Item 6: Diff-limit for direct turns (inner wheel floor, outer ceiling) */
+    if (s_ra_orig_flag < 3u && s_ra_straight == 0u)
+    {
+        float inner_min_pct = (float)ra_direct_diff_inner_pct() * 0.01f;
+        float outer_boost_pct = (float)ra_direct_diff_outer_boost_pct() * 0.01f;
+        float inner_min_duty = outer * inner_min_pct;
+        float nominal_outer = (float)ra_fast_hard_outer_cmd();
+        float outer_ceiling = nominal_outer * (1.0f + outer_boost_pct);
+        if (outer_ceiling < RA_PIVOT_OUTER_MIN_DUTY)
+            outer_ceiling = (float)RA_PIVOT_OUTER_MIN_DUTY;
+        if (outer > outer_ceiling)
+            outer = outer_ceiling;
+        if (!ra_direct_reverse_allowed() && inner < 0.0f)
+            inner = 0.0f;
+        if (inner >= 0.0f && inner < inner_min_duty)
+            inner = inner_min_duty;
+        else if (inner < 0.0f && (-inner) > inner_min_duty)
+            inner = -inner_min_duty;
+        ra_dbg_inner_min_pct = (uint8)(inner_min_pct * 100.0f);
+        ra_dbg_outer_boost_pct = (uint8)(outer_boost_pct * 100.0f);
+    }
 
     if (s_ra_dir == 1u)
     {
@@ -5785,6 +6440,18 @@ void line_pid_control(void)                  /* 主PID控制入口 */
     {
         auto_tune_log_pid_tick();
         return;                              /* 跳过��PID */
+    }
+
+    /* Item 8: Decrement continuous turn remnant when RA is not active */
+    if (s_continuous_turn_remnant_frames > 0u && s_ra_state == RA_ST_NONE)
+    {
+        s_continuous_turn_remnant_frames--;
+        if (s_continuous_turn_remnant_frames == 0u)
+        {
+            s_continuous_turn_mode = 0u;
+            turn_assist_reset();
+            ra_dbg_continuous_turn_mode = 0u;
+        }
     }
 
     /* ===== 丢线搜索 ===== */

@@ -94,6 +94,19 @@ typedef struct
     uint8 hard_enter_ip;
     uint16 hard_enter_tick;
     uint8 pre_seen_frames;
+    int16 yaw_total_progress10;        /* 总yaw progress * 10 (from ra_dbg_yaw_total_progress10) */
+    int16 yaw_hard_progress10;         /* HARD yaw progress * 10 (from ra_dbg_yaw_hard_progress10) */
+    uint8 visual_exit_ready;           /* visual_exit_ready flag (from ra_dbg_visual_exit_ready) */
+    uint8 yaw_guard_active;            /* yaw_guard_active flag (from ra_dbg_yaw_guard_active) */
+    uint8 over_turn_guard;             /* over_turn_guard flag (from ra_dbg_over_turn_guard) */
+    uint8 line_takeover_speed_cap;     /* line_takeover_speed_cap counter (from ra_dbg_line_takeover_speed_cap) */
+    uint8 turn_assist_active;          /* turn_assist_active flag (from ra_dbg_turn_assist_active) */
+    uint8 turn_assist_weight;          /* turn_assist weight pct (from ra_dbg_turn_assist_weight) */
+    int16 turn_assist_found_col;       /* turn_assist found column (from ra_dbg_turn_assist_found_col) */
+    uint8 continuous_turn_mode;        /* continuous_turn_mode flag (from ra_dbg_continuous_turn_mode) */
+    uint8 exit_reason_verbose;         /* verbose exit reason (from ra_dbg_exit_reason_verbose) */
+    uint8 inner_min_pct;               /* inner min duty pct (from ra_dbg_inner_min_pct) */
+    uint8 outer_boost_pct;             /* outer boost pct (from ra_dbg_outer_boost_pct) */
 } AutoTuneRecord;
 
 #if AUTO_TUNE_LOG_ENABLE
@@ -245,6 +258,19 @@ static void at_pack_record(uint8 *p, const AutoTuneRecord *r)
     p[idx++] = r->turn_mark;
     p[idx++] = r->hard_enter_ip;
     p[idx++] = r->pre_seen_frames;
+    at_put_i16(p, &idx, r->yaw_total_progress10);
+    at_put_i16(p, &idx, r->yaw_hard_progress10);
+    p[idx++] = r->visual_exit_ready;
+    p[idx++] = r->yaw_guard_active;
+    p[idx++] = r->over_turn_guard;
+    p[idx++] = r->line_takeover_speed_cap;
+    p[idx++] = r->turn_assist_active;
+    p[idx++] = r->turn_assist_weight;
+    at_put_i16(p, &idx, r->turn_assist_found_col);
+    p[idx++] = r->continuous_turn_mode;
+    p[idx++] = r->exit_reason_verbose;
+    p[idx++] = r->inner_min_pct;
+    p[idx++] = r->outer_boost_pct;
 }
 
 static void at_pack_live(uint8 *p, const AutoTuneRecord *r)
@@ -531,6 +557,21 @@ void auto_tune_log_pid_tick(void)
             r->pre_detail |= 0x80u;
         }
     }
+    /* New improved direct turn fields */
+    r->yaw_total_progress10 = ra_dbg_yaw_total_progress10;
+    r->yaw_hard_progress10 = ra_dbg_yaw_hard_progress10;
+    r->visual_exit_ready = ra_dbg_visual_exit_ready;
+    r->yaw_guard_active = ra_dbg_yaw_guard_active;
+    r->over_turn_guard = ra_dbg_over_turn_guard;
+    r->line_takeover_speed_cap = ra_dbg_line_takeover_speed_cap;
+    r->turn_assist_active = ra_dbg_turn_assist_active;
+    r->turn_assist_weight = ra_dbg_turn_assist_weight;
+    r->turn_assist_found_col = ra_dbg_turn_assist_found_col;
+    r->continuous_turn_mode = ra_dbg_continuous_turn_mode;
+    r->exit_reason_verbose = ra_dbg_exit_reason_verbose;
+    r->inner_min_pct = ra_dbg_inner_min_pct;
+    r->outer_boost_pct = ra_dbg_outer_boost_pct;
+
     s_at_prev_phase = r->ra_phase;
 
     s_at_write = at_next_index(s_at_write);

@@ -126,6 +126,23 @@ extern uint8 route_dbg_count;       /* 路线调试当前count */
 extern uint8 route_dbg_action;      /* 路线调试当前动作 */
 extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 
+/* New debug externs for improved direct turn */
+extern int16 ra_dbg_yaw_total_progress10;
+extern int16 ra_dbg_yaw_hard_progress10;
+extern uint8 ra_dbg_visual_exit_ready;
+extern uint8 ra_dbg_visual_stable_cnt;
+extern uint8 ra_dbg_yaw_guard_active;
+extern uint8 ra_dbg_over_turn_guard;
+extern uint8 ra_dbg_line_takeover_speed_cap;
+extern uint8 ra_dbg_turn_assist_active;
+extern uint8 ra_dbg_turn_assist_weight;
+extern int16 ra_dbg_turn_assist_found_col;
+extern uint8 ra_dbg_inner_speed_pct;
+extern uint8 ra_dbg_outer_boost_pct;
+extern uint8 ra_dbg_continuous_turn_mode;
+extern uint8 ra_dbg_exit_reason_verbose;
+extern uint8 ra_dbg_inner_min_pct;
+
 /* ========================================================================
  * 转向PD控制参数
  * ========================================================================
@@ -541,8 +558,63 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_EXIT_BOOST_VALID_ROWS         22u
 
 /* direct RA fast reverse */
-#define RA_DIRECT_FAST_REVERSE_FRAMES    8u
-#define RA_DIRECT_FAST_REVERSE_DUTY      260.0f
+#define RA_DIRECT_FAST_REVERSE_FRAMES    2u
+#define RA_DIRECT_FAST_REVERSE_DUTY      80.0f
+
+/* ==================== Direct turn diff-limit (item 6) ==================== */
+#define RA_DIRECT_INNER_MIN_PCT          35u
+#define RA_DIRECT_OUTER_MAX_BOOST_PCT    15u
+#define RA_DIRECT_REVERSE_ENABLE_SPEED_LOW_ONLY 1u
+
+/* ==================== Visual exit thresholds (item 2) ==================== */
+#define RA_VISUAL_EXIT_VALID_ROWS       22u
+#define RA_VISUAL_EXIT_ERR_MAX          30
+#define RA_VISUAL_EXIT_LA_MAX           42
+#define RA_VISUAL_EXIT_TREND_MAX        35
+#define RA_VISUAL_EXIT_STABLE_FRAMES    2u
+
+#define RA_VISUAL_EXIT_STRICT_VALID_ROWS   24u
+#define RA_VISUAL_EXIT_STRICT_ERR_MAX      25
+#define RA_VISUAL_EXIT_STRICT_LA_MAX       35
+#define RA_VISUAL_EXIT_STRICT_TREND_MAX    30
+#define RA_VISUAL_EXIT_STRICT_FRAMES       3u
+
+#define RA_VISUAL_EXIT_VERY_STRICT_VALID_ROWS 26u
+#define RA_VISUAL_EXIT_VERY_STRICT_ERR_MAX    20
+#define RA_VISUAL_EXIT_VERY_STRICT_LA_MAX     28
+#define RA_VISUAL_EXIT_VERY_STRICT_TREND_MAX  22
+#define RA_VISUAL_EXIT_VERY_STRICT_FRAMES     3u
+
+/* ==================== Turn assist (补线) (item 3) ==================== */
+#define RA_TURN_ASSIST_RIGHT_START      78
+#define RA_TURN_ASSIST_RIGHT_END        88
+#define RA_TURN_ASSIST_LEFT_START       6
+#define RA_TURN_ASSIST_LEFT_END         16
+#define RA_TURN_ASSIST_WEIGHT_FRAME1    30u
+#define RA_TURN_ASSIST_WEIGHT_FRAME2    50u
+#define RA_TURN_ASSIST_WEIGHT_FRAME3    70u
+#define RA_TURN_ASSIST_WEIGHT_MAX       85u
+#define RA_TURN_ASSIST_WEIGHT_RECOVER   25u
+
+/* ==================== Yaw thresholds (item 4/5) ==================== */
+#define RA_TOTAL_YAW_EXIT_MIN           65.0f
+#define RA_TOTAL_YAW_EXIT_LOW           45.0f
+#define RA_TOTAL_YAW_OVERSHOOT          100.0f
+#define RA_YAW_RATE_OVER_LIMIT          700.0f
+#define RA_LOW_YAW_SPEED_CAP_PCT        78
+
+/* ==================== Takeover speed (item 7) ==================== */
+#define RA_TAKEOVER_SPEED_CAP_PCT       78
+#define RA_TAKEOVER_SPEED_CAP_FRAMES    3u
+#define RA_TAKEOVER_RECOVER_SPEED_PCT   95
+
+/* ==================== Continuous turn (item 8) ==================== */
+#define RA_CONTINUOUS_TURN_REMNANT_FRAMES 8u
+
+/* ==================== Verbose exit reasons (item 9) ==================== */
+#define RA_EXIT_VERBOSE_VISUAL_LOW_YAW  10u
+#define RA_EXIT_VERBOSE_OVERTURN        11u
+#define RA_EXIT_VERBOSE_YAW_GUARD       12u
 
 /* ================= RA high-speed patches ================= */
 #define RA_PRE_DIRECT_EARLY_ENABLE       0u
