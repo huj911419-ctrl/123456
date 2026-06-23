@@ -475,23 +475,23 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_COMPLEX_PREDICT_MIN_ROW 40u
 #define RA_DIRECT_ENTRY_REVERSE_FRAMES 6u
 #define RA_DIRECT_ENTRY_REVERSE_DUTY   120.0f
-#define RA_DIRECT_ENTRY_OUTER_DUTY_MAX 1850.0f
+#define RA_DIRECT_ENTRY_OUTER_DUTY_MAX 2200.0f
 #define RA_DIRECT_TURN_ROW_OFFSET 0u        /* 直接转弯行偏移 */
 #define RA_FAST_TURN_ROW_ADVANCE 8u        /* 高速转弯行提前 */
 #define RA_FAST_TURN_ROW_ADVANCE_MAX 16u    /* 高速转弯行提前最大值 */
 #define RA_FAST_TURN_ROW_ADVANCE_SPEED_END 1500
 #define RA_TURN_ROW_MIN         18u         /* 转弯行最小值 */
-#define RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX 3000 /* 高速预识别直角不立刻HARD */
+#define RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX 6000 /* allow pre-detected direct turn to enter HARD earlier */
 #define RA_ROUTE_PRE_HARD_ENABLE 0u         /* 路线预HARD开关 */
 #define RA_ROUTE_PRE_HARD_VALID_ROWS 52u    /* 路线预HARD有效行数 */
 #define RA_ROUTE_PRE_HARD_LOOKAHEAD_MIN 2  /* 路线预HARD最小前瞻误差 */
 #define RA_ROUTE_PRE_HARD_IP_ROW 10u        /* 路线预HARD拐点行 */
-#define RA_ROUTE_DIRECT_EARLY_ENABLE 0u
+#define RA_ROUTE_DIRECT_EARLY_ENABLE 1u
 #define RA_ROUTE_DIRECT_EARLY_FIRST_ONLY 1u
 #define RA_ROUTE_DIRECT_EARLY_VALID_ROWS_MIN 28u
 #define RA_ROUTE_DIRECT_EARLY_VALID_ROWS_MAX 44u
 #define RA_ROUTE_DIRECT_EARLY_ERR_MAX 18
-#define RA_ROUTE_DIRECT_EARLY_LA_MIN 2
+#define RA_ROUTE_DIRECT_EARLY_LA_MIN 0
 #define RA_ROUTE_DIRECT_EARLY_IP_ROW 56u
 #define RA_ROUTE_DIRECT_EARLY_MIN_TICKS PID_MS_TO_TICKS(500u)
 #define RA_PRE_DIRECT_HARD_IP_ROW 10u       /* 预直接HARD最小拐点行 */
@@ -499,7 +499,7 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_PRE_DIRECT_NO_IP_ENABLE 1u       /* allow strong pre-turn without IP row */
 #define RA_PRE_DIRECT_NO_IP_ROW 12u         /* equivalent row for no-IP pre-turn */
 #define RA_PRE_DIRECT_NO_IP_VALID_ROWS 45u  /* no-IP pre-turn max valid rows */
-#define RA_PRE_DIRECT_NO_IP_LA_MIN 1
+#define RA_PRE_DIRECT_NO_IP_LA_MIN 0
 
 #define RA_FAST_TURN_ENABLE              1u
 
@@ -538,11 +538,11 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_EXIT_BOOST_VALID_ROWS         22u
 
 /* direct RA fast reverse */
-#define RA_DIRECT_FAST_REVERSE_FRAMES    6u
-#define RA_DIRECT_FAST_REVERSE_DUTY      120.0f
+#define RA_DIRECT_FAST_REVERSE_FRAMES    8u
+#define RA_DIRECT_FAST_REVERSE_DUTY      260.0f
 
 /* ================= RA high-speed patches ================= */
-#define RA_PRE_DIRECT_EARLY_ENABLE       1u
+#define RA_PRE_DIRECT_EARLY_ENABLE       0u
 #define RA_PRE_DIRECT_MIN_FRAMES         2u
 #define RA_PRE_DIRECT_MIN_VALID_ROWS     18u
 #define RA_PRE_DIRECT_MAX_ERR            90

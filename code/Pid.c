@@ -3251,9 +3251,13 @@ static uint8 ra_hard_exit_reason(uint8 direct_fast,
     }
 
     if (line_ok &&
-        s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES &&
-        yaw_progress >= hard_yaw_target - 8.0f)
-        return RA_EXIT_LINE;
+        s_ra_exit_good_cnt >= RA_EXIT_CONFIRM_FRAMES)
+    {
+        if (s_ra_orig_flag < 3u)
+            return RA_EXIT_LINE;
+        if (yaw_progress >= hard_yaw_target - 8.0f)
+            return RA_EXIT_LINE;
+    }
 
     if (yaw_progress >= RA_EXIT_FORCE_YAW_DEG)
         return RA_EXIT_YAW;
@@ -5026,8 +5030,7 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
             {
                 need_yaw_lock = 1u;
             }
-            else if ((exit_reason == RA_EXIT_YAW ||
-                      exit_reason == RA_EXIT_LINE) &&
+            else if (exit_reason == RA_EXIT_YAW &&
                      imu_ready && !imu_error &&
                      yaw_progress_rate > RA_YAW_LOCK_RATE_DONE)
             {
@@ -5043,7 +5046,10 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
             {
                 ra_enter_recover();
                 r->speed_scale = (float)RA_RECOVER_SPEED_PCT * 0.01f;
-                ra_output_recover_lost_drive();
+                if (exit_reason == RA_EXIT_LINE)
+                    ra_output_recover_visual_drive();
+                else
+                    ra_output_recover_lost_drive();
                 r->should_return = 1u;
                 ra_debug_update();
             }
