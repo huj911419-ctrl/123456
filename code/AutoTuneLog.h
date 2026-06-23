@@ -23,8 +23,8 @@
 #define AUTO_TUNE_TYPE_RECORD  0xA1u        /* 数据包类型：记录数据包（多条记录打包） */
 #define AUTO_TUNE_TYPE_END     0xA2u        /* 数据包类型：传输结束标记 */
 #define AUTO_TUNE_TYPE_LIVE    0xA3u        /* 数据包类型：实时记录包（运行时单条记录） */
-#define AUTO_TUNE_VERSION      4u           /* 协议版本号，PC端据此解析数据格式 */
-#define AUTO_TUNE_RECORD_SIZE  74u          /* 单条记录的字节数 */
+#define AUTO_TUNE_VERSION      6u           /* 协议版本号，PC端据此解析数据格式 */
+#define AUTO_TUNE_RECORD_SIZE  101u         /* 单条记录的字节数 */
 #define AUTO_TUNE_LIVE_SIZE    31u          /* 实时记录的字节数（精简版） */
 
 /* ========================================================================

@@ -107,6 +107,18 @@ extern uint8 ra_dbg_turn_row;       /* RA TURN触发行 */
 extern uint8 ra_dbg_exit_reason;    /* RA退出原因 */
 extern int16 ra_dbg_hard_target10;  /* RA HARD目标yawx10 */
 extern int16 ra_dbg_outer_cmd;      /* RA外侧命令 */
+extern uint8 ra_dbg_line_takeover_ready;
+extern uint8 ra_dbg_line_takeover_cnt;
+extern uint8 ra_dbg_exit_boost_active;
+extern uint8 ra_dbg_exit_boost_cnt;
+extern int16 ra_dbg_hard_outer_dynamic;
+extern int16 ra_dbg_yaw_pred10;
+extern int16 ra_dbg_yaw_remain10;
+extern uint8 ra_dbg_outer_scale;
+extern uint8 ra_dbg_takeover_valid_rows;
+extern int16 ra_dbg_takeover_error;
+extern int16 ra_dbg_takeover_lookahead;
+extern int16 ra_dbg_takeover_trend;
 extern uint8 route_dbg_step;        /* 路线调试当前步数 */
 extern uint8 route_dbg_total;       /* 路线调试总步数 */
 extern uint8 route_dbg_flag;        /* 路线调试当前flag */
@@ -461,17 +473,16 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_COMPLEX_IP_V_MAX 14.0f
 #define RA_COMPLEX_FORCE_ROW 92u
 #define RA_COMPLEX_PREDICT_MIN_ROW 40u
-#define RA_DIRECT_ENTRY_REVERSE_FRAMES 10u
-#define RA_DIRECT_ENTRY_REVERSE_DUTY   180.0f
+#define RA_DIRECT_ENTRY_REVERSE_FRAMES 6u
+#define RA_DIRECT_ENTRY_REVERSE_DUTY   120.0f
 #define RA_DIRECT_ENTRY_OUTER_DUTY_MAX 1850.0f
 #define RA_DIRECT_TURN_ROW_OFFSET 0u        /* 直接转弯行偏移 */
-#define RA_COMPLEX_TURN_ROW_OFFSET 12u      /* 复杂转弯行偏移 */
 #define RA_FAST_TURN_ROW_ADVANCE 8u        /* 高速转弯行提前 */
 #define RA_FAST_TURN_ROW_ADVANCE_MAX 16u    /* 高速转弯行提前最大值 */
 #define RA_FAST_TURN_ROW_ADVANCE_SPEED_END 1500
 #define RA_TURN_ROW_MIN         18u         /* 转弯行最小值 */
 #define RA_PRE_DIRECT_IMMEDIATE_HARD_SPEED_MAX 3000 /* 高速预识别直角不立刻HARD */
-#define RA_ROUTE_PRE_HARD_ENABLE 1u         /* 路线预HARD开关 */
+#define RA_ROUTE_PRE_HARD_ENABLE 0u         /* 路线预HARD开关 */
 #define RA_ROUTE_PRE_HARD_VALID_ROWS 52u    /* 路线预HARD有效行数 */
 #define RA_ROUTE_PRE_HARD_LOOKAHEAD_MIN 2  /* 路线预HARD最小前瞻误差 */
 #define RA_ROUTE_PRE_HARD_IP_ROW 10u        /* 路线预HARD拐点行 */
@@ -490,6 +501,46 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_PRE_DIRECT_NO_IP_VALID_ROWS 45u  /* no-IP pre-turn max valid rows */
 #define RA_PRE_DIRECT_NO_IP_LA_MIN 1
 
+#define RA_FAST_TURN_ENABLE              1u
+
+/* HARD front strong, rear taper */
+#define RA_HARD_PREDICT_EXIT_ENABLE      1u
+#define RA_HARD_PREDICT_TIME_S           0.030f
+#define RA_HARD_TARGET_YAW_MAX           80.0f
+#define RA_HARD_REMAIN_FULL              30.0f
+#define RA_HARD_REMAIN_MID               18.0f
+#define RA_HARD_REMAIN_LOW               8.0f
+#define RA_HARD_OUTER_SCALE_FULL         100
+#define RA_HARD_OUTER_SCALE_MID          78
+#define RA_HARD_OUTER_SCALE_LOW          52
+#define RA_HARD_OUTER_SCALE_END          25
+#define RA_HARD_OUTER_MIN                1100
+
+/* line takeover after turn exit */
+#define RA_LINE_TAKEOVER_ENABLE          1u
+#define RA_LINE_TAKEOVER_MIN_YAW_DEG     55.0f
+#define RA_LINE_TAKEOVER_RATE_MAX        650.0f
+#define RA_LINE_TAKEOVER_VALID_ROWS      16u
+#define RA_LINE_TAKEOVER_ERR_MAX         32
+#define RA_LINE_TAKEOVER_LA_MAX          38
+#define RA_LINE_TAKEOVER_TREND_MAX       45
+#define RA_LINE_TAKEOVER_CONFIRM_FRAMES  1u
+
+/* takeover speed and steering smoothing */
+#define RA_LINE_TAKEOVER_SPEED_PCT       82
+#define RA_LINE_TAKEOVER_STEER_KEEP_PCT  25
+
+/* exit boost */
+#define RA_EXIT_BOOST_ENABLE             1u
+#define RA_EXIT_BOOST_DELAY_FRAMES       3u
+#define RA_EXIT_BOOST_SPEED_PCT          96
+#define RA_EXIT_BOOST_ERR_MAX            24
+#define RA_EXIT_BOOST_VALID_ROWS         22u
+
+/* direct RA fast reverse */
+#define RA_DIRECT_FAST_REVERSE_FRAMES    6u
+#define RA_DIRECT_FAST_REVERSE_DUTY      120.0f
+
 /* ================= RA high-speed patches ================= */
 #define RA_PRE_DIRECT_EARLY_ENABLE       1u
 #define RA_PRE_DIRECT_MIN_FRAMES         2u
@@ -505,7 +556,6 @@ extern volatile uint8 vacuum_enable; /* 负压实际运行状态 */
 #define RA_REAL_TURN_MIN_YAW             70
 #define RA_REAL_TURN_MIN_OUTER           1600
 #define RA_COMPLEX_TURN_ROW_OFFSET       8u
-#define RA_LOW_TURN_ROW_DELAY            6u        /* no-IP pre-turn min lookahead */
 #define RA_PRE_DIRECT_STRAIGHT_VALID_ROWS 48u
 #define RA_PRE_DIRECT_STRAIGHT_ERR_MAX 16
 #define RA_PRE_DIRECT_STRAIGHT_LA_MAX 14

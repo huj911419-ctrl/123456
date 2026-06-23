@@ -52,6 +52,18 @@ uint8 ra_dbg_turn_row = 0u;
 uint8 ra_dbg_exit_reason = 0u;
 int16 ra_dbg_hard_target10 = 0;
 int16 ra_dbg_outer_cmd = 0;
+uint8 ra_dbg_line_takeover_ready = 0u;
+uint8 ra_dbg_line_takeover_cnt = 0u;
+uint8 ra_dbg_exit_boost_active = 0u;
+uint8 ra_dbg_exit_boost_cnt = 0u;
+int16 ra_dbg_hard_outer_dynamic = 0;
+int16 ra_dbg_yaw_pred10 = 0;
+int16 ra_dbg_yaw_remain10 = 0;
+uint8 ra_dbg_outer_scale = 100u;
+uint8 ra_dbg_takeover_valid_rows = 0u;
+int16 ra_dbg_takeover_error = 0;
+int16 ra_dbg_takeover_lookahead = 0;
+int16 ra_dbg_takeover_trend = 0;
 
 
 /* ======================== �向PD控制静�变�?======================== */
@@ -314,6 +326,9 @@ static uint8 s_ra_hard_diff_ready = 0u;
 static float s_ra_exit_last_err = 0.0f;
 static float s_ra_exit_last_turn = 0.0f;
 static uint8 s_ra_exit_pd_ready = 0u;
+static uint8 s_ra_line_takeover_cnt = 0u;
+static uint8 s_ra_exit_boost_cnt = 0u;
+static uint8 s_ra_exit_boost_active = 0u;
 
 /* 前向声明：int16取绝对�?*/
 static int16 abs_i16(int16 v)
@@ -908,6 +923,72 @@ static float ra_yaw_progress_rate(void)
     return (rate > 0.0f) ? rate : 0.0f;
 }
 
+static float ra_abs_yaw_progress(void)
+{
+    float yaw_now = normalize_angle(yaw_angle - s_ra_yaw_base);
+
+    if (yaw_now < 0.0f)
+        yaw_now = -yaw_now;
+
+    return yaw_now;
+}
+
+static float ra_abs_yaw_rate(void)
+{
+    float rate = (float)yaw_rate;
+
+    if (rate < 0.0f)
+        rate = -rate;
+
+    return rate;
+}
+
+static int16 ra_fast_hard_outer_cmd(void)
+{
+#if RA_HARD_PREDICT_EXIT_ENABLE
+    float yaw_now;
+    float yaw_rate_abs;
+    float yaw_pred;
+    float target;
+    float remain;
+    int32 outer;
+    int32 scale;
+
+    target = (float)ra_hard_yaw;
+    if (target > RA_HARD_TARGET_YAW_MAX)
+        target = RA_HARD_TARGET_YAW_MAX;
+
+    yaw_now = ra_abs_yaw_progress();
+    yaw_rate_abs = ra_abs_yaw_rate();
+    yaw_pred = yaw_now + yaw_rate_abs * RA_HARD_PREDICT_TIME_S;
+    remain = target - yaw_pred;
+
+    if (remain > RA_HARD_REMAIN_FULL)
+        scale = RA_HARD_OUTER_SCALE_FULL;
+    else if (remain > RA_HARD_REMAIN_MID)
+        scale = RA_HARD_OUTER_SCALE_MID;
+    else if (remain > RA_HARD_REMAIN_LOW)
+        scale = RA_HARD_OUTER_SCALE_LOW;
+    else
+        scale = RA_HARD_OUTER_SCALE_END;
+
+    outer = ((int32)ra_hard_outer * scale) / 100;
+    if (outer < RA_HARD_OUTER_MIN)
+        outer = RA_HARD_OUTER_MIN;
+
+    ra_dbg_hard_outer_dynamic = (int16)outer;
+    ra_dbg_yaw_pred10 = (int16)(yaw_pred * 10.0f);
+    ra_dbg_yaw_remain10 = (int16)(remain * 10.0f);
+    ra_dbg_outer_scale = (uint8)scale;
+
+    return (int16)outer;
+#else
+    ra_dbg_hard_outer_dynamic = ra_hard_outer;
+    ra_dbg_outer_scale = 100u;
+    return ra_hard_outer;
+#endif
+}
+
 static float ra_hard_target_limit(float target)
 {
     if (target > RA_HARD_YAW_MAX_DEG)
@@ -1049,9 +1130,9 @@ static float ra_curve_steer_assist(void)
 
     assist = RA_CURVE_ASSIST_MIN +
              (RA_CURVE_ASSIST_MAX - RA_CURVE_ASSIST_MIN) * speed_t;
-    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_ENTRY_REVERSE_FRAMES)
+    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_FAST_REVERSE_FRAMES)
     {
-        inner = -RA_DIRECT_ENTRY_REVERSE_DUTY;
+        inner = -RA_DIRECT_FAST_REVERSE_DUTY;
         if (outer > RA_DIRECT_ENTRY_OUTER_DUTY_MAX)
             outer = RA_DIRECT_ENTRY_OUTER_DUTY_MAX;
     }
@@ -1256,7 +1337,10 @@ static void ra_reset(void)                  /* RA状�机全��?*/
     s_ra_exit_last_err = 0.0f;
     s_ra_exit_last_turn = 0.0f;
     s_ra_exit_pd_ready = 0u;
+    s_ra_line_takeover_cnt = 0u;
     s_ra_pre_turn_ff = 0.0f;
+    ra_dbg_line_takeover_ready = 0u;
+    ra_dbg_line_takeover_cnt = 0u;
     ra_dbg_exit_reason = RA_EXIT_NONE;
     ra_dbg_hard_target10 = 0;
     ra_dbg_outer_cmd = 0;
@@ -1914,6 +1998,136 @@ static void ra_finish(void)                 /* RA正常结束 */
     ra_finish_ex(0u);                   /* 清除flag，启动转�屏�?*/
 }
 
+static uint8 ra_line_takeover_ready(void)
+{
+#if RA_LINE_TAKEOVER_ENABLE
+    float yaw_now;
+    float rate_abs;
+
+    ra_dbg_line_takeover_ready = 0u;
+    ra_dbg_takeover_valid_rows = g_tf.valid_row_count;
+    ra_dbg_takeover_error = g_tf.error;
+    ra_dbg_takeover_lookahead = g_tf.lookahead_error;
+    ra_dbg_takeover_trend = g_tf.error_trend;
+
+    if (s_ra_state != RA_ST_ACTIVE)
+        return 0u;
+    if (s_ra_straight != 0u)
+        return 0u;
+    if (s_ra_dir != 1u && s_ra_dir != 2u)
+        return 0u;
+    if (s_ra_orig_flag >= 3u)
+        return 0u;
+
+    if (s_ra_phase != RA_PH_HARD &&
+        s_ra_phase != RA_PH_YAW_LOCK &&
+        s_ra_phase != RA_PH_RECOVER)
+    {
+        s_ra_line_takeover_cnt = 0u;
+        ra_dbg_line_takeover_cnt = 0u;
+        return 0u;
+    }
+
+    yaw_now = ra_abs_yaw_progress();
+    rate_abs = ra_abs_yaw_rate();
+
+    if (yaw_now < RA_LINE_TAKEOVER_MIN_YAW_DEG)
+    {
+        s_ra_line_takeover_cnt = 0u;
+        ra_dbg_line_takeover_cnt = 0u;
+        return 0u;
+    }
+
+    if (rate_abs > RA_LINE_TAKEOVER_RATE_MAX)
+    {
+        s_ra_line_takeover_cnt = 0u;
+        ra_dbg_line_takeover_cnt = 0u;
+        return 0u;
+    }
+
+    if (g_tf.line_lost != 0u)
+    {
+        s_ra_line_takeover_cnt = 0u;
+        ra_dbg_line_takeover_cnt = 0u;
+        return 0u;
+    }
+
+    if (g_tf.valid_row_count < RA_LINE_TAKEOVER_VALID_ROWS)
+    {
+        s_ra_line_takeover_cnt = 0u;
+        ra_dbg_line_takeover_cnt = 0u;
+        return 0u;
+    }
+
+    if (abs_i16(g_tf.error) > RA_LINE_TAKEOVER_ERR_MAX)
+    {
+        s_ra_line_takeover_cnt = 0u;
+        ra_dbg_line_takeover_cnt = 0u;
+        return 0u;
+    }
+
+    if (abs_i16(g_tf.lookahead_error) > RA_LINE_TAKEOVER_LA_MAX)
+    {
+        s_ra_line_takeover_cnt = 0u;
+        ra_dbg_line_takeover_cnt = 0u;
+        return 0u;
+    }
+
+    if (abs_i16(g_tf.error_trend) > RA_LINE_TAKEOVER_TREND_MAX)
+    {
+        s_ra_line_takeover_cnt = 0u;
+        ra_dbg_line_takeover_cnt = 0u;
+        return 0u;
+    }
+
+    if (s_ra_line_takeover_cnt < 255u)
+        s_ra_line_takeover_cnt++;
+
+    ra_dbg_line_takeover_cnt = s_ra_line_takeover_cnt;
+    if (s_ra_line_takeover_cnt >= RA_LINE_TAKEOVER_CONFIRM_FRAMES)
+    {
+        ra_dbg_line_takeover_ready = 1u;
+        return 1u;
+    }
+
+    return 0u;
+#else
+    return 0u;
+#endif
+}
+
+static void ra_finish_by_line_takeover(void)
+{
+    float keep_steer = s_ra_hard_steer_seed;
+
+    ra_finish();
+
+    s_steer_d_reset_flag = 1u;
+    s_filtered_err = (float)g_tf.error;
+    s_steer_last_pos_err = s_filtered_err;
+    s_steer_last_raw_err = (float)g_tf.error;
+    s_steer_ff_filtered = 0.0f;
+    s_cas_target_filtered = 0.0f;
+    s_cas_last_yaw_err = 0.0f;
+    s_cas_pos_integral *= 0.5f;
+
+    s_prev_steer_output = keep_steer *
+        ((float)RA_LINE_TAKEOVER_STEER_KEEP_PCT * 0.01f);
+
+    s_base_speed_ramped = (int16)((float)motor_speed * 8.0f *
+        ((float)RA_LINE_TAKEOVER_SPEED_PCT * 0.01f));
+    s_prev_target_speed = (float)s_base_speed_ramped;
+    s_speed_integral *= 0.5f;
+    s_speed_ff_ready = 1u;
+
+#if RA_EXIT_BOOST_ENABLE
+    s_ra_exit_boost_active = 1u;
+    s_ra_exit_boost_cnt = 0u;
+    ra_dbg_exit_boost_active = 1u;
+    ra_dbg_exit_boost_cnt = 0u;
+#endif
+}
+
 static void ra_enter_yaw_lock(void)
 {
     turn_right_led_off();
@@ -2028,6 +2242,9 @@ static void ra_start(uint8 dir, uint8 orig_flag, uint8 straight,
     s_ra_exit_last_err = 0.0f;
     s_ra_exit_last_turn = 0.0f;
     s_ra_exit_pd_ready = 0u;
+    s_ra_line_takeover_cnt = 0u;
+    ra_dbg_line_takeover_ready = 0u;
+    ra_dbg_line_takeover_cnt = 0u;
     s_speed_integral *= 0.70f;
     reset_speed_planner();                  /* 复位速度规划�?*/
     lost_search_reset();                    /* 复位丢线搜索 */
@@ -2057,6 +2274,9 @@ static void ra_enter_hard(void)             /* 进入HARD���阶�?*/
     s_ra_exit_last_err = 0.0f;
     s_ra_exit_last_turn = 0.0f;
     s_ra_exit_pd_ready = 0u;
+    s_ra_line_takeover_cnt = 0u;
+    ra_dbg_line_takeover_ready = 0u;
+    ra_dbg_line_takeover_cnt = 0u;
     s_ra_yaw_lock_cnt = 0u;
     s_ra_hard_yaw_peak = 0.0f;
     s_ra_hard_diff_cmd = 0.0f;
@@ -3038,6 +3258,22 @@ static uint8 ra_hard_exit_reason(uint8 direct_fast,
     if (yaw_progress >= RA_EXIT_FORCE_YAW_DEG)
         return RA_EXIT_YAW;
 
+#if RA_HARD_PREDICT_EXIT_ENABLE
+    if (s_ra_orig_flag < 3u)
+    {
+        float target = hard_yaw_target;
+        float yaw_pred;
+
+        if (target > RA_HARD_TARGET_YAW_MAX)
+            target = RA_HARD_TARGET_YAW_MAX;
+        yaw_pred = yaw_progress + yaw_progress_rate * RA_HARD_PREDICT_TIME_S;
+        ra_dbg_yaw_pred10 = (int16)(yaw_pred * 10.0f);
+        ra_dbg_yaw_remain10 = (int16)((target - yaw_pred) * 10.0f);
+        if (yaw_pred >= target)
+            return RA_EXIT_YAW;
+    }
+#endif
+
     if (yaw_progress >= hard_yaw_target)
         return RA_EXIT_YAW;
 
@@ -3101,6 +3337,36 @@ static int16 plan_base_speed(int16 target, int16 pos_err_abs, uint8 pre_slow_act
 
         return speed_ramp_apply_reason(target, 1u); /* 直接用目标�度，原�?RA */
     }
+
+#if RA_EXIT_BOOST_ENABLE
+    if (s_ra_exit_boost_active != 0u)
+    {
+        if (s_ra_exit_boost_cnt < 255u)
+            s_ra_exit_boost_cnt++;
+
+        if (s_ra_exit_boost_cnt <= RA_EXIT_BOOST_DELAY_FRAMES)
+        {
+            target = apply_speed_pct(target, RA_LINE_TAKEOVER_SPEED_PCT);
+        }
+        else if (g_tf.line_lost == 0u &&
+                 g_tf.valid_row_count >= RA_EXIT_BOOST_VALID_ROWS &&
+                 abs_i16(g_tf.error) <= RA_EXIT_BOOST_ERR_MAX)
+        {
+            target = apply_speed_pct(target, RA_EXIT_BOOST_SPEED_PCT);
+            s_ra_exit_boost_active = 0u;
+        }
+        else
+        {
+            target = apply_speed_pct(target, RA_LINE_TAKEOVER_SPEED_PCT);
+        }
+
+        ra_dbg_exit_boost_active = s_ra_exit_boost_active;
+        ra_dbg_exit_boost_cnt = s_ra_exit_boost_cnt;
+        s_straight_cnt = 0u;
+        s_straight_hold = 0u;
+        return speed_ramp_apply_reason(target, 10u);
+    }
+#endif
 
     if (s_ra_post_recover_cnt > 0u)
     {
@@ -3640,7 +3906,17 @@ static uint8 ra_try_start_pre_direct_flag(void)
     }
 
     turn_row = ra_slow_trigger_row();
-    if (g_ip_max_row < turn_row)
+
+    uint8 row_for_turn = g_ip_max_row;
+    /* 普通直角用控制用拐点提前触发（复杂3/4/5不走这条路） */
+    if (flag < 3u &&
+        g_ip_ctrl_row > row_for_turn &&
+        g_ip_ctrl_dir == flag)
+    {
+        row_for_turn = g_ip_ctrl_row;
+    }
+
+    if (row_for_turn < turn_row)
         return 0u;
 
     g_ra_flag = flag;
@@ -4590,7 +4866,16 @@ static uint8 ra_step_wait_slow_approach(RaResult *r)
                                 RA_COMPLEX_SLOW_TO_APPROACH_FALLBACK_FRAMES :
                                 RA_SLOW_TO_APPROACH_FALLBACK_FRAMES;
 
-        if (s_ra_ip_row >= turn_row)
+        uint8 row_for_turn = s_ra_ip_row;
+
+        if (s_ra_orig_flag < 3u &&
+            g_ip_ctrl_row > row_for_turn &&
+            g_ip_ctrl_dir == s_ra_dir)
+        {
+            row_for_turn = g_ip_ctrl_row;
+        }
+
+        if (row_for_turn >= turn_row)
         {
             if (s_ra_orig_flag < 3u)
             {
@@ -4697,6 +4982,8 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     float out_r;
     float yaw_progress_rate;
     uint8 ramp_frames;
+    uint8 direct_inner_reverse_allowed = 0u;
+    float direct_inner_reverse_limit = 0.0f;
 
     s_ra_hard_cnt++;
 
@@ -4764,17 +5051,28 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         }
     }
 
-    outer = (float)ra_dynamic_outer_cmd() *
-            (float)(direct_fast ? RA_FAST_HARD_OUTER_PCT : RA_HARD_OUTER_PCT) * 0.01f;
+    if (s_ra_orig_flag < 3u)
+    {
+        outer = (float)ra_fast_hard_outer_cmd();
+    }
+    else
+    {
+        outer = (float)ra_dynamic_outer_cmd() *
+                (float)(direct_fast ? RA_FAST_HARD_OUTER_PCT : RA_HARD_OUTER_PCT) * 0.01f;
+        ra_dbg_hard_outer_dynamic = (int16)outer;
+        ra_dbg_outer_scale = 100u;
+    }
     inner = (float)ra_hard_inner;
     if (inner < 0.0f)
         inner = 0.0f;
     if (inner > MAX_DUTY)
         inner = MAX_DUTY;
 
-    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_ENTRY_REVERSE_FRAMES)
+    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_FAST_REVERSE_FRAMES)
     {
-        inner = -RA_DIRECT_ENTRY_REVERSE_DUTY;
+        inner = -RA_DIRECT_FAST_REVERSE_DUTY;
+        direct_inner_reverse_allowed = 1u;
+        direct_inner_reverse_limit = RA_DIRECT_FAST_REVERSE_DUTY;
         if (outer > RA_DIRECT_ENTRY_OUTER_DUTY_MAX)
             outer = RA_DIRECT_ENTRY_OUTER_DUTY_MAX;
     }
@@ -4803,6 +5101,15 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
                                yaw_progress_rate,
                                &outer,
                                &inner);
+
+    if (s_ra_orig_flag < 3u &&
+        s_ra_hard_cnt <= RA_DIRECT_FAST_REVERSE_FRAMES &&
+        direct_inner_reverse_allowed != 0u)
+    {
+        inner = -direct_inner_reverse_limit;
+        if (outer > RA_DIRECT_ENTRY_OUTER_DUTY_MAX)
+            outer = RA_DIRECT_ENTRY_OUTER_DUTY_MAX;
+    }
 
     if (s_ra_orig_flag >= 3u && outer > RA_COMPLEX_PIVOT_OUTER_MAX_DUTY)
         outer = RA_COMPLEX_PIVOT_OUTER_MAX_DUTY;
@@ -4844,8 +5151,11 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
         yaw_progress >= 30.0f &&
         yaw_progress < hard_yaw_target - 15.0f)
     {
-        inner = -220.0f;
+        inner = -RA_DIRECT_FAST_REVERSE_DUTY;
         outer = 1500.0f;
+        direct_inner_reverse_allowed = 1u;
+        if (direct_inner_reverse_limit < RA_DIRECT_FAST_REVERSE_DUTY)
+            direct_inner_reverse_limit = RA_DIRECT_FAST_REVERSE_DUTY;
         if (s_ra_dir == 1u)
         {
             out_l = inner;
@@ -4891,13 +5201,6 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
             out_r = inner_min;
     }
 
-    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_ENTRY_REVERSE_FRAMES)
-    {
-        inner = -RA_DIRECT_ENTRY_REVERSE_DUTY;
-        if (outer > RA_DIRECT_ENTRY_OUTER_DUTY_MAX)
-            outer = RA_DIRECT_ENTRY_OUTER_DUTY_MAX;
-    }
-
     if (s_ra_orig_flag >= 3u)
     {
         if (s_ra_dir == 1u)
@@ -4915,14 +5218,28 @@ static uint8 ra_handle_hard_phase(int16 pos_err_abs, RaResult *r)
     }
     else
     {
-        if (out_l < 0.0f) out_l = 0.0f;
-        if (out_r < 0.0f) out_r = 0.0f;
-    }
-    if (s_ra_orig_flag < 3u && s_ra_hard_cnt <= RA_DIRECT_ENTRY_REVERSE_FRAMES)
-    {
-        inner = -RA_DIRECT_ENTRY_REVERSE_DUTY;
-        if (outer > RA_DIRECT_ENTRY_OUTER_DUTY_MAX)
-            outer = RA_DIRECT_ENTRY_OUTER_DUTY_MAX;
+        if (direct_inner_reverse_allowed != 0u)
+        {
+            if (s_ra_dir == 1u)
+            {
+                if (out_l < -direct_inner_reverse_limit)
+                    out_l = -direct_inner_reverse_limit;
+                if (out_r < 0.0f)
+                    out_r = 0.0f;
+            }
+            else
+            {
+                if (out_l < 0.0f)
+                    out_l = 0.0f;
+                if (out_r < -direct_inner_reverse_limit)
+                    out_r = -direct_inner_reverse_limit;
+            }
+        }
+        else
+        {
+            if (out_l < 0.0f) out_l = 0.0f;
+            if (out_r < 0.0f) out_r = 0.0f;
+        }
     }
 
     if (s_ra_orig_flag >= 3u)
@@ -5053,6 +5370,17 @@ static RaResult ra_state_machine_step(int16 pos_err_abs) /* RA状�机主�辑
 
     if (ra_handle_straight_phase(&r))
         return r;
+
+    if (s_ra_phase == RA_PH_HARD ||
+        s_ra_phase == RA_PH_YAW_LOCK ||
+        s_ra_phase == RA_PH_RECOVER)
+    {
+        if (ra_line_takeover_ready())
+        {
+            ra_finish_by_line_takeover();
+            return r;
+        }
+    }
 
     if (ra_handle_yaw_lock_phase(&r))
         return r;
@@ -5362,6 +5690,10 @@ static void pid_stop_runtime_reset(uint8 clear_rules_done)
     }
     s_ra_post_recover_cnt = 0u;
     s_ra_lost_guard_cnt = 0u;
+    s_ra_exit_boost_active = 0u;
+    s_ra_exit_boost_cnt = 0u;
+    ra_dbg_exit_boost_active = 0u;
+    ra_dbg_exit_boost_cnt = 0u;
     single_edge_reset();
     s_completed_right_ra_count = 0u;
     lost_search_reset();
